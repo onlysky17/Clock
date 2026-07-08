@@ -1,0 +1,11 @@
+{
+  "name": "DLG-CLOCK Retail",
+  "short_name": "DLG-CLOCK",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f0e8",
+  "theme_color": "#f4f0e8",
+  "description": "Web Bluetooth control app for DLG-CLOCK / DA14585 e-ink board.",
+  "icons": []
+}

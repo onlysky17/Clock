@@ -1,0 +1,19 @@
+LR_1 0x07FC0000 15*1024 {
+    ER_1 +0 {
+       *.o (RESET, +First)
+       *(InRoot$$Sections)
+       startup_DA14585_586.o (+RO)
+       *(system_DA14xxx)
+       .ANY(+RO)
+       .ANY(+RW)
+    }
+
+    ER_2 AlignExpr(+0,8) UNINIT {
+       *(.bss.non_init)
+    }
+
+    ER_3 +0 (0x07FC0000 + 96 * 1024 - ImageLimit(ER_2)) {
+       *(+ZI)
+       *(STACK, +Last)
+    }
+}

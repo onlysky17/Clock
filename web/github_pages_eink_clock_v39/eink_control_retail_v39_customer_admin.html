@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DLG-CLOCK Retail v39</title>
+<style>
+:root{--bg:#f4f0e8;--card:#fffdf8;--ink:#171512;--muted:#6c6257;--line:#ddd2c0;--red:#ef4b24;--green:#0f766e;--gray:#74685c;--bad:#b91c1c;--blue:#2563eb;--soft:#efe6d7;--yellow:#b45309}
+*{box-sizing:border-box}
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:0;background:var(--bg);color:var(--ink)}
+.wrap{max-width:940px;margin:0 auto;padding:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px;margin:12px 0;box-shadow:0 4px 14px #0000000a}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+button{border:0;border-radius:14px;background:var(--red);color:white;font-weight:850;padding:10px 12px;min-height:52px;flex:1;font-size:15px}
+button.gray{background:var(--gray)}button.bad{background:var(--bad)}button.ok{background:var(--green)}button.blue{background:var(--blue)}button.warn{background:var(--yellow)}button.soft{background:var(--soft);color:var(--ink);border:1px solid var(--line)}
+button.big{font-size:18px;min-height:70px}
+button:disabled{opacity:.45}
+input,select,textarea{border:1px solid var(--line);border-radius:12px;padding:10px;min-height:42px;background:white}
+textarea{width:100%;height:110px;font-family:ui-monospace,Consolas,monospace;font-size:12px}
+#log{height:220px;overflow:auto;background:#15120f;color:#f7eadb;border-radius:12px;padding:10px;font-family:ui-monospace,Consolas,monospace;font-size:12px;white-space:pre-wrap}
+.status{display:inline-block;background:var(--soft);border:1px solid var(--line);border-radius:999px;padding:6px 10px;font-weight:850}
+.small{font-size:12px;color:var(--muted);line-height:1.45}.bigtitle{font-size:42px;line-height:1.05;margin:10px 0}
+.hidden{display:none}.pinbox{max-width:140px}
+.quick{font-size:22px;min-height:82px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1 class="bigtitle">DLG-CLOCK Retail <span class="status">v39</span></h1>
+<div class="small">Bản giao khách: giao diện sạch, admin ẩn, dùng chung bộ nhớ với v38.</div>
+
+<div class="card">
+<div class="row">
+<span class="status" id="st">Chưa kết nối</span>
+<span class="status" id="busy">READY</span>
+<span class="status" id="nowBox">--:--</span>
+<span class="status" id="curBox">Hiện tại: chưa biết</span>
+</div>
+<div class="row">
+<button class="big" onclick="connectFast()">Kết nối thiết bị</button>
+<button class="gray" onclick="disconnect()">Ngắt</button>
+</div>
+</div>
+
+<div class="card">
+<h2>Màn hình</h2>
+<div class="row">
+<button class="blue quick" onclick="gotoLayout('TH1')">Tổng hợp 1</button>
+<button class="blue quick" onclick="gotoLayout('TH2')">Tổng hợp 2</button>
+<button class="blue quick" onclick="gotoLayout('TH3')">Tổng hợp 3</button>
+</div>
+<div class="row">
+<button class="ok big" onclick="timeFast()">Cập nhật giờ</button>
+<button class="warn big" onclick="calendarFast()">Lịch tháng</button>
+<button class="gray big" onclick="refreshFast()">Làm mới</button>
+</div>
+</div>
+
+<div class="grid">
+<div class="card">
+<h2>Countdown</h2>
+<div class="row">
+<input id="cdDate" type="date" value="2026-07-01">
+<input id="cdLabel" value="COUNT" maxlength="8">
+</div>
+<div class="row">
+<button class="big" onclick="countdownFast()">Gửi countdown</button>
+</div>
+</div>
+
+<div class="card">
+<h2>Đổi nhanh đồng hồ</h2>
+<div class="row">
+<button class="soft" onclick="gotoLayout('CLOCK1')">Đồng hồ 1</button>
+<button class="soft" onclick="gotoLayout('CLOCK2')">Đồng hồ 2</button>
+<button class="soft" onclick="gotoLayout('CLOCK3')">Đồng hồ 3</button>
+</div>
+</div>
+</div>
+
+<div class="card">
+<h2>Admin</h2>
+<div id="adminLock">
+<div class="row">
+<input id="pin" class="pinbox" placeholder="PIN">
+<button class="gray" onclick="unlockAdmin()">Mở admin</button>
+</div>
+<div class="small">PIN mặc định: 585</div>
+</div>
+<div id="adminPanel" class="hidden">
+<div class="row">
+<label>Delay refresh</label>
+<select id="fastDelay" onchange="savePrefs()">
+<option value="4">4s rất nhanh</option>
+<option value="6" selected>6s thương mại</option>
+<option value="8">8s an toàn</option>
+<option value="12">12s pin yếu</option>
+</select>
+</div>
+<div class="row">
+<button class="soft" onclick="setCurrent('CLOCK1')">Đang là ĐH1</button>
+<button class="soft" onclick="setCurrent('CLOCK2')">Đang là ĐH2</button>
+<button class="soft" onclick="setCurrent('TH1')">Đang là TH1</button>
+</div>
+<div class="row">
+<button class="soft" onclick="setCurrent('TH2')">Đang là TH2</button>
+<button class="soft" onclick="setCurrent('CLOCK3')">Đang là ĐH3</button>
+<button class="soft" onclick="setCurrent('TH3')">Đang là TH3</button>
+</div>
+<div class="row">
+<button class="warn" onclick="calendarFast()">Neo lại bằng Lịch tháng</button>
+<button class="gray" onclick="unknownCurrent()">Không biết vị trí</button>
+<button class="bad" onclick="panicSlow()">PANIC cứu màn</button>
+</div>
+<div class="row">
+<button class="ok" onclick="exportState()">Export</button>
+<button class="gray" onclick="importState()">Import</button>
+<button class="bad" onclick="wipeAll()">Xóa nhớ</button>
+</div>
+<textarea id="stateText" placeholder="State JSON"></textarea>
+<div class="row">
+<button class="gray" onclick="navigator.clipboard&&navigator.clipboard.writeText(logEl().textContent)">Copy log</button>
+<button class="gray" onclick="logEl().textContent=''">Xóa log</button>
+<button class="gray" onclick="lockAdmin()">Khóa admin</button>
+</div>
+<div id="log"></div>
+</div>
+</div>
+</div>
+
+<script>
+const RXTX_SERVICE='00001f10-0000-1000-8000-00805f9b34fb';
+const RXTX_CHAR='00001f1f-0000-1000-8000-00805f9b34fb';
+// Dùng chung với v38 để lên version không mất trạng thái
+const STORE='dlg_clock_commercial_FINAL_v38';
+const CYCLE=['CLOCK1','CLOCK2','TH1','TH2','CLOCK3','TH3'];
+let dev=null,rxtxChar=null,running=false;
+
+function $(id){return document.getElementById(id)}
+function logEl(){return $('log')}
+function log(s){const t=new Date().toLocaleTimeString('vi-VN');if(logEl()) {logEl().textContent+=`[${t}] ${s}\n`;logEl().scrollTop=999999}}
+function setSt(s){$('st').textContent=s}
+function setBusy(s){$('busy').textContent=s}
+function delay(ms){return new Promise(r=>setTimeout(r,ms))}
+function cleanHex(h){return String(h||'').replace(/0x/gi,'').replace(/[^0-9a-fA-F]/g,'').toUpperCase()}
+function hexToBytes(h){h=cleanHex(h);if(!h||h.length%2)throw new Error('HEX sai');const a=new Uint8Array(h.length/2);for(let i=0;i<a.length;i++)a[i]=parseInt(h.substr(i*2,2),16);return a}
+function intToHex(n,bytes){return(Number(n)>>>0).toString(16).padStart(bytes*2,'0').slice(-bytes*2).toUpperCase()}
+function pad2(n){return String(n).padStart(2,'0')}
+function defaultState(){return {version:39,currentIndex:null,atCalendar:false,fastDelay:'6',cdDate:'2026-07-01',cdLabel:'COUNT'}}
+function state(){try{return Object.assign(defaultState(),JSON.parse(localStorage.getItem(STORE)||'{}'))}catch(e){return defaultState()}}
+function saveState(s){localStorage.setItem(STORE,JSON.stringify(s));renderState()}
+function savePrefs(){const s=state();['fastDelay','cdDate','cdLabel'].forEach(id=>{if($(id))s[id]=$(id).value});saveState(s)}
+function loadPrefs(){const s=state();['fastDelay','cdDate','cdLabel'].forEach(id=>{if($(id))$(id).value=s[id]||defaultState()[id]})}
+function fastMs(){return Number(($('fastDelay')&&$('fastDelay').value)||state().fastDelay||6)*1000}
+function labelName(x){return {TH1:'Tổng hợp 1',TH2:'Tổng hợp 2',TH3:'Tổng hợp 3',CLOCK1:'Đồng hồ 1',CLOCK2:'Đồng hồ 2',CLOCK3:'Đồng hồ 3',CAL:'Lịch tháng'}[x]||x||'chưa biết'}
+function renderState(){
+  const s=state();
+  let cur='chưa biết';
+  if(s.atCalendar)cur='Lịch tháng';
+  else if(s.currentIndex!==null)cur=(s.currentIndex+1)+': '+labelName(CYCLE[s.currentIndex]);
+  $('curBox').textContent='Hiện tại: '+cur;
+}
+function unlockAdmin(){if(($('pin').value||'')==='585'){$('adminLock').classList.add('hidden');$('adminPanel').classList.remove('hidden');loadPrefs();log('Admin mở')}else alert('Sai PIN')}
+function lockAdmin(){$('adminPanel').classList.add('hidden');$('adminLock').classList.remove('hidden');$('pin').value=''}
+
+async function connectFast(){
+  try{
+    dev=await navigator.bluetooth.requestDevice({filters:[{namePrefix:'DLG-CLOCK'},{namePrefix:'DLG'}],optionalServices:[RXTX_SERVICE]});
+    dev.addEventListener('gattserverdisconnected',()=>{rxtxChar=null;setSt('Đã ngắt');log('Đã ngắt')});
+    const g=await dev.gatt.connect();
+    const rs=await g.getPrimaryService(RXTX_SERVICE);
+    rxtxChar=await rs.getCharacteristic(RXTX_CHAR);
+    setSt('Đã kết nối '+(dev.name||''));
+    log('Đã kết nối RXTX');
+  }catch(e){setSt('Lỗi kết nối');log('Lỗi kết nối: '+e.message)}
+}
+function disconnect(){try{if(dev&&dev.gatt.connected)dev.gatt.disconnect()}catch(e){}rxtxChar=null;setSt('Chưa kết nối')}
+async function guard(name,fn){
+  if(running){log('Đang BUSY, đợi DONE rồi bấm tiếp');return}
+  running=true;setBusy('BUSY');[...document.querySelectorAll('button')].forEach(b=>b.disabled=true);
+  try{savePrefs();log('START '+name);await fn();log('DONE '+name)}
+  catch(e){log('ERR '+name+': '+e.message);alert('Lỗi: '+e.message)}
+  finally{running=false;setBusy('READY');[...document.querySelectorAll('button')].forEach(b=>b.disabled=false)}
+}
+async function sendCmd(hex,label){
+  const b=hexToBytes(hex);
+  if(!rxtxChar)throw new Error('Chưa kết nối');
+  if(rxtxChar.writeValueWithResponse)await rxtxChar.writeValueWithResponse(b);
+  else await rxtxChar.writeValue(b);
+  log(label||('Gửi '+hex));
+}
+function getTimeHex(){
+  const nowSec=Math.round(Date.now()/1000);
+  const ts=nowSec - new Date().getTimezoneOffset()*60 + 3600;
+  const d=new Date();
+  return 'DD'+intToHex(ts,4)+intToHex(d.getFullYear(),2)+intToHex(d.getMonth()+1,1)+intToHex(d.getDate(),1)+intToHex(d.getDay()||7,1);
+}
+async function refreshWait(label){await sendCmd('E2',label||'Refresh');await delay(fastMs())}
+function idx(label){return CYCLE.indexOf(label)}
+async function sendNext(n){for(let i=0;i<n;i++){await sendCmd('E102','Kiểu tiếp theo '+(i+1)+'/'+n);await delay(220)}}
+async function gotoLayout(label){
+  await guard('đến '+labelName(label),async()=>{
+    const s=state();
+    const target=idx(label);
+    if(target<0)throw new Error('Layout không hợp lệ');
+    await sendCmd(getTimeHex(),'Cập nhật giờ');
+    await delay(220);
+    if(s.atCalendar || s.currentIndex===null){
+      await sendCmd('E101','Mốc Lịch tháng');
+      await delay(220);
+      await sendNext(target+1);
+      s.currentIndex=target;s.atCalendar=false;saveState(s);
+    }else{
+      const steps=(target-s.currentIndex+CYCLE.length)%CYCLE.length;
+      if(steps===0)log('Đang ở đúng '+labelName(label)+', chỉ refresh');
+      else await sendNext(steps);
+      s.currentIndex=target;s.atCalendar=false;saveState(s);
+    }
+    await refreshWait('Refresh 1 lần');
+  });
+}
+async function timeFast(){await guard('cập nhật giờ',async()=>{await sendCmd(getTimeHex(),'Cập nhật giờ');await delay(220);await refreshWait('Refresh')})}
+async function calendarFast(){
+  await guard('lịch tháng',async()=>{
+    await sendCmd('E101','Về Lịch tháng');
+    await delay(220);
+    await refreshWait('Refresh Lịch tháng');
+    const s=state();s.atCalendar=true;s.currentIndex=null;saveState(s);
+  });
+}
+async function refreshFast(){await guard('làm mới',async()=>{await refreshWait('Refresh')})}
+function setCurrent(label){const s=state();s.currentIndex=idx(label);s.atCalendar=false;saveState(s);log('Đặt hiện tại = '+labelName(label))}
+function unknownCurrent(){const s=state();s.currentIndex=null;s.atCalendar=false;saveState(s);log('Đã đặt hiện tại = chưa biết')}
+async function panicSlow(){
+  await guard('panic cứu màn',async()=>{
+    await refreshWait('Wake refresh');
+    await sendCmd(getTimeHex(),'Cập nhật giờ');
+    await delay(220);
+    await sendCmd('E102','Đổi kiểu');
+    await delay(220);
+    await refreshWait('Refresh');
+    unknownCurrent();
+  });
+}
+async function countdownFast(){
+  await guard('countdown',async()=>{
+    const v=$('cdDate').value;if(!v)throw new Error('Chưa chọn ngày');
+    const d=new Date(v+'T00:00:00');
+    let label=($('cdLabel').value||'COUNT').replace(/[^\x20-\x7E]/g,' ').slice(0,8);
+    const bytes=[0xD6,0,d.getFullYear()&255,(d.getFullYear()>>8)&255,d.getMonth()+1,d.getDate(),label.length];
+    for(const c of label)bytes.push(c.charCodeAt(0)&127);
+    await sendCmd(bytes.map(x=>x.toString(16).padStart(2,'0')).join(''),'Gửi countdown '+label);
+    await delay(220);
+    await refreshWait('Refresh');
+    unknownCurrent();
+  });
+}
+function exportState(){const txt=JSON.stringify(state(),null,2);$('stateText').value=txt;navigator.clipboard&&navigator.clipboard.writeText(txt);log('Đã export')}
+function importState(){try{const obj=JSON.parse($('stateText').value.trim());localStorage.setItem(STORE,JSON.stringify(Object.assign(defaultState(),obj)));loadPrefs();renderState();log('Đã import')}catch(e){log('Import lỗi: '+e.message)}}
+function wipeAll(){localStorage.removeItem(STORE);loadPrefs();renderState();log('Đã xóa nhớ')}
+setInterval(()=>{const d=new Date();$('nowBox').textContent=`${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`},1000);
+loadPrefs();renderState();
+</script>
+</body>
+</html>

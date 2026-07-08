@@ -1,0 +1,35 @@
+# Build outputs
+**/out_DA14585/
+**/Objects/
+**/Listings/
+*.o
+*.d
+*.axf
+*.hex
+*.lnp
+*.dep
+*.build_log.htm
+
+# Local programmer logs/settings
+JLinkLog.txt
+JLinkSettings.ini
+*.uvguix.*
+
+# Local backups and donor dumps
+BACKUP*/
+backup*/
+*_BACKUP*/
+*_backup*/
+*_R1_*.bin
+*_R2_*.bin
+board*_*.bin
+
+# Archives copied from raw workspace
+*.rar
+*.7z
+*.zip
+
+# OS/editor noise
+Thumbs.db
+desktop.ini
+.DS_Store

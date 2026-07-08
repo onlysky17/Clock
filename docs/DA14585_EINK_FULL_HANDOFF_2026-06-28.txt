@@ -1,0 +1,542 @@
+
+DA14585 / E-INK 2.13" — FULL PROJECT HANDOFF
+Cập nhật đến: 2026-06-28
+Ngôn ngữ làm việc: Tiếng Việt, thân thiện, gọi nhau “ní”
+Mục đích: chuyển toàn bộ dự án sang tài khoản/chat khác và tiếp tục ngay, không làm lại từ đầu.
+
+======================================================================
+0. PROMPT DÙNG Ở CHAT MỚI
+======================================================================
+
+Hãy đọc toàn bộ file handoff này trước khi trả lời.
+
+Tiếp tục đúng từ trạng thái hiện tại:
+- Không suy đoán lại pinout đã xác nhận.
+- Không ghi OTP.
+- Không xóa hoặc ghi SPI Flash khi chưa có checkpoint rõ ràng.
+- Không nạp firmware sai chip/sai màn chỉ vì cùng kích thước 2.13 inch.
+- Hướng dẫn từng bước rõ ràng, nói chính xác bấm gì, nhập gì, kiểm tra log nào.
+- Mỗi bước phải có điểm dừng/checkpoint.
+- Nếu cần nạp firmware, phải nhắc đúng file, đúng offset, đúng tùy chọn Do not modify/Bootable.
+- Ưu tiên bảo toàn backup gốc.
+
+Trạng thái hiện tại:
+- Đã backup board web Tân Hoàng Phúc hai lần, R1/R2 giống hệt nhau.
+- Đang chuẩn bị nạp thử firmware Việt hóa clone-ready sang board đích.
+- Chưa Erase/Burn ở checkpoint cuối cùng.
+- Bước tiếp theo là load đúng firmware Việt hóa vào SmartSnippets, chụp màn hình xác nhận trước khi Erase.
+
+======================================================================
+1. MỤC TIÊU CUỐI
+======================================================================
+
+Biến các board e-ink 2.13 inch thành đồng hồ decor bàn làm việc:
+
+- Giờ HH:MM cỡ lớn.
+- Ngày/thứ bằng tiếng Việt.
+- Có thể có âm lịch, pin, nhiệt độ nếu firmware hỗ trợ.
+- Không phụ thuộc mã active.
+- Có thể clone/nạp hàng loạt.
+- Sau này làm jig pogo pin để nạp nhanh, nhưng hiện tạm hoãn jig.
+
+Có hai hướng:
+1. Clone firmware Việt hóa đã có sẵn.
+2. Nếu clone không tương thích, tự build firmware HINK213-CLOCK.
+
+Hiện tại ưu tiên hướng 1 vì đã có donor firmware Việt hóa chạy đẹp.
+
+======================================================================
+2. PHÂN BIỆT CÁC BOARD
+======================================================================
+
+BOARD A — DA14585, PCB Alibaba Group 20190605, màn HINK-E0213A41
+- Đây là board chính đã dùng trước.
+- MCU DA14585.
+- PCB silkscreen: Alibaba Group 20190605.
+- Màn: HINK-E0213A41-FPC.
+- Đã nạp firmware PP_14585_2.13L_BW_DC.bin.
+- Đã boot BLE và refresh màn thành công.
+- BLE name: NRF-67413B.
+- MAC: 18BC5A67413B.
+- Có backup R1/R2 gốc giống nhau.
+
+BOARD DONOR VIỆT HÓA
+- PCB gần như y hệt Alibaba Group 20190605.
+- MCU DA14585.
+- Hiển thị tiếng Việt:
+  - “Thứ tư 01-01-2025”
+  - giờ lớn 00:32
+  - âm lịch
+  - nhiệt độ
+  - pin
+- Đây là donor firmware tốt nhất để clone/phân tích.
+- Đã có bộ firmware backup và file clone-ready trong thư mục D:\EINK\VN.
+
+BOARD CŨ / BOARD KHÁC LAYOUT
+- Cùng chip Dialog DA1458x nhưng layout khác.
+- Có 6 pad test dọc TP1, TP2, TP3, TP4, TP7, TP8.
+- FPC có vẻ khác dòng E0213A07.
+- Không được coi là cùng PCB hoàn toàn với Alibaba Group 20190605.
+- Đã xác định UART và backup thành công.
+- Đây là board đích đang chuẩn bị thử firmware Việt hóa.
+
+BOARD DA14580 CŨ BỊ NHẦM TRƯỚC ĐÓ
+- Từng có board khác và cuộn cảm “470” bị vỡ.
+- Không dùng làm chuẩn pinout cho board hiện tại.
+- Không được nhầm với board DA14585.
+
+======================================================================
+3. BOARD CŨ 6 PAD — PINOUT ĐÃ CẬP NHẬT
+======================================================================
+
+Ảnh/sơ đồ cũ từng ghi sai TP1/TP4.
+
+Kết quả đo mới nhất trên board 6 pad:
+
+    TP1 = VCC / BAT
+    TP2 = GND
+
+Các pad còn lại:
+    TP7 / TP8 = cặp UART, đã thử thành công bằng SmartSnippets.
+    Chiều TX/RX là đúng theo cách đang đấu lúc kết nối COM6 thành công.
+    TP3 / TP4 chưa được chốt chức năng trong handoff này.
+    Không được chạm TP3/TP4 vào VCC khi chưa đo chắc chắn.
+
+Dấu hiệu kết nối thành công trên SmartSnippets:
+    Reset detected
+    Successfully downloaded firmware file to the board
+    Successfully configured SPI Flash ports and pins
+
+COM dùng cho board 6 pad:
+    COM6
+
+Support package log:
+    DA14585-586
+
+Kết luận:
+- Board nhiều khả năng là DA14585/DA14586 family, không nên gọi cứng là DA14580 chỉ vì hình cũ.
+- Trước khi Burn phải nhìn thanh tiêu đề SmartSnippets xác nhận đúng Device.
+
+======================================================================
+4. SMARTSNIPPETS / UART
+======================================================================
+
+SmartSnippets Toolbox:
+    v5.0.10.2434
+
+Các chế độ đã dùng:
+    UART/SPI
+    SPI Flash Programmer
+    OTP Header
+
+Các thiết bị:
+- Board Alibaba/HINK A41: COM3.
+- Board 6 pad hiện tại: COM6.
+
+Dấu hiệu UART thành công:
+    Reset detected
+    Successfully downloaded firmware file to the board
+    Successfully configured SPI Flash ports and pins
+
+Nếu lần đầu báo:
+    CRC does not match
+
+nhưng lần sau có đủ ba dòng thành công trên, thì phiên sau đã kết nối được.
+
+Không bấm:
+    Erase
+    Burn
+    Burn & Verify
+    OTP Burn
+
+khi chỉ đang backup.
+
+======================================================================
+5. BACKUP GỐC BOARD ALIBABA/HINK A41
+======================================================================
+
+Hai file backup:
+
+    DA14585_HINK_E0213A41_FULL_R1_256KB.bin
+    DA14585_HINK_E0213A41_FULL_R2_256KB.bin
+
+Dung lượng:
+    262144 byte
+
+SHA-256 cả R1 và R2:
+    8712715F86B85D659DE58ACE3B3E7EDBC7F6CD305E218FFCCB78A89B96608ECE
+
+Đã đối chiếu:
+    FC: no differences encountered
+
+======================================================================
+6. FIRMWARE NGƯỜI BÁN ĐÃ NẠP THÀNH CÔNG TRÊN BOARD A41
+======================================================================
+
+File:
+    PP_14585_2.13L_BW_DC.bin
+
+Cách nạp:
+    Load hex/bin file
+    Do not modify
+    Bootable: bỏ tích
+    Offset: 00000
+    SPI Flash size: 40000
+    Erase
+    Burn & Verify
+
+Kết quả:
+    SPI memory verification succeeded
+
+Cold boot:
+- Tháo TX/RX.
+- Ngắt nguồn 10 giây.
+- Chỉ cấp BAT/GND.
+- Board boot BLE và refresh màn.
+
+BLE:
+    NRF-67413B
+
+MAC:
+    18BC5A67413B
+
+Website:
+    https://tanhoangphuc842002-rgb.github.io/
+
+Website gửi được:
+    Time set to...
+    Command: e102
+
+Nhưng firmware tự disconnect và không vào clock như mong muốn.
+Active code không rõ.
+Quyết định: không phụ thuộc active code nữa.
+
+======================================================================
+7. DONOR FIRMWARE VIỆT HÓA
+======================================================================
+
+Thư mục hiện tại:
+    D:\EINK\VN
+
+Các file quan trọng nhìn thấy:
+
+    DA14585_VIET_DONOR_ANALYSIS_REPORT_2026-06-27.txt
+    DA14585_VIET_DONOR_FULL_CLONE_READY_256KB.bin
+    DA14585_VIET_DONOR_FULL_CLONE_READY_256KB (1).bin
+    DA14585_VIET_DONOR_FULL_R1_256KB.bin
+    DA14585_VIET_DONOR_FULL_R2_256KB.bin
+    DA14585_VIET_DONOR_IMAGE1_RAW_63380B.bin
+    DA14585_VIET_DONOR_IMAGE1_VALID.img
+    DA14585_VIET_DONOR_OTP_HEADER.bin
+    VI_R1_00000.bin
+    VI_R1_08000.bin
+    ...
+    VI_R2_...
+
+File ưu tiên dùng để clone:
+    D:\EINK\VN\DA14585_VIET_DONOR_FULL_CLONE_READY_256KB.bin
+
+Không dùng nhầm:
+    DA14585_VIET_DONOR_OTP_HEADER.bin
+    DA14585_VIET_DONOR_IMAGE1_VALID.img
+    VI_R1_00000.bin
+    file có “(1)” nếu chưa chắc nội dung
+
+Trước khi nạp, phải kiểm tra:
+    (Get-Item $FW).Length
+
+Kết quả bắt buộc:
+    262144
+
+======================================================================
+8. BACKUP BOARD WEB TÂN HOÀNG PHÚC / BOARD ĐÍCH 6 PAD
+======================================================================
+
+Tên bộ backup:
+    THP_WEB_BOARD
+
+Các block đã đọc hai lần:
+    00000
+    08000
+    10000
+    18000
+    20000
+    28000
+    30000
+    38000
+
+Mỗi block:
+    32768 byte
+
+File full đã ghép:
+
+    D:\EINK\VN\THP_WEB_BOARD_FULL_R1_256KB.bin
+    D:\EINK\VN\THP_WEB_BOARD_FULL_R2_256KB.bin
+
+Dung lượng mỗi file:
+    262144 byte
+
+SHA-256:
+    0F1580F244303772A3C8EF13F086B96D005B212047D885A83EB508C8C13E09F1
+
+Đã đối chiếu:
+    PASS: SHA256 R1 và R2 giống hệt nhau.
+    FC: no differences encountered
+
+Đây là firmware phục hồi board đích.
+
+Khuyến nghị khóa read-only:
+
+    attrib +R ".\THP_WEB_BOARD_FULL_R1_256KB.bin"
+    attrib +R ".\THP_WEB_BOARD_FULL_R2_256KB.bin"
+
+Lưu ý lỗi PowerShell “else is not recognized”:
+- Chỉ do dán riêng đoạn else sau khi script đã chạy xong.
+- Không ảnh hưởng backup.
+- Hai file full đã tạo và đối chiếu PASS.
+
+======================================================================
+9. CHECKPOINT HIỆN TẠI — CHƯA ERASE/BURN
+======================================================================
+
+Mục tiêu kế tiếp:
+Nạp thử firmware Việt hóa clone-ready sang board đích 6 pad.
+
+File dự kiến nạp:
+    D:\EINK\VN\DA14585_VIET_DONOR_FULL_CLONE_READY_256KB.bin
+
+Board đích đã có backup phục hồi:
+    THP_WEB_BOARD_FULL_R1_256KB.bin
+
+Trạng thái cuối cùng:
+- Đã backup board đích thành công.
+- Đã chốt file donor clone-ready.
+- Chưa load/nạp ở checkpoint cuối.
+- Chưa Erase.
+- Chưa Burn.
+- Chưa đụng OTP.
+
+======================================================================
+10. QUY TRÌNH TIẾP THEO — LOAD TRƯỚC, CHƯA ERASE
+======================================================================
+
+1. Kiểm tra file donor:
+
+    Set-Location "D:\EINK\VN"
+
+    $FW = ".\DA14585_VIET_DONOR_FULL_CLONE_READY_256KB.bin"
+
+    (Get-Item $FW).Length
+    Get-FileHash $FW -Algorithm SHA256
+
+Dung lượng phải:
+    262144
+
+2. Giữ nguyên dây board đích như lúc backup:
+- TP1 = VCC/BAT 3.0–3.3 V
+- TP2 = GND
+- FTDI GND -> TP2
+- FTDI TX/RX -> TP7/TP8 theo chiều đã kết nối COM6 thành công
+
+3. Mở SmartSnippets:
+    UART/SPI
+    COM6
+    Device đúng DA14585 family
+    SPI Flash Programmer
+
+4. Connect.
+Nếu yêu cầu reset:
+- reset/power-cycle giống lúc backup thành công.
+
+Phải có:
+    Successfully downloaded firmware file to the board
+    Successfully configured SPI Flash ports and pins
+
+5. Load:
+    Load hex/bin file
+
+Chọn:
+    DA14585_VIET_DONOR_FULL_CLONE_READY_256KB.bin
+
+Tùy chọn:
+    Do not modify
+    Bootable: bỏ tích
+
+Sau đó:
+    Next
+    Finish
+
+6. Kiểm tra:
+    Offset in SPI Flash memory: 00000
+    SPI Flash memory size: 40000
+    Data File Contents bắt đầu tại 0x00000000
+
+7. DỪNG.
+Chụp màn hình có:
+- tên file trong log,
+- offset 00000,
+- flash size 40000,
+- dữ liệu bảng bên trái.
+
+Chưa bấm Erase/Burn trước khi xác nhận.
+
+======================================================================
+11. SAU CHECKPOINT LOAD ĐÚNG
+======================================================================
+
+Nếu mọi thứ đúng mới làm:
+
+    Erase
+    chờ hoàn tất
+    Burn & Verify
+
+Kết quả bắt buộc:
+    SPI memory verification succeeded
+
+Sau đó cold boot:
+- Đóng SmartSnippets.
+- Rút FTDI.
+- Tháo TX/RX.
+- Ngắt nguồn 10 giây.
+- Chỉ cấp BAT/GND.
+- Quan sát:
+  - BLE có xuất hiện không.
+  - Màn có hiển thị tiếng Việt không.
+  - Có refresh bất thường không.
+  - Cuộn cảm/transistor có nóng không.
+  - Dòng nguồn có tăng bất thường không.
+
+Nếu lỗi:
+- Ngắt nguồn ngay.
+- Restore:
+    THP_WEB_BOARD_FULL_R1_256KB.bin
+- Cách restore:
+    Do not modify
+    Bootable bỏ tích
+    Offset 00000
+    Flash size 40000
+    Erase
+    Burn & Verify
+
+======================================================================
+12. RỦI RO TƯƠNG THÍCH
+======================================================================
+
+Board đích và donor:
+- Cùng DA14585 family.
+- Có SPI Flash ngoài.
+- Có UART boot.
+- Nhưng PCB/FPC/mạch nguồn màn có thể khác.
+
+Rủi ro:
+- BLE chạy nhưng màn không lên.
+- Màn sai chiều/sọc.
+- BUSY bị treo.
+- GPIO nguồn màn khác.
+- LUT/controller khác.
+- Refresh bất thường.
+
+Không được kỳ vọng clone chắc chắn 100%.
+
+Nhưng vì:
+- Board đích đã backup đủ.
+- R1/R2 giống nhau.
+- Có thể restore.
+
+nên có thể thử có kiểm soát.
+
+======================================================================
+13. OTP / MAC
+======================================================================
+
+Không clone OTP donor sang board đích.
+
+Không bấm:
+    OTP Burn
+    Application Programmed Flag
+    sửa Bluetooth Device Address
+    sửa Customer Specific Field
+
+Dump SPI Flash không đồng nghĩa clone OTP.
+Mỗi board nên giữ MAC/OTP riêng.
+
+======================================================================
+14. JIG / J-LINK
+======================================================================
+
+Đã bàn:
+- Jig 2 pogo pin vào SWDIO/SWCLK.
+- Nguồn đi connector BAT/GND.
+- Có thể dùng J-Link để nạp hàng loạt.
+
+Nhưng hiện:
+- Tạm hoãn jig.
+- Dùng FTDI UART để test firmware.
+- Chỉ quay lại jig sau khi firmware clone chạy ổn.
+
+USBasp:
+- Không dùng cho DA14585.
+
+STC USB-TTL:
+- Chỉ dự phòng.
+
+FTDI:
+- Đang dùng tốt.
+
+======================================================================
+15. HƯỚNG TỰ BUILD NẾU CLONE KHÔNG CHẠY
+======================================================================
+
+Tên project:
+    HINK213-CLOCK
+
+Mục tiêu:
+- BLE name HINK213-CLOCK
+- Set time qua BLE
+- HH:MM lớn
+- ngày/thứ tiếng Việt
+- refresh mỗi phút
+- sleep
+- không active code
+
+Chiến lược:
+- Giữ firmware đang chạy trong SPI Flash.
+- Chạy firmware test trong RAM trước.
+- Chỉ Burn flash khi BLE/time/display/sleep đều pass.
+
+Nhưng hiện tại ưu tiên clone donor Việt hóa trước.
+
+======================================================================
+16. QUY TẮC LÀM VIỆC
+======================================================================
+
+- Hướng dẫn dài, rõ, không cụt ngủn.
+- Mỗi lần một checkpoint lớn.
+- Nói chính xác nút nào được bấm.
+- Nếu thấy plan/proceed/approve phải nói có bấm hay không.
+- Không đoán pinout.
+- Không bỏ qua backup/hash.
+- Không nạp file chưa rõ layout.
+- Không đụng OTP.
+- Luôn giữ một file restore nguyên vẹn.
+
+======================================================================
+17. TÓM TẮT 10 DÒNG
+======================================================================
+
+1. Board donor Việt hóa DA14585 chạy giao diện tiếng Việt rất đẹp.
+2. Board đích 6 pad đã xác định TP1=VCC, TP2=GND.
+3. TP7/TP8 là UART, SmartSnippets COM6 đã kết nối thành công.
+4. Đã backup board đích hai lần.
+5. R1/R2 mỗi file 262144 byte.
+6. SHA-256 cả hai:
+   0F1580F244303772A3C8EF13F086B96D005B212047D885A83EB508C8C13E09F1
+7. FC: no differences encountered.
+8. File donor sẽ thử:
+   DA14585_VIET_DONOR_FULL_CLONE_READY_256KB.bin
+9. Chưa Erase/Burn.
+10. Bước tiếp theo: load donor vào SmartSnippets, xác nhận offset/size rồi mới cho phép Erase.
+
+======================================================================
+HẾT HANDOFF
+======================================================================

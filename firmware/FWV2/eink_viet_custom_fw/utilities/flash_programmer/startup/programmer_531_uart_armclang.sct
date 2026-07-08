@@ -1,0 +1,31 @@
+LR_1 0x07FC0000 15*1024 {
+    ER_1 +0 {
+       *.o (RESET, +First)
+       *(InRoot$$Sections)
+       startup_DA14531.o (+RO)
+       *(system_DA14xxx)
+       .ANY(+RO)
+       .ANY(+RW)
+    }
+
+    ER_2 AlignExpr(+0,8) UNINIT {
+       *(.bss.non_init)
+    }
+
+; ***************************************************************************
+; From address 0x07FCB000 to 0x7FCBA00 the RAM shall not be used by the
+; programmer and shall remain uninitialized. The buffer used by the DA14531
+; TRNG software mechanism must use only uninitialized RAM space in order to
+; generate random seeds.
+; ***************************************************************************
+    ER_3 +0 (0x07FCB000 - ImageLimit(ER_2)) {
+        *(+ZI)
+    }
+
+; ***************************************************************************
+; Stack size is 0x600 bytes and is defined in startup_DA14531.s
+; ***************************************************************************
+    ER_4 0x7FCBA00 0x600 {
+        *(STACK, +Last)
+    }
+}
