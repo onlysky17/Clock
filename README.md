@@ -1,6 +1,6 @@
 # Clock
 
-DA14585 2.13 inch E-Ink clock firmware workspace.
+DA14585 2.13 inch E-Ink clock firmware and Web Bluetooth control workspace.
 
 This repo is the clean sync copy from `D:\EINK`, made so the firmware can be continued on another machine without carrying raw board backups, donor dumps, or large archive files.
 
@@ -38,10 +38,23 @@ Use offset `00000`, SPI flash size `40000`, and read/backup before erase or burn
 
 ## Web Tool
 
-The current web BLE control page is under:
+The current Web Bluetooth control page is kept in two places:
+
+- GitHub Pages root: `index.html`, `manifest.webmanifest`, `service-worker.js`, `.nojekyll`
+- Workspace copy: `web\github_pages_eink_clock_v39`
+
+Web Bluetooth needs HTTPS. GitHub Pages serves HTTPS, so it works on Chrome Android/Desktop.
+
+Admin PIN:
 
 ```text
-web\github_pages_eink_clock_v39
+585
+```
+
+Shared storage key:
+
+```text
+dlg_clock_commercial_FINAL_v38
 ```
 
 ## Not Tracked
