@@ -77,7 +77,7 @@
  *
  ******************************************
  */
-static const sleep_state_t app_default_sleep_mode = ARCH_EXT_SLEEP_ON;
+static const sleep_state_t app_default_sleep_mode = ARCH_SLEEP_OFF;
 
 /*
  ****************************************************************************************
@@ -191,7 +191,7 @@ static const struct advertise_configuration user_adv_conf = {
  ****************************************************************************************
  */
 /// Device name
-#define USER_DEVICE_NAME        "EINK-VIET"
+#define USER_DEVICE_NAME        "EINK-HL06"
 
 /// Device name length
 #define USER_DEVICE_NAME_LEN    (sizeof(USER_DEVICE_NAME)-1)
@@ -282,14 +282,14 @@ static const struct gapm_configuration user_gapm_conf = {
 static const struct connection_param_configuration user_connection_param_conf = {
     /// Connection interval minimum measured in ble double slots (1.25ms)
     /// use the macro MS_TO_DOUBLESLOTS to convert from milliseconds (ms) to double slots
-    .intv_min = MS_TO_DOUBLESLOTS(10),
+    .intv_min = MS_TO_DOUBLESLOTS(30),
 
     /// Connection interval maximum measured in ble double slots (1.25ms)
     /// use the macro MS_TO_DOUBLESLOTS to convert from milliseconds (ms) to double slots
-    .intv_max = MS_TO_DOUBLESLOTS(45),
+    .intv_max = MS_TO_DOUBLESLOTS(50),
 
     /// Latency measured in connection events
-    .latency = 10,
+    .latency = 0,
 
     /// Supervision timeout measured in timer units (10 ms)
     /// use the macro MS_TO_TIMERUNITS to convert from milliseconds (ms) to timer units
@@ -307,11 +307,11 @@ static const struct connection_param_configuration user_connection_param_conf = 
 static const struct connection_param_configuration user_connection_param_conf_high = {
     /// Connection interval minimum measured in ble double slots (1.25ms)
     /// use the macro MS_TO_DOUBLESLOTS to convert from milliseconds (ms) to double slots
-    .intv_min = MS_TO_DOUBLESLOTS(10),
+    .intv_min = MS_TO_DOUBLESLOTS(30),
 
     /// Connection interval maximum measured in ble double slots (1.25ms)
     /// use the macro MS_TO_DOUBLESLOTS to convert from milliseconds (ms) to double slots
-    .intv_max = MS_TO_DOUBLESLOTS(20),
+    .intv_max = MS_TO_DOUBLESLOTS(50),
 
     /// Latency measured in connection events
     .latency = 0,

@@ -46,3 +46,6 @@ firmware/**/donor/
 # J-Link generated files
 **/JLinkLog.txt
 **/JLinkSettings.ini
+
+# FW debug backups
+*.bak_fw*
