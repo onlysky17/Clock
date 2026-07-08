@@ -1,0 +1,132 @@
+﻿<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>EINK BLE Debug</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 720px; margin: 24px auto; padding: 0 16px; }
+    button { font-size: 16px; padding: 12px 16px; margin: 6px 4px 6px 0; }
+    textarea { width: 100%; height: 160px; margin-top: 12px; }
+    .ok { color: green; }
+    .bad { color: red; }
+    .box { border: 1px solid #ddd; padding: 16px; border-radius: 10px; margin: 12px 0; }
+  </style>
+</head>
+<body>
+  <h1>EINK BLE Debug</h1>
+
+  <div class="box">
+    <button onclick="scanOnly()">1. Scan Only</button>
+    <button onclick="connectOnly()">2. Connect Only</button>
+    <button onclick="getService()">3. Get Service</button>
+    <button onclick="sendE2()">4. Send E2</button>
+    <button onclick="disconnectBle()">Disconnect</button>
+    <p id="status">Chưa kết nối</p>
+  </div>
+
+  <textarea id="log" readonly></textarea>
+
+<script>
+const CMD_SERVICE = "00001f10-0000-1000-8000-00805f9b34fb";
+const CMD_CHAR    = "00001f1f-0000-1000-8000-00805f9b34fb";
+
+let device = null;
+let server = null;
+let writeChar = null;
+
+function log(msg) {
+  const el = document.getElementById("log");
+  el.value += `[${new Date().toLocaleTimeString()}] ${msg}\n`;
+  el.scrollTop = el.scrollHeight;
+}
+
+function setStatus(msg, ok=false) {
+  const el = document.getElementById("status");
+  el.textContent = msg;
+  el.className = ok ? "ok" : "bad";
+}
+
+async function scanOnly() {
+  try {
+    log("Scan...");
+    device = await navigator.bluetooth.requestDevice({
+      filters: [{ namePrefix: "EINK" }],
+      optionalServices: [CMD_SERVICE]
+    });
+    log("Selected: " + device.name);
+    setStatus("Đã chọn: " + device.name, true);
+
+    device.addEventListener("gattserverdisconnected", () => {
+      log("EVENT: gattserverdisconnected");
+      setStatus("Disconnected", false);
+      server = null;
+      writeChar = null;
+    });
+  } catch (e) {
+    log("SCAN ERROR: " + e);
+    setStatus("Scan lỗi");
+  }
+}
+
+async function connectOnly() {
+  try {
+    if (!device) await scanOnly();
+
+    log("Connecting only...");
+    server = await device.gatt.connect();
+
+    log("connect() returned");
+    log("device.gatt.connected = " + device.gatt.connected);
+
+    setStatus("Connected only: " + device.name, true);
+
+    setTimeout(() => {
+      log("After 5s connected = " + device.gatt.connected);
+    }, 5000);
+
+    setTimeout(() => {
+      log("After 15s connected = " + device.gatt.connected);
+    }, 15000);
+  } catch (e) {
+    log("CONNECT ONLY ERROR: " + e);
+    setStatus("Connect only lỗi");
+  }
+}
+
+async function getService() {
+  try {
+    if (!device || !device.gatt.connected) await connectOnly();
+
+    log("Getting service " + CMD_SERVICE);
+    const service = await server.getPrimaryService(CMD_SERVICE);
+    log("Service OK");
+
+    writeChar = await service.getCharacteristic(CMD_CHAR);
+    log("Write characteristic OK");
+
+    setStatus("Service OK: " + device.name, true);
+  } catch (e) {
+    log("GET SERVICE ERROR: " + e);
+    log("connected now = " + (device ? device.gatt.connected : "no device"));
+  }
+}
+
+async function sendE2() {
+  try {
+    if (!writeChar) await getService();
+    await writeChar.writeValue(new Uint8Array([0xE2]));
+    log("Sent E2");
+  } catch (e) {
+    log("SEND ERROR: " + e);
+  }
+}
+
+function disconnectBle() {
+  if (device && device.gatt.connected) {
+    device.gatt.disconnect();
+  }
+}
+</script>
+</body>
+</html>

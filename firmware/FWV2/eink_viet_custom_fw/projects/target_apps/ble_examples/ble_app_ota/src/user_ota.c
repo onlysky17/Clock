@@ -286,37 +286,28 @@ void user_app_adv_start(void)
 
 void user_app_connection(uint8_t connection_idx, struct gapc_connection_req_ind const *param)
 {
+    // FW006 debug: BLE link only.
+    // Do NOT call default_app_on_connection().
+    // This avoids app_prf_enable() and all GATT profiles.
     if (app_env[connection_idx].conidx != GAP_INVALID_CONIDX)
     {
         app_connection_idx = connection_idx;
 
-        // Stop the advertising data update timer
-        app_easy_timer_cancel(app_adv_data_update_timer_used);
-
-        // Check if the parameters of the established connection are the preferred ones.
-        // If not then schedule a connection parameter update request.
-        if ((param->con_interval < user_connection_param_conf.intv_min) ||
-            (param->con_interval > user_connection_param_conf.intv_max) ||
-            (param->con_latency != user_connection_param_conf.latency) ||
-            (param->sup_to != user_connection_param_conf.time_out))
+        if (app_adv_data_update_timer_used != EASY_TIMER_INVALID_TIMER)
         {
-            // Connection params are not these that we expect
-            app_param_update_request_timer_used = app_easy_timer(APP_PARAM_UPDATE_REQUEST_TO, param_update_request_timer_cb);
+            app_easy_timer_cancel(app_adv_data_update_timer_used);
+            app_adv_data_update_timer_used = EASY_TIMER_INVALID_TIMER;
         }
-        arch_printf("connection\n");
-        isconnected=1;
-        bat_connect_used = 1;
-        app_timer_set(APP_BASS_CONNECT_TIMER, TASK_APP, 10);
+
+        isconnected = 1;
+        bat_connect_used = 0;
+        arch_printf("FW006 link only connection\n");
     }
     else
     {
-        // No connection has been established, restart advertising
         user_app_adv_start();
     }
-    
-    default_app_on_connection(connection_idx, param);
 }
-
 void user_app_adv_undirect_complete(uint8_t status)
 {
     // If advertising was canceled then update advertising data and start advertising again
