@@ -77,7 +77,7 @@
     <button id="connectBtn" onclick="connectBle()">Connect EINK/HINK</button>
     <button onclick="disconnectBle()">Disconnect</button>
     <button onclick="clearLog()">Clear log</button>
-    <p class="muted">Target firmware hiện tại: EINK-HL14. Web này chỉ gửi command an toàn cho màn 2.13.</p>
+    <p class="muted">Target firmware: EINK-HL14 hoặc EINK-HL16. Web này chỉ gửi command an toàn cho màn 2.13.</p>
   </section>
 
   <section>
@@ -298,7 +298,7 @@ function decodeNotify(bytes) {
   return {};
 }
 
-log("HL15 web ready. Connect EINK-HL14.");
+log("HL15 web ready. Connect EINK-HL14/EINK-HL16.");
 </script>
 </body>
 </html>
