@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>HL12 BLE Test</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 760px; margin: 24px auto; padding: 0 16px; }
+    button { font-size: 16px; padding: 12px 16px; margin: 6px 4px 6px 0; }
+    textarea { width: 100%; height: 260px; margin-top: 12px; font-family: Consolas, monospace; }
+    input { font-size: 16px; padding: 8px; width: 100%; box-sizing: border-box; }
+    .box { border: 1px solid #ddd; padding: 16px; border-radius: 10px; margin: 12px 0; }
+    .ok { color: green; }
+    .bad { color: red; }
+    code { display: inline-block; padding: 4px 6px; background: #eee; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>HL12 / HINK213 BLE Test</h1>
+
+  <div class="box">
+    <button onclick="connectHink()">Connect HINK213</button>
+    <button onclick="enableNotify()">Enable Notify</button>
+    <button onclick="disconnectBle()">Disconnect</button>
+    <p id="status">Chưa kết nối</p>
+  </div>
+
+  <div class="box">
+    <button onclick="sendCurrentTimeWrite()">Send Time via WRITE</button>
+    <button onclick="sendCurrentTimeWnr()">Send Time via WNR</button>
+    <button onclick="sendCurrentTimeBoth()">Send Time BOTH</button>
+    <button onclick="sendBadLenTest()">Send Bad Length Test</button>
+    <p>Packet time format:</p>
+    <code>YY MM DD DOW HH MM SS</code>
+  </div>
+
+  <div class="box">
+    <h3>Gửi HEX tự chọn</h3>
+    <input id="hexInput" value="26 07 09 04 21 53 00">
+    <button onclick="sendCustomHexWrite()">Send HEX via WRITE</button>
+    <button onclick="sendCustomHexWnr()">Send HEX via WNR</button>
+    <button onclick="clearLog()">Clear Log</button>
+  </div>
+
+  <textarea id="log" readonly></textarea>
+
+<script>
+const HINK_SERVICE = "18424398-7cbc-11e9-8f9e-2a86e4085a59";
+
+const CHAR_WRITE = "2d86686a-53dc-25b3-0c4a-f0e10c8dee20";
+const CHAR_WRITE_NO_RESP = "5a87b4ef-3bfa-76a8-e642-92933c31434f";
+const CHAR_NOTIFY_ADC1 = "15005991-b131-3396-014c-664c9867b917";
+const CHAR_INDICATE = "9e1547ba-c365-57b5-2947-c5e1c1e1d528";
+
+let device = null;
+let server = null;
+let service = null;
+let writeChar = null;
+let writeNoRespChar = null;
+let notifyChar = null;
+let notifyEnabled = false;
+
+function log(msg) {
+  const el = document.getElementById("log");
+  el.value += `[${new Date().toLocaleTimeString()}] ${msg}\n`;
+  el.scrollTop = el.scrollHeight;
+}
+
+function clearLog() {
+  document.getElementById("log").value = "";
+}
+
+function setStatus(msg, ok=false) {
+  const el = document.getElementById("status");
+  el.textContent = msg;
+  el.className = ok ? "ok" : "bad";
+}
+
+function bytesToHex(data) {
+  return [...data].map(x => x.toString(16).padStart(2, "0").toUpperCase()).join(" ");
+}
+
+function parseHex(str) {
+  return str
+    .replace(/0x/gi, "")
+    .replace(/[^0-9a-fA-F]/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(x => parseInt(x, 16) & 0xFF);
+}
+
+function currentTimePacket() {
+  const d = new Date();
+
+  const yy = d.getFullYear() % 100;
+  const mm = d.getMonth() + 1;
+  const dd = d.getDate();
+
+  // JS: 0=CN, 1=T2, 2=T3...
+  const dow = d.getDay();
+
+  const hh = d.getHours();
+  const mi = d.getMinutes();
+  const ss = d.getSeconds();
+
+  return [yy, mm, dd, dow, hh, mi, ss];
+}
+
+async function connectHink() {
+  try {
+    log("Scanning ALL BLE devices...");
+
+    device = await navigator.bluetooth.requestDevice({
+      acceptAllDevices: true,
+      optionalServices: [HINK_SERVICE]
+    });
+
+    device.addEventListener("gattserverdisconnected", () => {
+      log("EVENT: disconnected");
+      setStatus("Disconnected", false);
+      server = null;
+      service = null;
+      writeChar = null;
+      writeNoRespChar = null;
+      notifyChar = null;
+      notifyEnabled = false;
+    });
+
+    log("Selected: " + device.name);
+
+    server = await device.gatt.connect();
+    log("Connected. Getting service...");
+
+    service = await server.getPrimaryService(HINK_SERVICE);
+    log("Service OK: " + HINK_SERVICE);
+
+    writeChar = await service.getCharacteristic(CHAR_WRITE);
+    log("Write char OK: " + CHAR_WRITE);
+
+    writeNoRespChar = await service.getCharacteristic(CHAR_WRITE_NO_RESP);
+    log("Write No Resp char OK: " + CHAR_WRITE_NO_RESP);
+
+    notifyChar = await service.getCharacteristic(CHAR_NOTIFY_ADC1);
+    log("Notify ADC1 char OK: " + CHAR_NOTIFY_ADC1);
+
+    setStatus("Connected: " + device.name, true);
+  } catch (e) {
+    log("CONNECT ERROR: " + e);
+    setStatus("Connect lỗi", false);
+  }
+}
+
+async function ensureConnected() {
+  if (!device || !device.gatt.connected || !service) {
+    await connectHink();
+  }
+}
+
+async function enableNotify() {
+  try {
+    await ensureConnected();
+
+    if (!notifyChar) {
+      notifyChar = await service.getCharacteristic(CHAR_NOTIFY_ADC1);
+    }
+
+    if (!notifyEnabled) {
+      notifyChar.addEventListener("characteristicvaluechanged", ev => {
+        const data = new Uint8Array(ev.target.value.buffer);
+        log("NOTIFY ADC1: " + bytesToHex(data));
+      });
+
+      await notifyChar.startNotifications();
+      notifyEnabled = true;
+      log("Notify enabled on ADC1");
+    } else {
+      log("Notify already enabled");
+    }
+  } catch (e) {
+    log("NOTIFY ERROR: " + e);
+  }
+}
+
+async function writeBytesTo(bytes, mode) {
+  await ensureConnected();
+
+  const data = new Uint8Array(bytes);
+  log("TX " + mode.toUpperCase() + ": " + bytesToHex(data));
+
+  if (mode === "write") {
+    if (!writeChar) {
+      writeChar = await service.getCharacteristic(CHAR_WRITE);
+    }
+
+    if (writeChar.writeValueWithResponse) {
+      await writeChar.writeValueWithResponse(data);
+    } else {
+      await writeChar.writeValue(data);
+    }
+
+    log("Sent via WRITE");
+    return;
+  }
+
+  if (mode === "wnr") {
+    if (!writeNoRespChar) {
+      writeNoRespChar = await service.getCharacteristic(CHAR_WRITE_NO_RESP);
+    }
+
+    if (writeNoRespChar.writeValueWithoutResponse) {
+      await writeNoRespChar.writeValueWithoutResponse(data);
+    } else {
+      await writeNoRespChar.writeValue(data);
+    }
+
+    log("Sent via WRITE NO RESPONSE");
+    return;
+  }
+
+  throw new Error("Unknown write mode: " + mode);
+}
+
+async function sendCurrentTimeWrite() {
+  await enableNotify();
+
+  const packet = currentTimePacket();
+  document.getElementById("hexInput").value = bytesToHex(packet);
+
+  await writeBytesTo(packet, "write");
+}
+
+async function sendCurrentTimeWnr() {
+  await enableNotify();
+
+  const packet = currentTimePacket();
+  document.getElementById("hexInput").value = bytesToHex(packet);
+
+  await writeBytesTo(packet, "wnr");
+}
+
+async function sendCurrentTimeBoth() {
+  await enableNotify();
+
+  const packet = currentTimePacket();
+  document.getElementById("hexInput").value = bytesToHex(packet);
+
+  await writeBytesTo(packet, "write");
+  await new Promise(r => setTimeout(r, 300));
+  await writeBytesTo(packet, "wnr");
+}
+
+async function sendBadLenTest() {
+  await enableNotify();
+  await writeBytesTo([0xAA, 0x55], "write");
+  await new Promise(r => setTimeout(r, 300));
+  await writeBytesTo([0xAA, 0x55], "wnr");
+}
+
+async function sendCustomHexWrite() {
+  await enableNotify();
+
+  const hex = document.getElementById("hexInput").value;
+  const data = parseHex(hex);
+
+  await writeBytesTo(data, "write");
+}
+
+async function sendCustomHexWnr() {
+  await enableNotify();
+
+  const hex = document.getElementById("hexInput").value;
+  const data = parseHex(hex);
+
+  await writeBytesTo(data, "wnr");
+}
+
+function disconnectBle() {
+  if (device && device.gatt.connected) {
+    device.gatt.disconnect();
+  }
+}
+</script>
+</body>
+</html>
