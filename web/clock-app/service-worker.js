@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dlg-clock-retail-v39-cache-v1';
+const CACHE_NAME = 'dlg-clock-hl17a-cache-v2';
 const ASSETS = ['./', './index.html', './manifest.webmanifest'];
 
 self.addEventListener('install', event => {
