@@ -191,6 +191,28 @@ Clean web panel works:
 Status:
 PASS
 
+### HL17A
+
+Web page:
+web/clock-app/hl16-213-panel.html
+
+Purpose:
+Web-only 2.13 framebuffer/canvas preview. Keep the canonical HL16 URL and add preview tools without sending framebuffer data to firmware.
+
+Implemented:
+- 128x296 preview canvas
+- Black/white pixel buffer
+- Sample clock drawing
+- Packed byte export preview
+- Copy packed HEX
+- Send framebuffer remains locked
+
+Packed preview:
+16 bytes per row, 296 rows, 4736 bytes total, MSB-first within each byte.
+
+Status:
+READY FOR WEB TEST
+
 ## BLE UUIDs
 
 Custom service:
@@ -231,20 +253,14 @@ HEADER: OK
 
 ## Next recommended task
 
-HL17A = prepare 2.13 framebuffer protocol, but keep refresh locked.
+HL17A browser test = verify the web-only canvas/packing controls on GitHub Pages after push.
 
 Goal:
 - Keep target only HINK213 2.13.
 - Do not test refresh on damaged panel.
-- Add web-side canvas/framebuffer preparation first.
+- Keep web-side canvas/framebuffer preparation only.
 - Later firmware can accept chunk data only, without refresh.
 - Refresh/draw text only when a good 2.13 panel is available.
-
-Possible HL17A web-only goals:
-- Add 128x296 preview canvas.
-- Add black/white pixel buffer.
-- Add export packed bytes preview.
-- Do not send framebuffer to firmware yet unless explicitly enabled.
 
 Possible HL17B firmware goals:
 - Add safe commands for framebuffer metadata/chunk ACK only.

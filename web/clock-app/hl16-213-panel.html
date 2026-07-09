@@ -3,25 +3,30 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>HL16 2.13 Panel</title>
+  <title>HL16/HL17A 2.13 Panel</title>
   <style>
     body { font-family: system-ui, Arial, sans-serif; background:#101010; color:#eee; margin:0; padding:16px; }
     h1 { margin:0 0 12px; }
     section { border:1px solid #333; border-radius:10px; padding:12px; margin:12px 0; background:#181818; }
     button { margin:4px; padding:8px 12px; border:0; border-radius:6px; background:#1f6feb; color:white; cursor:pointer; }
     button.danger { background:#555; cursor:not-allowed; opacity:.45; }
-    input { padding:8px; border-radius:6px; border:1px solid #444; background:#111; color:#eee; min-width:340px; }
+    input, textarea { padding:8px; border-radius:6px; border:1px solid #444; background:#111; color:#eee; }
+    input:not([type]), input[type="text"] { min-width:340px; }
+    textarea { width:100%; min-height:110px; box-sizing:border-box; font-family:Consolas, monospace; font-size:12px; resize:vertical; }
     .muted { color:#aaa; font-size:13px; }
     .ok { color:#7CFC98; }
     .warn { color:#FFD166; }
     .bad { color:#FF6B6B; }
     .grid { display:grid; grid-template-columns:150px 1fr; gap:6px 12px; max-width:520px; }
-    .logbar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:8px; }
+    .logbar, .toolbar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:8px; }
+    .previewWrap { display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap; }
+    #fbCanvas { width:256px; height:592px; max-width:100%; border:1px solid #555; background:#f8f8f8; image-rendering:pixelated; touch-action:none; }
+    .stats { display:grid; grid-template-columns:120px 1fr; gap:6px 12px; min-width:240px; }
     #log { background:#050505; border:1px solid #333; border-radius:8px; padding:10px; height:300px; overflow:auto; white-space:pre-wrap; font-family:Consolas, monospace; font-size:13px; }
   </style>
 </head>
 <body>
-  <h1>HL16 — HINK213 2.13 Panel</h1>
+  <h1>HL16/HL17A — HINK213 2.13 Panel</h1>
 
   <section>
     <h2>BLE</h2>
@@ -57,6 +62,33 @@
   </section>
 
   <section>
+    <h2>HL17A Framebuffer Preview</h2>
+    <div class="previewWrap">
+      <canvas id="fbCanvas" width="128" height="296"></canvas>
+      <div>
+        <div class="toolbar">
+          <button onclick="setFbTool('black')">Black</button>
+          <button onclick="setFbTool('white')">White</button>
+          <button onclick="clearFramebuffer()">Clear</button>
+          <button onclick="drawSampleClock()">Sample Clock</button>
+          <button onclick="exportFramebuffer()">Pack bytes</button>
+          <button onclick="copyFramebufferHex()">Copy HEX</button>
+          <button class="danger" disabled>Send locked</button>
+        </div>
+        <div class="stats">
+          <div>Canvas</div><b>128 x 296</b>
+          <div>X bytes</div><b>16</b>
+          <div>Payload</div><b id="fbPayloadSize">4736 bytes</b>
+          <div>Tool</div><b id="fbToolName">Black</b>
+          <div>Black pixels</div><b id="fbBlackPixels">0</b>
+        </div>
+        <p class="muted">Preview web-only. Pack MSB-first: 16 byte/dòng, 296 dòng. Chưa gửi framebuffer xuống firmware.</p>
+      </div>
+    </div>
+    <textarea id="fbHexOut" readonly placeholder="Bam Pack bytes de xem HEX payload preview"></textarea>
+  </section>
+
+  <section>
     <h2>HEX thủ công</h2>
     <input id="hexInput" value="E2 D0 00 00 00 00 00" />
     <button onclick="sendCustomHex()">Send HEX via WRITE</button>
@@ -76,10 +108,15 @@
 const HINK_SERVICE = "18424398-7cbc-11e9-8f9e-2a86e4085a59";
 const WRITE_UUID   = "2d86686a-53dc-25b3-0c4a-f0e10c8dee20";
 const NOTIFY_UUID  = "15005991-b131-3396-014c-664c9867b917";
+const FB_WIDTH = 128;
+const FB_HEIGHT = 296;
+const FB_X_BYTES = 16;
 
 let device = null;
 let writeChar = null;
 let notifyChar = null;
+let fbTool = "black";
+const framebuffer = new Uint8Array(FB_WIDTH * FB_HEIGHT);
 
 const panel = {
   driver: null,
@@ -123,6 +160,138 @@ async function copyLog() {
 
 function bytesToHex(bytes) {
   return Array.from(bytes).map(b => b.toString(16).padStart(2, "0").toUpperCase()).join(" ");
+}
+
+function setupFramebufferPreview() {
+  const canvas = document.getElementById("fbCanvas");
+  canvas.addEventListener("pointerdown", ev => {
+    canvas.setPointerCapture(ev.pointerId);
+    paintFramebuffer(ev);
+  });
+  canvas.addEventListener("pointermove", ev => {
+    if (ev.buttons) paintFramebuffer(ev);
+  });
+  redrawFramebuffer();
+}
+
+function setFbTool(tool) {
+  fbTool = tool;
+  document.getElementById("fbToolName").textContent = tool === "black" ? "Black" : "White";
+}
+
+function fbIndex(x, y) {
+  return y * FB_WIDTH + x;
+}
+
+function paintFramebuffer(ev) {
+  const canvas = document.getElementById("fbCanvas");
+  const rect = canvas.getBoundingClientRect();
+  const x = Math.floor((ev.clientX - rect.left) * FB_WIDTH / rect.width);
+  const y = Math.floor((ev.clientY - rect.top) * FB_HEIGHT / rect.height);
+  const value = fbTool === "black" ? 1 : 0;
+
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      const px = x + dx;
+      const py = y + dy;
+      if (px >= 0 && px < FB_WIDTH && py >= 0 && py < FB_HEIGHT) {
+        framebuffer[fbIndex(px, py)] = value;
+      }
+    }
+  }
+
+  redrawFramebuffer();
+}
+
+function clearFramebuffer() {
+  framebuffer.fill(0);
+  document.getElementById("fbHexOut").value = "";
+  redrawFramebuffer();
+}
+
+function drawSampleClock() {
+  const scratch = document.createElement("canvas");
+  scratch.width = FB_WIDTH;
+  scratch.height = FB_HEIGHT;
+  const ctx = scratch.getContext("2d");
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, FB_WIDTH, FB_HEIGHT);
+  ctx.fillStyle = "#000";
+  ctx.textAlign = "center";
+  ctx.font = "bold 22px Arial";
+  ctx.fillText("09:41", 64, 92);
+  ctx.font = "12px Arial";
+  ctx.fillText("EINK HL17A", 64, 118);
+  ctx.strokeStyle = "#000";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(10, 154, 108, 72);
+  ctx.font = "11px Arial";
+  ctx.fillText("128 x 296", 64, 188);
+  ctx.fillText("preview only", 64, 206);
+
+  const img = ctx.getImageData(0, 0, FB_WIDTH, FB_HEIGHT).data;
+  for (let i = 0; i < framebuffer.length; i++) {
+    const r = img[i * 4];
+    const g = img[i * 4 + 1];
+    const b = img[i * 4 + 2];
+    framebuffer[i] = (r + g + b) < 384 ? 1 : 0;
+  }
+
+  redrawFramebuffer();
+}
+
+function redrawFramebuffer() {
+  const canvas = document.getElementById("fbCanvas");
+  const ctx = canvas.getContext("2d");
+  const img = ctx.createImageData(FB_WIDTH, FB_HEIGHT);
+  let black = 0;
+
+  for (let i = 0; i < framebuffer.length; i++) {
+    const isBlack = framebuffer[i] === 1;
+    if (isBlack) black++;
+    const v = isBlack ? 0 : 248;
+    img.data[i * 4] = v;
+    img.data[i * 4 + 1] = v;
+    img.data[i * 4 + 2] = v;
+    img.data[i * 4 + 3] = 255;
+  }
+
+  ctx.putImageData(img, 0, 0);
+  document.getElementById("fbBlackPixels").textContent = String(black);
+  document.getElementById("fbPayloadSize").textContent = String(FB_X_BYTES * FB_HEIGHT) + " bytes";
+}
+
+function packFramebuffer() {
+  const packed = new Uint8Array(FB_X_BYTES * FB_HEIGHT);
+
+  for (let y = 0; y < FB_HEIGHT; y++) {
+    for (let xb = 0; xb < FB_X_BYTES; xb++) {
+      let value = 0;
+      for (let bit = 0; bit < 8; bit++) {
+        const x = xb * 8 + bit;
+        if (framebuffer[fbIndex(x, y)]) value |= (0x80 >> bit);
+      }
+      packed[y * FB_X_BYTES + xb] = value;
+    }
+  }
+
+  return packed;
+}
+
+function exportFramebuffer() {
+  const packed = packFramebuffer();
+  document.getElementById("fbHexOut").value = bytesToHex(packed);
+  log("HL17A packed preview: " + packed.length + " bytes, not sent to firmware", "ok");
+}
+
+async function copyFramebufferHex() {
+  try {
+    if (!document.getElementById("fbHexOut").value) exportFramebuffer();
+    await navigator.clipboard.writeText(document.getElementById("fbHexOut").value);
+    log("Copied framebuffer HEX preview", "ok");
+  } catch (e) {
+    log("FRAMEBUFFER COPY ERROR: " + e.message, "bad");
+  }
 }
 
 function parseHex(s) {
@@ -272,7 +441,8 @@ function decodeNotify(bytes) {
   return { text: "DECODE: " + name + " => status 0x" + st.toString(16).padStart(2, "0").toUpperCase(), cls:"warn" };
 }
 
-log("HL16 clean panel ready. Connect EINK-HL14/EINK-HL16.");
+setupFramebufferPreview();
+log("HL16/HL17A panel ready. Connect EINK-HL14/EINK-HL16; framebuffer preview is web-only.");
 </script>
 </body>
 </html>

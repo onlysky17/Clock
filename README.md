@@ -4,19 +4,34 @@ DA14585 2.13 inch E-Ink clock firmware and Web Bluetooth control workspace.
 
 This repo is the clean sync copy from `D:\EINK`, made so the firmware can be continued on another machine without carrying raw board backups, donor dumps, or large archive files.
 
+## Current Target
+
+This workspace is currently focused on the DA14585 HINK213 2.13 inch e-ink BLE clock only.
+
+Current milestones:
+
+- HL14 EPD smoke: PASS
+- HL16 panel descriptor: PASS
+- HL16 web panel: PASS
+- HL17A web/canvas preview: READY FOR WEB TEST
+
+Do not work on 4.2 / 5.83 / 7.5 inch panels in this repo state.
+Do not push `.bin` firmware images to public GitHub.
+Do not run refresh/framebuffer tests while the current screen/FPC is damaged.
+
 ## Main Firmware
 
 Open this Keil project:
 
 ```text
-firmware\FWV2\eink_viet_custom_fw\projects\target_apps\ble_examples\ble_app_ota\Keil_5\ble_app_ota.uvprojx
+D:\EINK\6.0.18.1182.1\projects\target_apps\ble_examples\HINK213_CLOCK_P3_EPD_SMOKE
 ```
 
-Current custom branch:
+Current handoff:
 
-- BLE name: `EINK-VIET`
-- Source root: `firmware\FWV2\eink_viet_custom_fw`
-- Packaged test image: `firmware\FWV2\eink_viet_custom_pack_v2\fw_custom_spi_v2_256KB.bin`
+```text
+docs\handoff\EINK_HANDOFF_2026-07-09.md
+```
 
 ## Flash Notes
 
@@ -38,24 +53,14 @@ Use offset `00000`, SPI flash size `40000`, and read/backup before erase or burn
 
 ## Web Tool
 
-The current Web Bluetooth control page is kept in two places:
-
-- GitHub Pages root: `index.html`, `manifest.webmanifest`, `service-worker.js`, `.nojekyll`
-- Workspace copy: `web\github_pages_eink_clock_v39`
-
-Web Bluetooth needs HTTPS. GitHub Pages serves HTTPS, so it works on Chrome Android/Desktop.
-
-Admin PIN:
+Canonical Web Bluetooth page:
 
 ```text
-585
+https://onlysky17.github.io/Clock/web/clock-app/hl16-213-panel.html
 ```
 
-Shared storage key:
-
-```text
-dlg_clock_commercial_FINAL_v38
-```
+Use `web\clock-app\hl16-213-panel.html` as the current page source.
+Do not use `eink-dev.html`; it is not the canonical page.
 
 ## Not Tracked
 
