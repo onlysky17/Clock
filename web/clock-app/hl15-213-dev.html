@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="vi">
 <head>
   <meta charset="utf-8" />
@@ -42,6 +42,17 @@
       min-width: 330px;
     }
     .muted { color: #aaa; font-size: 13px; }
+    .logbar {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
+    .logbar label {
+      font-size: 13px;
+      color: #ddd;
+    }
     #log {
       background: #050505;
       border: 1px solid #333;
@@ -86,6 +97,7 @@
     <button onclick="sendEpd('45')">Reset Pulse</button>
     <button onclick="sendEpd('42')">SPI Byte</button>
     <button onclick="sendEpd('43')">Soft Reset Byte</button>
+    <button onclick="sendPanelInfo()">Read Panel Info</button>
     <p class="muted">Không gửi refresh/framebuffer khi màn/FPC đang gãy.</p>
   </section>
 
@@ -95,8 +107,13 @@
     <button onclick="sendCustomHex()">Send HEX via WRITE</button>
   </section>
 
-  <section>
+    <section>
     <h2>Log</h2>
+    <div class="logbar">
+      <button onclick="clearLog()">Clear log</button>
+      <button onclick="copyLog()">Copy log</button>
+      <label><input id="decodedOnly" type="checkbox" checked /> Chỉ hiện decode</label>
+    </div>
     <div id="log"></div>
   </section>
 
@@ -115,6 +132,11 @@ function now() {
   return new Date().toLocaleTimeString();
 }
 
+function isQuietLog() {
+  const el = document.getElementById("decodedOnly");
+  return !!(el && el.checked);
+}
+
 function log(msg, cls) {
   const el = document.getElementById("log");
   const line = `[${now()}] ${msg}\n`;
@@ -128,6 +150,16 @@ function escapeHtml(s) {
 
 function clearLog() {
   document.getElementById("log").innerHTML = "";
+}
+
+async function copyLog() {
+  const text = document.getElementById("log").innerText || "";
+  try {
+    await navigator.clipboard.writeText(text);
+    log("Copied log", "ok");
+  } catch (e) {
+    log("COPY ERROR: " + e.message, "bad");
+  }
 }
 
 function bytesToHex(bytes) {
@@ -189,12 +221,19 @@ async function writeBytes(bytes) {
     await writeChar.writeValue(bytes);
   }
 
-  log("TX WRITE: " + bytesToHex(bytes));
+  if (!isQuietLog()) log("TX WRITE: " + bytesToHex(bytes));
 }
 
 async function sendEpd(subHex) {
   const bytes = parseHex("E2 " + subHex + " 00 00 00 00 00");
   await writeBytes(bytes);
+}
+
+async function sendPanelInfo() {
+  for (const sub of ["D0", "D1", "D2", "D3", "D4", "D5"]) {
+    await sendEpd(sub);
+    await new Promise(resolve => setTimeout(resolve, 150));
+  }
 }
 
 async function sendCustomHex() {
@@ -211,7 +250,7 @@ function onNotify(ev) {
   const bytes = new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength);
   const hex = bytesToHex(bytes);
 
-  log("NOTIFY ADC1: " + hex);
+  if (!isQuietLog()) log("NOTIFY ADC1: " + hex);
   const decoded = decodeNotify(bytes);
   if (decoded.text) log(decoded.text, decoded.cls);
 }
@@ -220,6 +259,13 @@ function decodeNotify(bytes) {
   if (bytes.length === 3 && bytes[0] === 0xE2) {
     const sub = bytes[1];
     const st = bytes[2];
+
+    if (sub === 0xD0) return { text: "DECODE: Panel driver => " + (st === 0x01 ? "HINK213 2.13 BW" : ("ID 0x" + st.toString(16).padStart(2, "0").toUpperCase())), cls: "ok" };
+    if (sub === 0xD1) return { text: "DECODE: Width low => " + st + " / 0x" + st.toString(16).padStart(2, "0").toUpperCase(), cls: "ok" };
+    if (sub === 0xD2) return { text: "DECODE: Width high => " + st, cls: "ok" };
+    if (sub === 0xD3) return { text: "DECODE: Height low => " + st + " / 0x" + st.toString(16).padStart(2, "0").toUpperCase(), cls: "ok" };
+    if (sub === 0xD4) return { text: "DECODE: Height high => " + st, cls: "ok" };
+    if (sub === 0xD5) return { text: "DECODE: X bytes => " + st, cls: "ok" };
 
     const names = {
       0x00: "EPD parser",
