@@ -196,6 +196,9 @@ PASS
 Web page:
 web/clock-app/hl16-213-panel.html
 
+Cache-safe fallback page:
+web/clock-app/hl17a-213-preview.html
+
 Purpose:
 Web-only 2.13 framebuffer/canvas preview. Keep the canonical HL16 URL and add preview tools without sending framebuffer data to firmware.
 
@@ -231,6 +234,9 @@ NOTIFY:
 
 Use this URL only from now on:
 https://onlysky17.github.io/Clock/web/clock-app/hl16-213-panel.html
+
+If Chrome/GitHub Pages still serves the cached vertical preview, use this cache-safe HL17A URL:
+https://onlysky17.github.io/Clock/web/clock-app/hl17a-213-preview.html
 
 Do not create new test URLs unless explicitly needed.
 
