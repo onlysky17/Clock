@@ -109,10 +109,13 @@ function currentTimePacket() {
 
 async function connectHink() {
   try {
-    log("Scanning ALL BLE devices...");
+    log("Scanning EINK/HINK only...");
 
     device = await navigator.bluetooth.requestDevice({
-      acceptAllDevices: true,
+      filters: [
+        { namePrefix: "EINK" },
+        { namePrefix: "HINK" }
+      ],
       optionalServices: [HINK_SERVICE]
     });
 
