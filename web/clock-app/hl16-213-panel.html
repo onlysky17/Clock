@@ -20,7 +20,7 @@
     .grid { display:grid; grid-template-columns:150px 1fr; gap:6px 12px; max-width:520px; }
     .logbar, .toolbar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:8px; }
     .previewWrap { display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap; }
-    #fbCanvas { width:256px; height:592px; max-width:100%; border:1px solid #555; background:#f8f8f8; image-rendering:pixelated; touch-action:none; }
+    #fbCanvas { width:592px; height:256px; max-width:100%; border:1px solid #555; background:#f8f8f8; image-rendering:pixelated; touch-action:none; }
     .stats { display:grid; grid-template-columns:120px 1fr; gap:6px 12px; min-width:240px; }
     #log { background:#050505; border:1px solid #333; border-radius:8px; padding:10px; height:300px; overflow:auto; white-space:pre-wrap; font-family:Consolas, monospace; font-size:13px; }
   </style>
@@ -64,7 +64,7 @@
   <section>
     <h2>HL17A Framebuffer Preview</h2>
     <div class="previewWrap">
-      <canvas id="fbCanvas" width="128" height="296"></canvas>
+      <canvas id="fbCanvas" width="296" height="128"></canvas>
       <div>
         <div class="toolbar">
           <button onclick="setFbTool('black')">Black</button>
@@ -76,7 +76,8 @@
           <button class="danger" disabled>Send locked</button>
         </div>
         <div class="stats">
-          <div>Canvas</div><b>128 x 296</b>
+          <div>Display</div><b>296 x 128</b>
+          <div>Raw buffer</div><b>128 x 296</b>
           <div>X bytes</div><b>16</b>
           <div>Payload</div><b id="fbPayloadSize">4736 bytes</b>
           <div>Tool</div><b id="fbToolName">Black</b>
@@ -111,6 +112,8 @@ const NOTIFY_UUID  = "15005991-b131-3396-014c-664c9867b917";
 const FB_WIDTH = 128;
 const FB_HEIGHT = 296;
 const FB_X_BYTES = 16;
+const VIEW_WIDTH = 296;
+const VIEW_HEIGHT = 128;
 
 let device = null;
 let writeChar = null;
@@ -183,17 +186,22 @@ function fbIndex(x, y) {
   return y * FB_WIDTH + x;
 }
 
+function viewToFramebuffer(x, y) {
+  return { x: y, y: x };
+}
+
 function paintFramebuffer(ev) {
   const canvas = document.getElementById("fbCanvas");
   const rect = canvas.getBoundingClientRect();
-  const x = Math.floor((ev.clientX - rect.left) * FB_WIDTH / rect.width);
-  const y = Math.floor((ev.clientY - rect.top) * FB_HEIGHT / rect.height);
+  const viewX = Math.floor((ev.clientX - rect.left) * VIEW_WIDTH / rect.width);
+  const viewY = Math.floor((ev.clientY - rect.top) * VIEW_HEIGHT / rect.height);
   const value = fbTool === "black" ? 1 : 0;
 
   for (let dy = -1; dy <= 1; dy++) {
     for (let dx = -1; dx <= 1; dx++) {
-      const px = x + dx;
-      const py = y + dy;
+      const mapped = viewToFramebuffer(viewX + dx, viewY + dy);
+      const px = mapped.x;
+      const py = mapped.y;
       if (px >= 0 && px < FB_WIDTH && py >= 0 && py < FB_HEIGHT) {
         framebuffer[fbIndex(px, py)] = value;
       }
@@ -211,30 +219,31 @@ function clearFramebuffer() {
 
 function drawSampleClock() {
   const scratch = document.createElement("canvas");
-  scratch.width = FB_WIDTH;
-  scratch.height = FB_HEIGHT;
+  scratch.width = VIEW_WIDTH;
+  scratch.height = VIEW_HEIGHT;
   const ctx = scratch.getContext("2d");
   ctx.fillStyle = "#fff";
-  ctx.fillRect(0, 0, FB_WIDTH, FB_HEIGHT);
+  ctx.fillRect(0, 0, VIEW_WIDTH, VIEW_HEIGHT);
   ctx.fillStyle = "#000";
   ctx.textAlign = "center";
-  ctx.font = "bold 22px Arial";
-  ctx.fillText("09:41", 64, 92);
-  ctx.font = "12px Arial";
-  ctx.fillText("EINK HL17A", 64, 118);
+  ctx.font = "bold 34px Arial";
+  ctx.fillText("09:41", 148, 52);
+  ctx.font = "15px Arial";
+  ctx.fillText("EINK HL17A", 148, 78);
   ctx.strokeStyle = "#000";
   ctx.lineWidth = 2;
-  ctx.strokeRect(10, 154, 108, 72);
-  ctx.font = "11px Arial";
-  ctx.fillText("128 x 296", 64, 188);
-  ctx.fillText("preview only", 64, 206);
+  ctx.strokeRect(20, 94, 256, 24);
+  ctx.font = "12px Arial";
+  ctx.fillText("296 x 128 view / 128 x 296 raw", 148, 111);
 
-  const img = ctx.getImageData(0, 0, FB_WIDTH, FB_HEIGHT).data;
-  for (let i = 0; i < framebuffer.length; i++) {
-    const r = img[i * 4];
-    const g = img[i * 4 + 1];
-    const b = img[i * 4 + 2];
-    framebuffer[i] = (r + g + b) < 384 ? 1 : 0;
+  const img = ctx.getImageData(0, 0, VIEW_WIDTH, VIEW_HEIGHT).data;
+  framebuffer.fill(0);
+  for (let vy = 0; vy < VIEW_HEIGHT; vy++) {
+    for (let vx = 0; vx < VIEW_WIDTH; vx++) {
+      const i = (vy * VIEW_WIDTH + vx) * 4;
+      const mapped = viewToFramebuffer(vx, vy);
+      framebuffer[fbIndex(mapped.x, mapped.y)] = (img[i] + img[i + 1] + img[i + 2]) < 384 ? 1 : 0;
+    }
   }
 
   redrawFramebuffer();
@@ -243,17 +252,21 @@ function drawSampleClock() {
 function redrawFramebuffer() {
   const canvas = document.getElementById("fbCanvas");
   const ctx = canvas.getContext("2d");
-  const img = ctx.createImageData(FB_WIDTH, FB_HEIGHT);
+  const img = ctx.createImageData(VIEW_WIDTH, VIEW_HEIGHT);
   let black = 0;
 
-  for (let i = 0; i < framebuffer.length; i++) {
-    const isBlack = framebuffer[i] === 1;
-    if (isBlack) black++;
-    const v = isBlack ? 0 : 248;
-    img.data[i * 4] = v;
-    img.data[i * 4 + 1] = v;
-    img.data[i * 4 + 2] = v;
-    img.data[i * 4 + 3] = 255;
+  for (let vy = 0; vy < VIEW_HEIGHT; vy++) {
+    for (let vx = 0; vx < VIEW_WIDTH; vx++) {
+      const mapped = viewToFramebuffer(vx, vy);
+      const isBlack = framebuffer[fbIndex(mapped.x, mapped.y)] === 1;
+      if (isBlack) black++;
+      const v = isBlack ? 0 : 248;
+      const i = (vy * VIEW_WIDTH + vx) * 4;
+      img.data[i] = v;
+      img.data[i + 1] = v;
+      img.data[i + 2] = v;
+      img.data[i + 3] = 255;
+    }
   }
 
   ctx.putImageData(img, 0, 0);
