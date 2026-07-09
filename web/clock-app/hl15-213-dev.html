@@ -1,0 +1,258 @@
+﻿<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>HL15 2.13 EPD Dev</title>
+  <style>
+    body {
+      font-family: system-ui, Arial, sans-serif;
+      background: #101010;
+      color: #e8e8e8;
+      margin: 0;
+      padding: 16px;
+    }
+    h1 { margin: 0 0 12px; }
+    section {
+      border: 1px solid #333;
+      border-radius: 10px;
+      padding: 12px;
+      margin: 12px 0;
+      background: #181818;
+    }
+    button {
+      margin: 4px;
+      padding: 8px 12px;
+      border: 0;
+      border-radius: 6px;
+      background: #1f6feb;
+      color: white;
+      cursor: pointer;
+    }
+    button:disabled {
+      opacity: .45;
+      cursor: not-allowed;
+    }
+    input {
+      padding: 8px;
+      border-radius: 6px;
+      border: 1px solid #444;
+      background: #111;
+      color: #eee;
+      min-width: 330px;
+    }
+    .muted { color: #aaa; font-size: 13px; }
+    #log {
+      background: #050505;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 10px;
+      height: 330px;
+      overflow: auto;
+      white-space: pre-wrap;
+      font-family: Consolas, monospace;
+      font-size: 13px;
+    }
+    .ok { color: #7CFC98; }
+    .warn { color: #FFD166; }
+    .bad { color: #FF6B6B; }
+  </style>
+</head>
+<body>
+  <h1>HL15 — HINK213 2.13 EPD Dev Panel</h1>
+
+  <section>
+    <h2>BLE</h2>
+    <button id="connectBtn" onclick="connectBle()">Connect EINK/HINK</button>
+    <button onclick="disconnectBle()">Disconnect</button>
+    <button onclick="clearLog()">Clear log</button>
+    <p class="muted">Target firmware hiện tại: EINK-HL14. Web này chỉ gửi command an toàn cho màn 2.13.</p>
+  </section>
+
+  <section>
+    <h2>Panel</h2>
+    <div>Driver: <b>HINK213 2.13 Black/White</b></div>
+    <div>Canvas: <b>128 x 296</b></div>
+    <div>X bytes: <b>16</b></div>
+    <div class="muted">Không có 4.2 / 5.83 ở đây. Mấy driver lớn để sau này nếu có phần cứng.</div>
+  </section>
+
+  <section>
+    <h2>Safe EPD Commands</h2>
+    <button onclick="sendEpd('00')">EPD Ping</button>
+    <button onclick="sendEpd('40')">GPIO Idle</button>
+    <button onclick="sendEpd('41')">SPI Init</button>
+    <button onclick="sendEpd('44')">Read BUSY</button>
+    <button onclick="sendEpd('45')">Reset Pulse</button>
+    <button onclick="sendEpd('42')">SPI Byte</button>
+    <button onclick="sendEpd('43')">Soft Reset Byte</button>
+    <p class="muted">Không gửi refresh/framebuffer khi màn/FPC đang gãy.</p>
+  </section>
+
+  <section>
+    <h2>HEX thủ công</h2>
+    <input id="hexInput" value="E2 00 00 00 00 00 00" />
+    <button onclick="sendCustomHex()">Send HEX via WRITE</button>
+  </section>
+
+  <section>
+    <h2>Log</h2>
+    <div id="log"></div>
+  </section>
+
+<script>
+const HINK_SERVICE = "18424398-7cbc-11e9-8f9e-2a86e4085a59";
+const WRITE_UUID   = "2d86686a-53dc-25b3-0c4a-f0e10c8dee20";
+const NOTIFY_UUID  = "15005991-b131-3396-014c-664c9867b917";
+
+let device = null;
+let server = null;
+let service = null;
+let writeChar = null;
+let notifyChar = null;
+
+function now() {
+  return new Date().toLocaleTimeString();
+}
+
+function log(msg, cls) {
+  const el = document.getElementById("log");
+  const line = `[${now()}] ${msg}\n`;
+  el.innerHTML += cls ? `<span class="${cls}">${escapeHtml(line)}</span>` : escapeHtml(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
+}
+
+function clearLog() {
+  document.getElementById("log").innerHTML = "";
+}
+
+function bytesToHex(bytes) {
+  return Array.from(bytes).map(b => b.toString(16).padStart(2, "0").toUpperCase()).join(" ");
+}
+
+function parseHex(s) {
+  const parts = s.trim().split(/\s+/).filter(Boolean);
+  const out = [];
+  for (const p of parts) {
+    if (!/^[0-9a-fA-F]{1,2}$/.test(p)) throw new Error("HEX sai: " + p);
+    out.push(parseInt(p, 16));
+  }
+  return new Uint8Array(out);
+}
+
+async function connectBle() {
+  try {
+    log("Scanning EINK/HINK...");
+    device = await navigator.bluetooth.requestDevice({
+      filters: [
+        { namePrefix: "EINK" },
+        { namePrefix: "HINK" }
+      ],
+      optionalServices: [HINK_SERVICE]
+    });
+
+    device.addEventListener("gattserverdisconnected", () => {
+      log("Disconnected", "warn");
+    });
+
+    server = await device.gatt.connect();
+    service = await server.getPrimaryService(HINK_SERVICE);
+    writeChar = await service.getCharacteristic(WRITE_UUID);
+    notifyChar = await service.getCharacteristic(NOTIFY_UUID);
+
+    await notifyChar.startNotifications();
+    notifyChar.addEventListener("characteristicvaluechanged", onNotify);
+
+    log("Connected: " + (device.name || "unknown"), "ok");
+    log("Notify enabled", "ok");
+  } catch (e) {
+    log("CONNECT ERROR: " + e.message, "bad");
+  }
+}
+
+function disconnectBle() {
+  if (device && device.gatt.connected) {
+    device.gatt.disconnect();
+  }
+}
+
+async function writeBytes(bytes) {
+  if (!writeChar) throw new Error("Chưa connect BLE");
+
+  if (writeChar.writeValueWithResponse) {
+    await writeChar.writeValueWithResponse(bytes);
+  } else {
+    await writeChar.writeValue(bytes);
+  }
+
+  log("TX WRITE: " + bytesToHex(bytes));
+}
+
+async function sendEpd(subHex) {
+  const bytes = parseHex("E2 " + subHex + " 00 00 00 00 00");
+  await writeBytes(bytes);
+}
+
+async function sendCustomHex() {
+  try {
+    const bytes = parseHex(document.getElementById("hexInput").value);
+    await writeBytes(bytes);
+  } catch (e) {
+    log("HEX ERROR: " + e.message, "bad");
+  }
+}
+
+function onNotify(ev) {
+  const dv = ev.target.value;
+  const bytes = new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength);
+  const hex = bytesToHex(bytes);
+
+  log("NOTIFY ADC1: " + hex);
+  const decoded = decodeNotify(bytes);
+  if (decoded.text) log(decoded.text, decoded.cls);
+}
+
+function decodeNotify(bytes) {
+  if (bytes.length === 3 && bytes[0] === 0xE2) {
+    const sub = bytes[1];
+    const st = bytes[2];
+
+    const names = {
+      0x00: "EPD parser",
+      0x40: "GPIO idle",
+      0x41: "SPI init",
+      0x42: "SPI byte transfer",
+      0x43: "Soft reset byte",
+      0x44: "BUSY read",
+      0x45: "Reset pulse"
+    };
+
+    const name = names[sub] || ("Subcmd 0x" + sub.toString(16).padStart(2, "0").toUpperCase());
+
+    if (st === 0x02) return { text: "DECODE: " + name + " => OK", cls: "ok" };
+    if (st === 0x00) return { text: "DECODE: " + name + " => BUSY LOW", cls: "ok" };
+    if (st === 0x01) return { text: "DECODE: " + name + " => BUSY HIGH", cls: "warn" };
+    if (st === 0x10) return { text: "DECODE: " + name + " => OK / BUSY LOW", cls: "ok" };
+    if (st === 0x11) return { text: "DECODE: " + name + " => OK / BUSY HIGH", cls: "warn" };
+    if (st === 0xEE) return { text: "DECODE: " + name + " => Unsupported command", cls: "bad" };
+    if (st === 0xF1) return { text: "DECODE: " + name + " => SPI TX stuck", cls: "bad" };
+    if (st === 0xF2) return { text: "DECODE: " + name + " => SPI BUSY stuck", cls: "bad" };
+
+    return { text: "DECODE: " + name + " => status 0x" + st.toString(16).padStart(2, "0").toUpperCase(), cls: "warn" };
+  }
+
+  if (bytes.length === 3) {
+    return { text: "DECODE: Time notify => " + bytesToHex(bytes), cls: "ok" };
+  }
+
+  return {};
+}
+
+log("HL15 web ready. Connect EINK-HL14.");
+</script>
+</body>
+</html>
