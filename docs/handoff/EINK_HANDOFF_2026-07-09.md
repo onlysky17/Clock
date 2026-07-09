@@ -335,3 +335,21 @@ PREPARED / NOT LIVE until committed and pushed.
 Note:
 Canonical production web remains HL17A until HL18A is pushed and verified:
 https://onlysky17.github.io/Clock/web/clock-app/hl17a-213-preview.html
+
+### HL18B
+
+Task:
+Firmware source patch for E3 framebuffer dry-run ACK only.
+
+Status:
+PARKED / SOURCE PATCHED LOCALLY / NOT BUILT / NOT FLASHED.
+
+Result so far:
+- E3 dry-run handler inserted into user_custs1_impl.c.
+- E3 hook verified before E2 EPD command path.
+- Patch saved as docs/firmware/patches/HL18B_E3_DRYRUN_user_custs1_impl.patch.
+- No .bin generated or pushed.
+- No real EPD refresh/framebuffer tested.
+
+Next:
+At company, apply/verify patch, build Keil project, then flash only if build passes.

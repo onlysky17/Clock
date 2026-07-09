@@ -126,3 +126,26 @@ Status codes:
 - 03 sequence error
 - 04 busy/locked
 - 05 unsupported
+
+## HL18B parked state - 2026-07-09 night
+
+Status:
+SOURCE PATCHED LOCALLY / NOT BUILT / NOT FLASHED.
+
+Local patched source:
+D:\EINK\6.0.18.1182.1\projects\target_apps\ble_examples\HINK213_CLOCK_P3_EPD_SMOKE\src\user_custs1_impl.c
+
+Backup before HL18B:
+D:\EINK\6.0.18.1182.1\projects\target_apps\ble_examples\HINK213_CLOCK_P3_EPD_SMOKE\src\user_custs1_impl.c.hl18b.bak
+
+Patch saved in repo:
+docs/firmware/patches/HL18B_E3_DRYRUN_user_custs1_impl.patch
+
+Safety:
+- E3 dry-run hook is before E2 EPD command path.
+- No build done.
+- No flash done.
+- No .bin pushed.
+- No real EPD refresh tested.
+- No framebuffer written to panel.
+- Continue at company with Keil build + flash tools only when ready.
