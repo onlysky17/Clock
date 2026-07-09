@@ -1,0 +1,251 @@
+﻿# EINK / HINK213 CLOCK HANDOFF — 2026-07-09
+
+## Repo
+
+GitHub:
+onlysky17/Clock
+
+Local repo:
+D:\EINK\Clock
+
+Firmware SDK/project root:
+D:\EINK\6.0.18.1182.1\projects\target_apps\ble_examples
+
+Main firmware project currently used:
+D:\EINK\6.0.18.1182.1\projects\target_apps\ble_examples\HINK213_CLOCK_P3_EPD_SMOKE
+
+## Hardware
+
+Target board:
+DA14585 based HINK213 / 2.13 inch e-ink BLE clock
+
+Current real panel:
+2.13 inch HINK213 only
+
+Important:
+Do not implement 4.2 / 5.83 / 7.5 drivers now. Those were only architecture references from another app.
+
+Screen/FPC condition:
+Current panel/FPC is damaged, so do not run refresh/framebuffer tests yet.
+
+## Programming
+
+Tool:
+SmartSnippets Toolbox + J-Link v9
+
+Flash settings:
+Device: DA14585
+Offset: 00000
+SPI Flash size: 40000
+Flow:
+Erase -> Burn & Verify -> close SmartSnippets -> unplug J-Link/SWD -> power-cycle board
+
+## Golden firmware
+
+Golden connect-good full image:
+D:\EINK\GOOD_CONNECT\HINK213_CLOCK_CONNECT_GOOD_FULL_256KB.bin
+
+Golden SHA256:
+C52E3E96CA76B45245FE5457721FFE6163C25C1840D120EB45F398817DA49452
+
+Working flash layout:
+0x00000 header: 70 50
+0x04000 app header: 70 51
+0x4040 raw app payload
+0x38000 product header: 70 52
+
+Do not push BIN files to public GitHub.
+
+## Known milestones
+
+### HL11_REPRO
+
+File:
+D:\EINK\GOOD_CONNECT\HL11_REPRO_HINK213_FULL_256KB.bin
+
+Result:
+Built source reproduced working BLE/timekeeping.
+
+Status:
+PASS
+
+### HL12
+
+Change:
+BLE name changed to EINK-HL12
+
+Result:
+BLE scan/connect worked. Web originally needed EINK/HINK filter.
+
+Status:
+PASS
+
+### HL13B
+
+File:
+D:\EINK\GOOD_CONNECT\HL13B_CONST_DEBUG_FULL_256KB.bin
+
+Device:
+EINK-HL13
+
+Test:
+Send HEX:
+F0 13
+
+Expected notify:
+13 13
+
+Result:
+Custom source patch confirmed running.
+
+Status:
+PASS
+
+### HL14
+
+File:
+D:\EINK\GOOD_CONNECT\HL14_P3_EPD_SMOKE_FULL_256KB.bin
+
+SHA256:
+7A54CAF30C61A9FD860C31BF2255A1EFDBE6D25CFB7ECB3059E97BAA3647FF1B
+
+Device:
+EINK-HL14
+
+Safe EPD command results:
+E2 00 02 = parser OK
+E2 40 02 = GPIO idle OK
+E2 41 02 = SPI init OK
+E2 44 01 = BUSY read, HIGH
+E2 45 11 = reset pulse OK, BUSY HIGH
+E2 42 02 = SPI byte transfer OK
+E2 43 11 = soft reset byte OK, BUSY HIGH
+
+Status:
+PASS
+
+Do not run refresh commands while screen/FPC is broken:
+E2 03
+E2 04
+E2 30
+E2 31
+E2 50
+
+### HL15A
+
+Web page:
+web/clock-app/hl15-213-dev.html
+
+Result:
+Web buttons + decode log worked.
+
+Status:
+PASS
+
+### HL16A
+
+Firmware file:
+D:\EINK\GOOD_CONNECT\HL16_PANEL_DESC_FULL_256KB.bin
+
+Purpose:
+Panel descriptor command for HINK213 2.13.
+
+Expected descriptor:
+E2 D0 01 = driver id HINK213 2.13 BW
+E2 D1 80 = width low 128
+E2 D2 00 = width high
+E2 D3 28 = height low 296
+E2 D4 01 = height high
+E2 D5 10 = x bytes 16
+
+Observed:
+Descriptor works.
+
+Note:
+Windows/Chrome may cache old BLE name EINK-HL14 by MAC. Descriptor result matters more than displayed cached name.
+
+Status:
+PASS
+
+### HL16B
+
+Stable web page:
+web/clock-app/hl16-213-panel.html
+
+Stable URL:
+https://onlysky17.github.io/Clock/web/clock-app/hl16-213-panel.html
+
+Result:
+Clean web panel works:
+- Connect EINK/HINK
+- Read Panel Info
+- Driver HINK213 2.13 BW
+- Width 128
+- Height 296
+- X bytes 16
+- Safe EPD buttons
+- Clear log
+- Copy log
+- decoded-only mode
+
+Status:
+PASS
+
+## BLE UUIDs
+
+Custom service:
+18424398-7cbc-11e9-8f9e-2a86e4085a59
+
+WRITE:
+2d86686a-53dc-25b3-0c4a-f0e10c8dee20
+
+WRITE NO RESPONSE:
+5a87b4ef-3bfa-76a8-e642-92933c31434f
+
+NOTIFY:
+15005991-b131-3396-014c-664c9867b917
+
+## Current web standard
+
+Use this URL only from now on:
+https://onlysky17.github.io/Clock/web/clock-app/hl16-213-panel.html
+
+Do not create new test URLs unless explicitly needed.
+
+The attempted stable alias below may be 404 and should not be treated as canonical yet:
+https://onlysky17.github.io/Clock/web/clock-app/eink-dev.html
+
+## Current packer
+
+Reusable pack script:
+D:\EINK\tools\pack-hink.ps1
+
+Expected output format:
+STATUS: READY TO FLASH
+FILE: ...
+DEVICE: ...
+RAW_SIZE: ...
+RAW_CRC32: ...
+SHA256: ...
+HEADER: OK
+
+## Next recommended task
+
+HL17A = prepare 2.13 framebuffer protocol, but keep refresh locked.
+
+Goal:
+- Keep target only HINK213 2.13.
+- Do not test refresh on damaged panel.
+- Add web-side canvas/framebuffer preparation first.
+- Later firmware can accept chunk data only, without refresh.
+- Refresh/draw text only when a good 2.13 panel is available.
+
+Possible HL17A web-only goals:
+- Add 128x296 preview canvas.
+- Add black/white pixel buffer.
+- Add export packed bytes preview.
+- Do not send framebuffer to firmware yet unless explicitly enabled.
+
+Possible HL17B firmware goals:
+- Add safe commands for framebuffer metadata/chunk ACK only.
+- No refresh command enabled by default.
