@@ -14,6 +14,24 @@ D:\EINK\6.0.18.1182.1\projects\target_apps\ble_examples
 Main firmware project currently used:
 D:\EINK\6.0.18.1182.1\projects\target_apps\ble_examples\HINK213_CLOCK_P3_EPD_SMOKE
 
+## Current Locked State
+
+State:
+HL17B docs cleanup only, after HL17A preview PASS/LIVE.
+
+Canonical web page:
+web/clock-app/hl17a-213-preview.html
+
+Canonical URL:
+https://onlysky17.github.io/Clock/web/clock-app/hl17a-213-preview.html
+
+Scope lock:
+- Target only HINK213 2.13 inch.
+- Do not implement 4.2 / 5.83 / 7.5 drivers now.
+- Do not use web/clock-app/eink-dev.html.
+- Do not push .bin firmware images to public GitHub.
+- Do not touch real EPD refresh/framebuffer while the current panel/FPC is broken.
+
 ## Hardware
 
 Target board:
@@ -194,16 +212,14 @@ PASS
 ### HL17A
 
 Web page:
-web/clock-app/hl16-213-panel.html
-
-Cache-safe fallback page:
 web/clock-app/hl17a-213-preview.html
 
 Purpose:
-Web-only 2.13 framebuffer/canvas preview. Keep the canonical HL16 URL and add preview tools without sending framebuffer data to firmware.
+Web-only 2.13 framebuffer/canvas preview. This is the canonical web page after HL17A. It previews and packs bytes without sending framebuffer data to firmware.
 
 Implemented:
-- 128x296 preview canvas
+- Landscape display preview, 296x128
+- Raw HINK213 buffer remains 128x296
 - Black/white pixel buffer
 - Sample clock drawing
 - Packed byte export preview
@@ -214,7 +230,22 @@ Packed preview:
 16 bytes per row, 296 rows, 4736 bytes total, MSB-first within each byte.
 
 Status:
-READY FOR WEB TEST
+PASS / LIVE
+
+### HL17B
+
+Task:
+Docs cleanup and state lock only.
+
+Result:
+- Canonical web page locked to web/clock-app/hl17a-213-preview.html
+- HINK213 2.13-only scope restated.
+- eink-dev.html explicitly not canonical.
+- .bin public GitHub push remains forbidden.
+- Real EPD refresh/framebuffer remains locked because panel/FPC is broken.
+
+Status:
+PASS
 
 ## BLE UUIDs
 
@@ -233,14 +264,15 @@ NOTIFY:
 ## Current web standard
 
 Use this URL only from now on:
-https://onlysky17.github.io/Clock/web/clock-app/hl16-213-panel.html
-
-If Chrome/GitHub Pages still serves the cached vertical preview, use this cache-safe HL17A URL:
 https://onlysky17.github.io/Clock/web/clock-app/hl17a-213-preview.html
 
-Do not create new test URLs unless explicitly needed.
+Local canonical file:
+web/clock-app/hl17a-213-preview.html
 
-The attempted stable alias below may be 404 and should not be treated as canonical yet:
+Previous HL16 page remains historical:
+web/clock-app/hl16-213-panel.html
+
+Do not use this page; it is not canonical and may be 404:
 https://onlysky17.github.io/Clock/web/clock-app/eink-dev.html
 
 ## Current packer
@@ -259,7 +291,7 @@ HEADER: OK
 
 ## Next recommended task
 
-HL17A browser test = verify the web-only canvas/packing controls on GitHub Pages after push.
+Hold firmware refresh/framebuffer work until a good 2.13 panel/FPC is available.
 
 Goal:
 - Keep target only HINK213 2.13.
@@ -268,6 +300,6 @@ Goal:
 - Later firmware can accept chunk data only, without refresh.
 - Refresh/draw text only when a good 2.13 panel is available.
 
-Possible HL17B firmware goals:
+Future firmware goals, not HL17B:
 - Add safe commands for framebuffer metadata/chunk ACK only.
 - No refresh command enabled by default.

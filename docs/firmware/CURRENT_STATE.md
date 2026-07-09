@@ -24,6 +24,29 @@ MAC:
 - Notify OK
 - Time command 7 byte OK
 
+## Web / Docs Lock
+
+State:
+HL17A preview PASS/LIVE; HL17B docs cleanup only.
+
+Canonical web page:
+web/clock-app/hl17a-213-preview.html
+
+Canonical URL:
+https://onlysky17.github.io/Clock/web/clock-app/hl17a-213-preview.html
+
+Scope:
+- Target only HINK213 2.13 inch.
+- Do not use web/clock-app/eink-dev.html.
+- Do not push .bin firmware images to public GitHub.
+- Do not run real EPD refresh/framebuffer while the current panel/FPC is broken.
+
+HL17A web preview:
+- Display preview is landscape 296x128.
+- Raw buffer remains HINK213 128x296.
+- Packed output remains 16 bytes per row, 296 rows, 4736 bytes total.
+- Framebuffer send remains locked.
+
 ## Time packet
 
 Format:
