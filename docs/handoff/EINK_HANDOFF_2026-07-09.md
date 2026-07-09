@@ -303,3 +303,35 @@ Goal:
 Future firmware goals, not HL17B:
 - Add safe commands for framebuffer metadata/chunk ACK only.
 - No refresh command enabled by default.
+
+### HL18A_CANDIDATE
+
+Task:
+Web-side BLE framebuffer dry-run page and safe protocol notes.
+
+Candidate web page:
+web/clock-app/hl18a-213-dryrun.html
+
+Purpose:
+Test BLE metadata/chunk transport for the existing 4736-byte HINK213 framebuffer package without touching real EPD refresh.
+
+Safety lock:
+- HL18A uses only E3 dry-run commands.
+- Firmware must ACK metadata/chunk/status/reset only.
+- Firmware must not call display(), EPD_2IN13_V2_DisplayPartBaseImage(), EPD_2IN13_V2_DisplayPart(), EPD_2IN13_V2_TurnOnDisplay(), EPD_2IN13_V2_TurnOnDisplayPart(), or any real refresh function from E3 commands.
+- Forbidden refresh commands remain locked: E2 03, E2 04, E2 30, E2 31, E2 50.
+- Do not push .bin firmware images.
+
+Protocol shape:
+- E3 00 widthLo widthHi heightLo heightHi xBytes totalLo totalHi = dry-run metadata.
+- E3 01 seqLo seqHi len xor data... = dry-run chunk.
+- E3 02 page = read one dry-run status byte.
+- E3 03 = reset dry-run counters.
+- Notify ACKs are intentionally 3 bytes to match the existing small notify pattern: E3 80 status, E3 81 status, E3 82 value, E3 83 status.
+
+Status:
+PREPARED / NOT LIVE until committed and pushed.
+
+Note:
+Canonical production web remains HL17A until HL18A is pushed and verified:
+https://onlysky17.github.io/Clock/web/clock-app/hl17a-213-preview.html

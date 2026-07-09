@@ -88,3 +88,41 @@ Do not continue HL03-HL10 as firmware base.
 New direction:
 Use HINK213-CLOCK connect-good as BLE golden baseline.
 Find matching source/project for HINK213-CLOCK or P2_TIMEKEEPING_PASS, then customize from that base.
+
+## HL18A Candidate — BLE framebuffer dry-run
+
+State:
+Prepared as offline/local patch. Not live until committed and pushed.
+
+Candidate web page:
+web/clock-app/hl18a-213-dryrun.html
+
+Canonical remains:
+https://onlysky17.github.io/Clock/web/clock-app/hl17a-213-preview.html
+
+Dry-run safety:
+- Uses E3 command family only.
+- Accepts metadata/chunk/status/reset for transport test only.
+- Does not write framebuffer to panel.
+- Does not call EPD refresh.
+- Does not enable E2 03, E2 04, E2 30, E2 31, E2 50.
+
+Expected HINK213 metadata:
+- Width: 128
+- Height: 296
+- X bytes: 16
+- Total payload: 4736 bytes
+
+3-byte ACK map:
+- E3 80 status = metadata ACK
+- E3 81 status = chunk ACK
+- E3 82 value = status byte response
+- E3 83 status = dry-run reset ACK
+
+Status codes:
+- 00 OK
+- 01 invalid size
+- 02 invalid checksum
+- 03 sequence error
+- 04 busy/locked
+- 05 unsupported

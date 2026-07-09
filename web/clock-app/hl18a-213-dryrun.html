@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>HL18A — HINK213 2.13 Dry-run</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --bg: #f4f4f0;
+      --card: #ffffff;
+      --ink: #171717;
+      --muted: #6b6b6b;
+      --border: #d6d6ce;
+      --soft: #ecece4;
+      --danger: #9a2a2a;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg:#161616; --card:#222; --ink:#f4f4f0; --muted:#aaa; --border:#3a3a3a; --soft:#2b2b2b; --danger:#ff8a8a; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 20px; background: var(--bg); color: var(--ink); }
+    main { max-width: 1100px; margin: 0 auto; display: grid; gap: 16px; }
+    h1 { margin: 0 0 6px; font-size: clamp(26px, 5vw, 42px); letter-spacing: -0.04em; }
+    h2 { margin: 0 0 10px; font-size: 18px; }
+    p { margin: 6px 0; color: var(--muted); line-height: 1.45; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 16px; box-shadow: 0 12px 30px rgba(0,0,0,.06); }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    button, select, input { border: 1px solid var(--border); background: var(--soft); color: var(--ink); border-radius: 12px; padding: 10px 12px; font: inherit; }
+    button { cursor: pointer; font-weight: 650; }
+    button:hover { filter: brightness(.97); }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    button.danger { color: var(--danger); }
+    button.primary { background: var(--ink); color: var(--bg); }
+    .stat { display: grid; grid-template-columns: 1fr auto; border-top: 1px solid var(--border); padding: 8px 0; gap: 10px; }
+    .stat:first-child { border-top: 0; }
+    .stat span:first-child { color: var(--muted); }
+    canvas { width: 100%; max-width: 888px; aspect-ratio: 296 / 128; border: 1px solid var(--border); border-radius: 14px; image-rendering: pixelated; background: #fff; touch-action: none; }
+    textarea { width: 100%; min-height: 160px; resize: vertical; border-radius: 14px; border: 1px solid var(--border); background: var(--soft); color: var(--ink); padding: 12px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; }
+    .warn { color: var(--danger); font-weight: 700; }
+    .pill { display:inline-flex; align-items:center; border:1px solid var(--border); border-radius:999px; padding:4px 9px; color:var(--muted); font-size:12px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+  </style>
+</head>
+<body>
+<main>
+  <section class="card">
+    <div class="pill">Web build: HL18A dry-run / no refresh</div>
+    <h1>HL18A — HINK213 2.13 Dry-run</h1>
+    <p>Trang này chỉ test BLE metadata/chunk ACK. <span class="warn">Không gửi lệnh refresh, không ghi framebuffer thật xuống panel.</span></p>
+  </section>
+
+  <section class="grid">
+    <div class="card">
+      <h2>BLE</h2>
+      <div class="row">
+        <button id="connectBtn" class="primary">Connect EINK/HINK</button>
+        <button id="disconnectBtn">Disconnect</button>
+        <button id="clearLogBtn">Clear log</button>
+      </div>
+      <p id="bleState">Disconnected</p>
+      <p class="mono" id="lastAck">Last ACK: -</p>
+    </div>
+    <div class="card">
+      <h2>Dry-run safety lock</h2>
+      <p>Allowed: <span class="mono">E3 00</span> metadata, <span class="mono">E3 01</span> chunk ACK, <span class="mono">E3 02</span> status, <span class="mono">E3 03</span> reset.</p>
+      <p>Forbidden: <span class="mono">E2 03 / E2 04 / E2 30 / E2 31 / E2 50</span> và mọi refresh thật.</p>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Canvas preview</h2>
+    <canvas id="preview" width="592" height="256"></canvas>
+    <div class="row" style="margin-top:10px">
+      <button id="blackBtn">Black</button>
+      <button id="whiteBtn">White</button>
+      <button id="clearBufBtn">Clear</button>
+      <button id="sampleBtn">Sample Clock</button>
+      <button id="packBtn">Pack bytes</button>
+      <button id="copyHexBtn">Copy HEX</button>
+    </div>
+    <p>Display <span class="mono">296 x 128</span>. Raw buffer <span class="mono">128 x 296</span>. Packed <span class="mono">16 bytes/row x 296 rows = 4736 bytes</span>, MSB-first.</p>
+  </section>
+
+  <section class="grid">
+    <div class="card">
+      <h2>Dry-run send</h2>
+      <div class="row">
+        <button id="sendMetaBtn">Send dry-run metadata</button>
+        <button id="sendChunksBtn" class="primary">Send dry-run chunks</button>
+        <button id="resetDryBtn">Reset dry-run</button>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <label>Chunk payload bytes
+          <select id="chunkSizeSel">
+            <option value="14" selected>14 bytes / BLE packet</option>
+            <option value="12">12 bytes / BLE packet</option>
+            <option value="8">8 bytes / BLE packet</option>
+          </select>
+        </label>
+        <label>Delay ms
+          <input id="delayInput" type="number" min="0" max="200" value="25" style="width:90px" />
+        </label>
+      </div>
+      <p class="warn">Send chunks ở đây vẫn là dry-run protocol E3, không refresh panel.</p>
+    </div>
+    <div class="card">
+      <h2>Progress</h2>
+      <div class="stat"><span>Payload</span><b id="payloadStat">4736 bytes</b></div>
+      <div class="stat"><span>Chunks sent</span><b id="chunksStat">0</b></div>
+      <div class="stat"><span>Bytes sent</span><b id="bytesStat">0</b></div>
+      <div class="stat"><span>ACK count</span><b id="ackStat">0</b></div>
+      <div class="stat"><span>Local XOR</span><b id="xorStat">00</b></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Manual HEX</h2>
+    <div class="row">
+      <input id="manualHex" placeholder="E3 02 00" style="flex:1; min-width:220px" />
+      <button id="sendHexBtn">Send HEX via WRITE</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Packed HEX preview</h2>
+    <textarea id="hexOut" readonly></textarea>
+  </section>
+
+  <section class="card">
+    <h2>Log</h2>
+    <textarea id="log" readonly></textarea>
+  </section>
+</main>
+
+<script>
+(() => {
+  'use strict';
+
+  const SERVICE_UUID = '18424398-7cbc-11e9-8f9e-2a86e4085a59';
+  const WRITE_UUID = '2d86686a-53dc-25b3-0c4a-f0e10c8dee20';
+  const WRITE_NR_UUID = '5a87b4ef-3bfa-76a8-e642-92933c31434f';
+  const NOTIFY_UUID = '15005991-b131-3396-014c-664c9867b917';
+
+  const RAW_W = 128;
+  const RAW_H = 296;
+  const X_BYTES = 16;
+  const PAYLOAD_BYTES = RAW_H * X_BYTES;
+  const DISPLAY_W = 296;
+  const DISPLAY_H = 128;
+
+  const $ = (id) => document.getElementById(id);
+  const canvas = $('preview');
+  const ctx = canvas.getContext('2d', { alpha: false });
+  const raw = new Uint8Array(RAW_W * RAW_H);
+  let drawBlack = true;
+  let packed = new Uint8Array(PAYLOAD_BYTES);
+  let device = null;
+  let server = null;
+  let writeChar = null;
+  let notifyChar = null;
+  let chunksSent = 0;
+  let bytesSent = 0;
+  let ackCount = 0;
+
+  function hex2(n) { return n.toString(16).toUpperCase().padStart(2, '0'); }
+  function sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
+  function log(line) {
+    const now = new Date().toLocaleTimeString();
+    $('log').value += `[${now}] ${line}\n`;
+    $('log').scrollTop = $('log').scrollHeight;
+  }
+  function bytesToHex(bytes) { return Array.from(bytes, hex2).join(' '); }
+  function setBleState(text) { $('bleState').textContent = text; }
+  function updateProgress() {
+    $('chunksStat').textContent = String(chunksSent);
+    $('bytesStat').textContent = String(bytesSent);
+    $('ackStat').textContent = String(ackCount);
+    $('payloadStat').textContent = `${PAYLOAD_BYTES} bytes`;
+  }
+  function localXor(bytes) {
+    let x = 0;
+    for (const b of bytes) x ^= b;
+    return x & 0xFF;
+  }
+
+  function render() {
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#111';
+    const sx = canvas.width / DISPLAY_W;
+    const sy = canvas.height / DISPLAY_H;
+    for (let y = 0; y < RAW_H; y++) {
+      for (let x = 0; x < RAW_W; x++) {
+        if (!raw[y * RAW_W + x]) continue;
+        ctx.fillRect(y * sx, x * sy, Math.ceil(sx), Math.ceil(sy));
+      }
+    }
+  }
+
+  function drawPixelFromCanvas(evt) {
+    const rect = canvas.getBoundingClientRect();
+    const displayX = Math.max(0, Math.min(DISPLAY_W - 1, Math.floor((evt.clientX - rect.left) / rect.width * DISPLAY_W)));
+    const displayY = Math.max(0, Math.min(DISPLAY_H - 1, Math.floor((evt.clientY - rect.top) / rect.height * DISPLAY_H)));
+    const rawX = displayY;
+    const rawY = displayX;
+    const radius = evt.shiftKey ? 6 : 2;
+    for (let yy = rawY - radius; yy <= rawY + radius; yy++) {
+      for (let xx = rawX - radius; xx <= rawX + radius; xx++) {
+        if (xx >= 0 && xx < RAW_W && yy >= 0 && yy < RAW_H) raw[yy * RAW_W + xx] = drawBlack ? 1 : 0;
+      }
+    }
+    render();
+  }
+
+  let drawing = false;
+  canvas.addEventListener('pointerdown', (evt) => { drawing = true; canvas.setPointerCapture(evt.pointerId); drawPixelFromCanvas(evt); });
+  canvas.addEventListener('pointermove', (evt) => { if (drawing) drawPixelFromCanvas(evt); });
+  canvas.addEventListener('pointerup', () => { drawing = false; });
+  canvas.addEventListener('pointercancel', () => { drawing = false; });
+
+  function clearRaw() { raw.fill(0); render(); packBytes(); }
+  function rectRaw(x, y, w, h, v = 1) {
+    for (let yy = y; yy < y + h; yy++) {
+      for (let xx = x; xx < x + w; xx++) {
+        if (xx >= 0 && xx < RAW_W && yy >= 0 && yy < RAW_H) raw[yy * RAW_W + xx] = v;
+      }
+    }
+  }
+  const SEG = {
+    '0': 'abcdef', '1': 'bc', '2': 'abged', '3': 'abgcd', '4': 'fgbc',
+    '5': 'afgcd', '6': 'afgcde', '7': 'abc', '8': 'abcdefg', '9': 'abcfgd'
+  };
+  function sevenSeg(ch, x, y, s) {
+    const segs = SEG[ch] || '';
+    const t = Math.max(2, Math.floor(s / 5));
+    const w = s;
+    const h = s * 2;
+    if (segs.includes('a')) rectRaw(x + t, y, w - 2 * t, t);
+    if (segs.includes('b')) rectRaw(x + w - t, y + t, t, h / 2 - t);
+    if (segs.includes('c')) rectRaw(x + w - t, y + h / 2, t, h / 2 - t);
+    if (segs.includes('d')) rectRaw(x + t, y + h - t, w - 2 * t, t);
+    if (segs.includes('e')) rectRaw(x, y + h / 2, t, h / 2 - t);
+    if (segs.includes('f')) rectRaw(x, y + t, t, h / 2 - t);
+    if (segs.includes('g')) rectRaw(x + t, y + h / 2 - t / 2, w - 2 * t, t);
+  }
+  function sampleClock() {
+    clearRaw();
+    rectRaw(4, 4, 120, 1);
+    rectRaw(4, 291, 120, 1);
+    rectRaw(4, 4, 1, 288);
+    rectRaw(123, 4, 1, 288);
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2, '0');
+    const mm = String(now.getMinutes()).padStart(2, '0');
+    sevenSeg(hh[0], 10, 42, 24);
+    sevenSeg(hh[1], 38, 42, 24);
+    rectRaw(65, 66, 4, 4);
+    rectRaw(65, 88, 4, 4);
+    sevenSeg(mm[0], 76, 42, 24);
+    sevenSeg(mm[1], 104, 42, 20);
+    rectRaw(10, 132, 106, 8);
+    rectRaw(10, 150, 72, 6);
+    rectRaw(10, 168, 92, 6);
+    rectRaw(92, 244, 24, 18);
+    render();
+    packBytes();
+  }
+
+  function packBytes() {
+    packed = new Uint8Array(PAYLOAD_BYTES);
+    let i = 0;
+    for (let y = 0; y < RAW_H; y++) {
+      for (let xb = 0; xb < X_BYTES; xb++) {
+        let b = 0;
+        for (let bit = 0; bit < 8; bit++) {
+          const x = xb * 8 + bit;
+          if (raw[y * RAW_W + x]) b |= (0x80 >> bit);
+        }
+        packed[i++] = b;
+      }
+    }
+    const hex = bytesToHex(packed);
+    $('hexOut').value = hex.slice(0, 4096) + (hex.length > 4096 ? '\n... truncated preview ...' : '');
+    $('xorStat').textContent = hex2(localXor(packed));
+    return packed;
+  }
+
+  async function connect() {
+    if (!navigator.bluetooth) {
+      log('Web Bluetooth không khả dụng trên browser này. Dùng Chrome/Edge desktop.');
+      return;
+    }
+    setBleState('Requesting device...');
+    device = await navigator.bluetooth.requestDevice({
+      filters: [{ namePrefix: 'EINK' }, { namePrefix: 'HINK' }],
+      optionalServices: [SERVICE_UUID]
+    });
+    device.addEventListener('gattserverdisconnected', () => {
+      setBleState('Disconnected');
+      writeChar = null;
+      notifyChar = null;
+      log('Disconnected');
+    });
+    server = await device.gatt.connect();
+    const svc = await server.getPrimaryService(SERVICE_UUID);
+    try {
+      writeChar = await svc.getCharacteristic(WRITE_NR_UUID);
+      log('Write No Response characteristic ready');
+    } catch (err) {
+      writeChar = await svc.getCharacteristic(WRITE_UUID);
+      log('Fallback WRITE characteristic ready');
+    }
+    notifyChar = await svc.getCharacteristic(NOTIFY_UUID);
+    await notifyChar.startNotifications();
+    notifyChar.addEventListener('characteristicvaluechanged', onNotify);
+    setBleState(`Connected: ${device.name || '(unnamed)'}`);
+    log(`Connected: ${device.name || '(unnamed)'}`);
+  }
+
+  function disconnect() {
+    if (device && device.gatt && device.gatt.connected) device.gatt.disconnect();
+    setBleState('Disconnected');
+  }
+
+  async function sendPacket(bytes) {
+    if (!writeChar) throw new Error('BLE chưa connect/write char chưa sẵn sàng');
+    const data = Uint8Array.from(bytes);
+    if (writeChar.writeValueWithoutResponse) await writeChar.writeValueWithoutResponse(data);
+    else await writeChar.writeValue(data);
+    log(`TX: ${bytesToHex(data)}`);
+  }
+
+  function onNotify(evt) {
+    const bytes = new Uint8Array(evt.target.value.buffer);
+    ackCount++;
+    updateProgress();
+    const hex = bytesToHex(bytes);
+    $('lastAck').textContent = `Last ACK: ${hex}`;
+    if (bytes[0] === 0xE3) log(`ACK ${decodeE3(bytes)} (${hex})`);
+    else log(`NOTIFY: ${hex}`);
+  }
+
+  function decodeE3(bytes) {
+    const statusName = (s) => ({0:'OK',1:'invalid size',2:'invalid checksum',3:'sequence error',4:'busy/locked',5:'unsupported'}[s] || `status ${hex2(s)}`);
+    if (bytes.length < 3) return 'E3 short';
+    if (bytes[1] === 0x80) return `metadata ${statusName(bytes[2])}`;
+    if (bytes[1] === 0x81) return `chunk ${statusName(bytes[2])}`;
+    if (bytes[1] === 0x82) return `status byte ${hex2(bytes[2])}`;
+    if (bytes[1] === 0x83) return `reset ${statusName(bytes[2])}`;
+    if (bytes[1] === 0x8F) return `unsupported ${statusName(bytes[2])}`;
+    return 'E3 unknown';
+  }
+
+  async function sendMetadata() {
+    // E3 00 widthLo widthHi heightLo heightHi xBytes totalLo totalHi
+    await sendPacket([0xE3, 0x00, 0x80, 0x00, 0x28, 0x01, 0x10, 0x80, 0x12]);
+  }
+
+  async function sendChunks() {
+    packBytes();
+    chunksSent = 0;
+    bytesSent = 0;
+    updateProgress();
+    await sendMetadata();
+    const chunkSize = Number($('chunkSizeSel').value || 14);
+    const delayMs = Math.max(0, Number($('delayInput').value || 0));
+    for (let offset = 0, seq = 0; offset < packed.length; offset += chunkSize, seq++) {
+      const chunk = packed.slice(offset, Math.min(offset + chunkSize, packed.length));
+      const checksum = localXor(chunk);
+      const packet = [0xE3, 0x01, seq & 0xFF, (seq >> 8) & 0xFF, chunk.length & 0xFF, checksum, ...chunk];
+      await sendPacket(packet);
+      chunksSent++;
+      bytesSent += chunk.length;
+      updateProgress();
+      if (delayMs) await sleep(delayMs);
+    }
+    log(`Dry-run chunks done: ${chunksSent} chunks, ${bytesSent} bytes, xor=${hex2(localXor(packed))}`);
+  }
+
+  function parseHex(text) {
+    const clean = text.replace(/[^0-9a-fA-F]/g, ' ').trim();
+    if (!clean) return [];
+    return clean.split(/\s+/).map((x) => parseInt(x, 16) & 0xFF);
+  }
+
+  $('connectBtn').addEventListener('click', () => connect().catch((err) => log(`Connect error: ${err.message || err}`)));
+  $('disconnectBtn').addEventListener('click', disconnect);
+  $('clearLogBtn').addEventListener('click', () => { $('log').value = ''; });
+  $('blackBtn').addEventListener('click', () => { drawBlack = true; log('Tool: black'); });
+  $('whiteBtn').addEventListener('click', () => { drawBlack = false; log('Tool: white'); });
+  $('clearBufBtn').addEventListener('click', clearRaw);
+  $('sampleBtn').addEventListener('click', sampleClock);
+  $('packBtn').addEventListener('click', () => { packBytes(); log(`Packed ${PAYLOAD_BYTES} bytes`); });
+  $('copyHexBtn').addEventListener('click', async () => { packBytes(); await navigator.clipboard.writeText(bytesToHex(packed)); log('Copied full packed HEX'); });
+  $('sendMetaBtn').addEventListener('click', () => sendMetadata().catch((err) => log(`TX error: ${err.message || err}`)));
+  $('sendChunksBtn').addEventListener('click', () => sendChunks().catch((err) => log(`Dry-run error: ${err.message || err}`)));
+  $('resetDryBtn').addEventListener('click', () => sendPacket([0xE3, 0x03]).catch((err) => log(`Reset error: ${err.message || err}`)));
+  $('sendHexBtn').addEventListener('click', () => sendPacket(parseHex($('manualHex').value)).catch((err) => log(`HEX error: ${err.message || err}`)));
+
+  clearRaw();
+  sampleClock();
+  log('HL18A page loaded. Dry-run only, no EPD refresh.');
+})();
+</script>
+</body>
+</html>
