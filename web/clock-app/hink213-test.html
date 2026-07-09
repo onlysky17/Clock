@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="vi">
 <head>
   <meta charset="utf-8">
@@ -109,10 +109,10 @@ function currentTimePacket() {
 
 async function connectHink() {
   try {
-    log("Scanning HINK...");
+    log("Scanning HINK/EINK...");
 
     device = await navigator.bluetooth.requestDevice({
-      filters: [{ namePrefix: "HINK" }],
+      filters: [{ namePrefix: "HINK" }, { namePrefix: "EINK" }],
       optionalServices: [HINK_SERVICE]
     });
 
