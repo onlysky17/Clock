@@ -204,3 +204,39 @@ docs/firmware/HL19_VALIDATION_RESULT_2026-07-10.md
 
 Next:
 HL20A firmware refresh kill-switch on the old board only.
+
+## HL20A validated state - 2026-07-10
+
+Status:
+PASS END-TO-END.
+
+Source/build:
+- Canonical source SHA256:
+  F76A308B86FDC2E2BA2EECA7F3845CAE56AC953307C07E8BCC24F69B8B37E334
+- Canonical source and SDK mirror matched.
+- Keil rebuild completed with 0 errors and 0 warnings.
+- Program size:
+  Code=30736
+  RO-data=3240
+  RW-data=4
+  ZI-data=8368
+
+Runtime:
+- E2 E0 lock query returned E2 E0 A1.
+- Descriptor remained 01 80 00 28 01 10.
+- E2 02, 03, 04, 30-37 and 50-54 all returned F0.
+- Final result: all panel jobs blocked.
+- E3 dry-run regression passed.
+
+Safety:
+- No panel RAM write.
+- No EPD refresh.
+- No .bin pushed.
+- Old board only.
+- New spare board untouched.
+
+Validation record:
+docs/firmware/HL20A_VALIDATION_RESULT_2026-07-10.md
+
+Next:
+HL21A BLE command-session safety design.

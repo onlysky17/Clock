@@ -410,3 +410,30 @@ Next:
 HL20A firmware refresh kill-switch.
 Keep safe descriptor/diagnostic commands, but block refresh-capable E2 commands
 at dispatch before any EPD job can start. Continue on the old board only.
+
+### HL20B
+
+Task:
+Close out HL20A firmware refresh kill-switch validation.
+
+Result:
+- Canonical and SDK source SHA256 matched.
+- Keil rebuild passed with 0 errors and 0 warnings.
+- E2 E0 returned the HL20A lock signature E2 E0 A1.
+- Descriptor remained 01 80 00 28 01 10.
+- E2 02, 03, 04, 30-37 and 50-54 all returned F0.
+- Final result confirmed all panel jobs blocked.
+- E3 dry-run regression passed.
+- No panel RAM write occurred.
+- No EPD refresh occurred.
+- No .bin was pushed.
+- New spare board remained untouched.
+
+Status:
+PASS
+
+Record:
+docs/firmware/HL20A_VALIDATION_RESULT_2026-07-10.md
+
+Next:
+HL21A BLE command-session safety design.
