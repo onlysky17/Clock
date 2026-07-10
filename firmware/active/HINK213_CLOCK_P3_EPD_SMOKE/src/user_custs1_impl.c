@@ -78,6 +78,15 @@ static uint8_t hl21_session_owner_conidx __SECTION_ZERO("retention_mem_area0");
 static uint8_t hl21_session_timer_running __SECTION_ZERO("retention_mem_area0");
 static ke_msg_id_t hl21_session_timer __SECTION_ZERO("retention_mem_area0");
 
+/* HL25A one-shot panel liveness state. One fire per cold boot. */
+static uint8_t hl25_liveness_armed __SECTION_ZERO("retention_mem_area0");
+static uint8_t hl25_liveness_used __SECTION_ZERO("retention_mem_area0");
+static uint8_t hl25_liveness_arm_id __SECTION_ZERO("retention_mem_area0");
+static uint8_t hl25_liveness_owner_conidx __SECTION_ZERO("retention_mem_area0");
+static uint8_t hl25_liveness_session_token __SECTION_ZERO("retention_mem_area0");
+static uint8_t hl25_liveness_timer_running __SECTION_ZERO("retention_mem_area0");
+static ke_msg_id_t hl25_liveness_timer __SECTION_ZERO("retention_mem_area0");
+
 static ke_msg_id_t hink_epd_timer __SECTION_ZERO("retention_mem_area0");
 static uint8_t hink_epd_busy_job __SECTION_ZERO("retention_mem_area0");
 static uint8_t hink_epd_job_sub __SECTION_ZERO("retention_mem_area0");
@@ -127,6 +136,10 @@ static uint8_t hink_epd_spi_cp_mode __SECTION_ZERO("retention_mem_area0");
 #define HINK_EPD_TOTAL_BYTES    (HINK_EPD_X_BYTES * HINK_EPD_Y_LINES)
 #define HINK_EPD_CHUNK_BYTES    64
 
+#define HL25_LIVENESS_JOB_SUB          0x25
+#define HL25_LIVENESS_ARM_TIMEOUT_10MS 1000U
+#define HL25_LIVENESS_ARM_TIMEOUT_SEC  10U
+
 static const uint8_t hink_lut0_30[30] = {
     0x50,0xAA,0x55,0xAA,0x11,0x00,0x00,0x00,0x00,0x00,
     0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
@@ -160,6 +173,11 @@ static uint8_t hl21_session_handle(struct custs1_val_write_ind const *param,
                                    uint8_t conidx);
 static uint8_t hl21_session_is_valid(uint8_t conidx);
 static void hl21_session_touch(void);
+
+static void hl25_liveness_disarm(void);
+static void hl25_liveness_timeout_cb(void);
+static uint8_t hl25_liveness_handle(struct custs1_val_write_ind const *param,
+                                    uint8_t conidx);
 
 static void hink_epd_notify(uint8_t subcmd, uint8_t status);
 static uint8_t hink_epd_panel_job_is_locked(uint8_t subcmd);
@@ -488,7 +506,31 @@ static void hink_epd_init_seq(void)
 static uint8_t hink_epd_pattern_byte(uint16_t idx)
 {
     uint16_t row = idx / HINK_EPD_X_BYTES;
-    uint8_t band = (row >> 4) & 0x01;
+    uint8_t col = (uint8_t)(idx % HINK_EPD_X_BYTES);
+    uint8_t band;
+
+    if (hink_epd_job_sub == HL25_LIVENESS_JOB_SUB)
+    {
+        /*
+         * Fixed, unmistakable liveness pattern:
+         * - 8-pixel border at left/right,
+         * - 8-row border at top/bottom,
+         * - large alternating checker blocks inside.
+         *
+         * Pixel polarity is irrelevant to liveness: either polarity still
+         * produces a high-contrast geometric pattern after one refresh.
+         */
+        if ((row < 8U) || (row >= (HINK_EPD_Y_LINES - 8U)) ||
+            (col == 0U) || (col == (HINK_EPD_X_BYTES - 1U)))
+        {
+            return 0xFF;
+        }
+
+        band = (uint8_t)(((row / 24U) + (col / 4U)) & 0x01U);
+        return band ? 0x00 : 0xFF;
+    }
+
+    band = (uint8_t)((row >> 4) & 0x01U);
     return band ? 0x00 : 0xFF;
 }
 
@@ -1119,6 +1161,323 @@ static void hink_tick_cb_handler(void)
 }
 
 /*
+ * HL25A_ONE_SHOT_PANEL_LIVENESS
+ *
+ * Purpose: prove that the white-screen HINK213 panel can execute exactly one
+ * fixed-pattern refresh after an explicit BLE arm/fire sequence.
+ *
+ * This path is intentionally narrow:
+ * - requires an active E4 session,
+ * - requires the magic ASCII string "HL25",
+ * - arm expires after 10 seconds,
+ * - fire must use the returned arm id,
+ * - the arm is cleared before the panel job starts,
+ * - only one fire is allowed per cold boot,
+ * - all legacy refresh-capable E2 commands remain blocked by HL20A.
+ *
+ * Protocol:
+ *   Arm:   E6 00 48 4C 32 35              ("HL25")
+ *          -> E6 80 status armId state timeoutSec
+ *   Fire:  E6 01 armId A5 5A
+ *          -> E6 81 status armId state timeoutSec
+ *          then E2 25 10 (job started), E2 25 02 (job complete)
+ *   Cancel:E6 02 armId
+ *          -> E6 82 status armId state timeoutSec
+ *   Query: E6 03
+ *          -> E6 83 status armId state timeoutSec
+ *
+ * State bits:
+ *   bit0 = armed
+ *   bit1 = used this cold boot
+ *   bit2 = panel job busy
+ */
+#define HL25_STATUS_OK               0x00
+#define HL25_STATUS_SESSION_REQUIRED 0x01
+#define HL25_STATUS_INVALID_SIZE     0x02
+#define HL25_STATUS_ALREADY_USED     0x03
+#define HL25_STATUS_BUSY             0x04
+#define HL25_STATUS_NOT_ARMED        0x05
+#define HL25_STATUS_WRONG_OWNER      0x06
+#define HL25_STATUS_TOKEN_MISMATCH   0x07
+#define HL25_STATUS_ARM_ID_MISMATCH  0x08
+#define HL25_STATUS_BAD_MAGIC        0x09
+#define HL25_STATUS_UNSUPPORTED      0x0A
+
+static uint8_t hl25_liveness_state(void)
+{
+    uint8_t state = 0;
+
+    if (hl25_liveness_armed)
+    {
+        state |= 0x01;
+    }
+
+    if (hl25_liveness_used)
+    {
+        state |= 0x02;
+    }
+
+    if (hink_epd_busy_job)
+    {
+        state |= 0x04;
+    }
+
+    return state;
+}
+
+static void hl25_liveness_notify(uint8_t response,
+                                 uint8_t status,
+                                 uint8_t arm_id)
+{
+    uint8_t msg[6];
+    msg[0] = 0xE6;
+    msg[1] = response;
+    msg[2] = status;
+    msg[3] = arm_id;
+    msg[4] = hl25_liveness_state();
+    msg[5] = HL25_LIVENESS_ARM_TIMEOUT_SEC;
+    hink_notify_bytes(msg, 6);
+}
+
+static void hl25_liveness_disarm(void)
+{
+    if (hl25_liveness_timer_running)
+    {
+        app_easy_timer_cancel(hl25_liveness_timer);
+        hl25_liveness_timer_running = 0;
+    }
+
+    hl25_liveness_armed = 0;
+    hl25_liveness_owner_conidx = 0xFF;
+    hl25_liveness_session_token = 0;
+}
+
+static void hl25_liveness_timeout_cb(void)
+{
+    hl25_liveness_timer_running = 0;
+    hl25_liveness_armed = 0;
+    hl25_liveness_owner_conidx = 0xFF;
+    hl25_liveness_session_token = 0;
+}
+
+static void hl25_liveness_arm_timer(void)
+{
+    if (hl25_liveness_timer_running)
+    {
+        app_easy_timer_cancel(hl25_liveness_timer);
+        hl25_liveness_timer_running = 0;
+    }
+
+    hl25_liveness_timer =
+        app_easy_timer(HL25_LIVENESS_ARM_TIMEOUT_10MS,
+                       hl25_liveness_timeout_cb);
+    hl25_liveness_timer_running = 1;
+}
+
+static uint8_t hl25_liveness_handle(
+    struct custs1_val_write_ind const *param,
+    uint8_t conidx)
+{
+    uint8_t subcmd;
+    uint8_t arm_id;
+
+    if ((param->length < 2) || (param->value[0] != 0xE6))
+    {
+        return 0;
+    }
+
+    subcmd = param->value[1];
+    arm_id = (param->length >= 3) ? param->value[2] : hl25_liveness_arm_id;
+
+    switch (subcmd)
+    {
+        case 0x00:
+            /* Arm: E6 00 "HL25" */
+            if (param->length != 6)
+            {
+                hl25_liveness_notify(0x80,
+                                     HL25_STATUS_INVALID_SIZE,
+                                     hl25_liveness_arm_id);
+            }
+            else if (!hl21_session_is_valid(conidx))
+            {
+                hl25_liveness_notify(0x80,
+                                     HL25_STATUS_SESSION_REQUIRED,
+                                     hl25_liveness_arm_id);
+            }
+            else if ((param->value[2] != 0x48) ||
+                     (param->value[3] != 0x4C) ||
+                     (param->value[4] != 0x32) ||
+                     (param->value[5] != 0x35))
+            {
+                hl25_liveness_notify(0x80,
+                                     HL25_STATUS_BAD_MAGIC,
+                                     hl25_liveness_arm_id);
+            }
+            else if (hl25_liveness_used)
+            {
+                hl25_liveness_notify(0x80,
+                                     HL25_STATUS_ALREADY_USED,
+                                     hl25_liveness_arm_id);
+            }
+            else if (hink_epd_busy_job)
+            {
+                hl25_liveness_notify(0x80,
+                                     HL25_STATUS_BUSY,
+                                     hl25_liveness_arm_id);
+            }
+            else
+            {
+                hl25_liveness_disarm();
+
+                hl25_liveness_arm_id++;
+                if (hl25_liveness_arm_id == 0)
+                {
+                    hl25_liveness_arm_id = 1;
+                }
+
+                hl25_liveness_armed = 1;
+                hl25_liveness_owner_conidx = conidx;
+                hl25_liveness_session_token = hl21_session_token;
+                hl25_liveness_arm_timer();
+                hl21_session_touch();
+
+                hl25_liveness_notify(0x80,
+                                     HL25_STATUS_OK,
+                                     hl25_liveness_arm_id);
+            }
+            return 1;
+
+        case 0x01:
+            /* Fire: E6 01 armId A5 5A */
+            if (param->length != 5)
+            {
+                hl25_liveness_notify(0x81,
+                                     HL25_STATUS_INVALID_SIZE,
+                                     arm_id);
+            }
+            else if (!hl21_session_is_valid(conidx))
+            {
+                hl25_liveness_notify(0x81,
+                                     HL25_STATUS_SESSION_REQUIRED,
+                                     arm_id);
+            }
+            else if (hl25_liveness_used)
+            {
+                hl25_liveness_notify(0x81,
+                                     HL25_STATUS_ALREADY_USED,
+                                     arm_id);
+            }
+            else if (!hl25_liveness_armed)
+            {
+                hl25_liveness_notify(0x81,
+                                     HL25_STATUS_NOT_ARMED,
+                                     arm_id);
+            }
+            else if (hl25_liveness_owner_conidx != conidx)
+            {
+                hl25_liveness_notify(0x81,
+                                     HL25_STATUS_WRONG_OWNER,
+                                     arm_id);
+            }
+            else if (hl25_liveness_session_token != hl21_session_token)
+            {
+                hl25_liveness_notify(0x81,
+                                     HL25_STATUS_TOKEN_MISMATCH,
+                                     arm_id);
+            }
+            else if (arm_id != hl25_liveness_arm_id)
+            {
+                hl25_liveness_notify(0x81,
+                                     HL25_STATUS_ARM_ID_MISMATCH,
+                                     arm_id);
+            }
+            else if ((param->value[3] != 0xA5) ||
+                     (param->value[4] != 0x5A))
+            {
+                hl25_liveness_notify(0x81,
+                                     HL25_STATUS_BAD_MAGIC,
+                                     arm_id);
+            }
+            else if (hink_epd_busy_job)
+            {
+                hl25_liveness_notify(0x81,
+                                     HL25_STATUS_BUSY,
+                                     arm_id);
+            }
+            else
+            {
+                /*
+                 * Auto-lock before touching the panel. From this point onward
+                 * another fire cannot be accepted until a cold boot.
+                 */
+                hl25_liveness_disarm();
+                hl25_liveness_used = 1;
+                hl21_session_touch();
+
+                hl25_liveness_notify(0x81,
+                                     HL25_STATUS_OK,
+                                     arm_id);
+
+                hink_epd_set_variant(0, 0, 0, 0, 0);
+                hink_epd_start_job(HL25_LIVENESS_JOB_SUB);
+            }
+            return 1;
+
+        case 0x02:
+            /* Cancel: E6 02 armId */
+            if (param->length != 3)
+            {
+                hl25_liveness_notify(0x82,
+                                     HL25_STATUS_INVALID_SIZE,
+                                     arm_id);
+            }
+            else if (!hl25_liveness_armed)
+            {
+                hl25_liveness_notify(0x82,
+                                     HL25_STATUS_NOT_ARMED,
+                                     arm_id);
+            }
+            else if (arm_id != hl25_liveness_arm_id)
+            {
+                hl25_liveness_notify(0x82,
+                                     HL25_STATUS_ARM_ID_MISMATCH,
+                                     arm_id);
+            }
+            else
+            {
+                hl25_liveness_disarm();
+                hl25_liveness_notify(0x82,
+                                     HL25_STATUS_OK,
+                                     arm_id);
+            }
+            return 1;
+
+        case 0x03:
+            /* Query is safe and does not require a session. */
+            if (param->length != 2)
+            {
+                hl25_liveness_notify(0x83,
+                                     HL25_STATUS_INVALID_SIZE,
+                                     hl25_liveness_arm_id);
+            }
+            else
+            {
+                hl25_liveness_notify(0x83,
+                                     HL25_STATUS_OK,
+                                     hl25_liveness_arm_id);
+            }
+            return 1;
+
+        default:
+            hl25_liveness_notify(0x8F,
+                                 HL25_STATUS_UNSUPPORTED,
+                                 hl25_liveness_arm_id);
+            return 1;
+    }
+}
+
+/*
  * HL21A_BLE_COMMAND_SESSION
  *
  * Bounded RAM-only safety session for E3 dry-run commands. This is not
@@ -1162,6 +1521,7 @@ static void hl21_session_expire(void)
     hl21_session_owner_conidx = 0xFF;
     hl18b_dry_reset();
     hl22_transfer_reset();
+    hl25_liveness_disarm();
 }
 
 static void hl21_session_timeout_cb(void)
@@ -1932,6 +2292,12 @@ static uint8_t hink_handle_time_write(struct custs1_val_write_ind const *param,
 {
     uint8_t conidx = KE_IDX_GET(src_id);
     hink_ble_conidx = app_env[conidx].conidx;
+
+    /* E6 is the HL25A one-shot panel liveness gate. */
+    if (hl25_liveness_handle(param, hink_ble_conidx))
+    {
+        return 1;
+    }
 
     /* E4 opens, maintains and closes the bounded HL21A session. */
     if (hl21_session_handle(param, hink_ble_conidx))

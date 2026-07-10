@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HL25A — Panel Live</title>
+<style>
+:root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;--card:#121c2b;--line:#2d3e59;--text:#f2f6fc;--muted:#a8b7ca;--ok:#3bd7a2;--warn:#ffd166;--bad:#fb7185}
+*{box-sizing:border-box}body{margin:0;background:linear-gradient(#080e17,#101b2b);color:var(--text)}
+main{max-width:1040px;margin:auto;padding:22px}.badge{display:inline-block;padding:7px 11px;border:1px solid #8a5c1d;border-radius:999px;background:#302008;color:#ffd98b;font-weight:900}
+.card{margin:14px 0;padding:17px;border:1px solid var(--line);border-radius:16px;background:rgba(18,28,43,.97)}
+.row{display:flex;flex-wrap:wrap;gap:9px;align-items:center}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:9px}
+button{padding:11px 14px;border:1px solid #506989;border-radius:10px;background:#1a2940;color:white;font-weight:850;cursor:pointer}
+button.primary{background:#1d4ed8}button.good{background:#066047}button.fire{background:#991b1b;border-color:#fb7185}button:disabled{opacity:.35;cursor:not-allowed}
+.stat{padding:11px;border:1px solid var(--line);border-radius:11px;background:#0b1421}.stat span{display:block;color:var(--muted);font-size:.8rem}.stat strong{font-size:1.1rem}
+.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}p{color:var(--muted);line-height:1.52}code{color:#c2dcff}
+.preview{display:flex;justify-content:center;padding:14px;background:#080d14;border:1px solid var(--line);border-radius:12px}
+canvas{width:min(100%,592px);height:auto;image-rendering:pixelated;background:white;border:1px solid #75849d}
+.confirm{display:flex;gap:9px;align-items:flex-start;padding:12px;border:1px solid #7b571f;border-radius:11px;background:#2c200c}
+textarea{width:100%;min-height:290px;padding:12px;border:1px solid var(--line);border-radius:10px;background:#050910;color:#cfe2ff;font:12px/1.5 ui-monospace,Consolas,monospace}
+</style>
+</head>
+<body><main>
+<div class="badge">HL25A · ONE REAL REFRESH · ONE SHOT PER COLD BOOT</div>
+<h1>HINK213 Panel Liveness</h1>
+<p>Trang này có thể làm màn refresh thật đúng một lần. Firmware chỉ vẽ mẫu cố định; không nhận framebuffer tùy ý.</p>
+
+<section class="card">
+<h2>Expected pattern</h2>
+<div class="preview"><canvas id="preview" width="296" height="128"></canvas></div>
+<p>Chỉ cần màn thay đổi thành mẫu hình học có viền/checker rõ ràng là panel còn sống. Đen/trắng đảo cực vẫn tính là PASS.</p>
+</section>
+
+<section class="card">
+<h2>BLE and safe preflight</h2>
+<div class="row">
+<button id="connect" class="primary">Connect EINK/HINK</button>
+<button id="disconnect" disabled>Disconnect</button>
+<button id="preflight" disabled>Run safe preflight</button>
+<button id="query" disabled>Query HL25 state</button>
+</div>
+<div class="grid" style="margin-top:12px">
+<div class="stat"><span>BLE</span><strong id="ble">Disconnected</strong></div>
+<div class="stat"><span>HL20A</span><strong id="lock">UNVERIFIED</strong></div>
+<div class="stat"><span>Descriptor</span><strong id="descriptor">-</strong></div>
+<div class="stat"><span>HL25 state</span><strong id="state">UNKNOWN</strong></div>
+</div>
+</section>
+
+<section class="card">
+<h2>One-shot arm and fire</h2>
+<div class="confirm">
+<input id="confirmBoard" type="checkbox">
+<label for="confirmBoard">
+Tôi xác nhận đang kết nối đúng <strong>board màn trắng HINK213 2.13</strong>,
+board được cấp nguồn ổn định, và chấp nhận thực hiện đúng một refresh thật.
+</label>
+</div>
+<div class="row" style="margin-top:12px">
+<button id="openSession" disabled>Open E4 session</button>
+<button id="arm" class="good" disabled>Arm for 10 seconds</button>
+<button id="fire" class="fire" disabled>FIRE ONE REFRESH</button>
+</div>
+<div class="grid" style="margin-top:12px">
+<div class="stat"><span>Session token</span><strong id="token">-</strong></div>
+<div class="stat"><span>Arm ID</span><strong id="armId">-</strong></div>
+<div class="stat"><span>Countdown</span><strong id="countdown">-</strong></div>
+<div class="stat"><span>Panel job</span><strong id="job">IDLE</strong></div>
+</div>
+</section>
+
+<section class="card">
+<h2>Expected BLE sequence</h2>
+<p><code>E6 80 00 ...</code> → armed, <code>E6 81 00 ...</code> → fire accepted, <code>E2 25 10</code> → job started, <code>E2 25 02</code> → job complete.</p>
+<p>Arm lần hai phải bị từ chối status <code>03</code> cho đến khi power-cycle.</p>
+</section>
+
+<section class="card"><h2>Log</h2><textarea id="log" readonly></textarea></section>
+</main>
+<script>
+'use strict';
+
+const SERVICE='18424398-7cbc-11e9-8f9e-2a86e4085a59';
+const WRITE='2d86686a-53dc-25b3-0c4a-f0e10c8dee20';
+const WRITE_NR='5a87b4ef-3bfa-76a8-e642-92933c31434f';
+const NOTIFY='15005991-b131-3396-014c-664c9867b917';
+
+let device=null,server=null,writeChar=null,notifyChar=null;
+let pending=null,inbox=[],busy=false,sessionToken=0,armId=0;
+let stateBits=0,countdownTimer=null,countdownValue=0;
+
+const $=id=>document.getElementById(id);
+const hex=a=>[...a].map(v=>v.toString(16).padStart(2,'0').toUpperCase()).join(' ');
+
+function log(message,tag=''){
+  $('log').value+=`${new Date().toLocaleTimeString('vi-VN',{hour12:false})} ${tag?`[${tag}] `:''}${message}\n`;
+  $('log').scrollTop=$('log').scrollHeight;
+}
+
+function drawPreview(){
+  const c=$('preview'),x=c.getContext('2d');
+  x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);
+  x.fillStyle='#000';
+  x.fillRect(0,0,c.width,8);x.fillRect(0,c.height-8,c.width,8);
+  x.fillRect(0,0,8,c.height);x.fillRect(c.width-8,0,8,c.height);
+  for(let y=8;y<c.height-8;y+=24){
+    for(let px=8;px<c.width-8;px+=32){
+      if((((y-8)/24)+((px-8)/32))%2===0)x.fillRect(px,y,32,24);
+    }
+  }
+}
+
+function stateText(state){
+  const p=[];
+  if(state&1)p.push('ARMED');
+  if(state&2)p.push('USED');
+  if(state&4)p.push('BUSY');
+  return p.length?p.join(' + '):'IDLE';
+}
+
+function applyState(packet){
+  armId=packet[3];stateBits=packet[4];
+  $('armId').textContent=armId?String(armId):'-';
+  $('state').textContent=stateText(stateBits);
+  $('state').className=(stateBits&2)?'warn':((stateBits&1)?'ok':'');
+  $('job').textContent=(stateBits&4)?'BUSY':((stateBits&2)?'USED / LOCKED':'IDLE');
+  controls();
+}
+
+function controls(){
+  const connected=!!server?.connected;
+  const confirmed=$('confirmBoard').checked;
+  const used=!!(stateBits&2);
+  const armed=!!(stateBits&1);
+  $('connect').disabled=connected||busy;
+  $('disconnect').disabled=!connected||busy;
+  $('preflight').disabled=!connected||busy;
+  $('query').disabled=!connected||busy;
+  $('openSession').disabled=!connected||busy;
+  $('arm').disabled=!connected||busy||!confirmed||!sessionToken||used;
+  $('fire').disabled=!connected||busy||!confirmed||!sessionToken||!armed||used;
+}
+
+function setBusy(v){busy=v;controls()}
+
+function stopCountdown(){
+  if(countdownTimer)clearInterval(countdownTimer);
+  countdownTimer=null;countdownValue=0;$('countdown').textContent='-';
+}
+
+function startCountdown(seconds){
+  stopCountdown();countdownValue=seconds;$('countdown').textContent=`${seconds}s`;
+  countdownTimer=setInterval(()=>{
+    countdownValue--;
+    $('countdown').textContent=countdownValue>0?`${countdownValue}s`:'EXPIRED';
+    if(countdownValue<=0){
+      clearInterval(countdownTimer);countdownTimer=null;
+      setTimeout(()=>safe(queryState),250);
+    }
+  },1000);
+}
+
+function consume(predicate){
+  const i=inbox.findIndex(predicate);
+  if(i<0)return null;
+  return inbox.splice(i,1)[0];
+}
+
+function waitFor(predicate,timeout=6000){
+  const hit=consume(predicate);
+  if(hit)return Promise.resolve(hit);
+  if(pending)throw Error('ACK already pending');
+  return new Promise((resolve,reject)=>{
+    const timer=setTimeout(()=>{pending=null;reject(Error('ACK timeout'))},timeout);
+    pending={predicate,resolve,reject,timer};
+  });
+}
+
+async function tx(packet){
+  log(`TX: ${hex(packet)}`);
+  if(writeChar.properties?.writeWithoutResponse&&writeChar.writeValueWithoutResponse){
+    await writeChar.writeValueWithoutResponse(packet);
+  }else{
+    await writeChar.writeValue(packet);
+  }
+}
+
+async function request(packet,predicate,timeout=6000){
+  const promise=waitFor(predicate,timeout);
+  try{await tx(packet)}
+  catch(error){
+    if(pending){clearTimeout(pending.timer);pending=null}
+    throw error;
+  }
+  return promise;
+}
+
+function onNotify(event){
+  const v=event.target.value;
+  const packet=new Uint8Array(v.buffer.slice(v.byteOffset,v.byteOffset+v.byteLength));
+  log(`RX: ${hex(packet)}`);
+  if(pending&&pending.predicate(packet)){
+    const item=pending;pending=null;clearTimeout(item.timer);item.resolve(packet);
+  }else{
+    inbox.push(packet);
+    if(inbox.length>30)inbox.shift();
+  }
+}
+
+async function connect(){
+  device=await navigator.bluetooth.requestDevice({
+    filters:[{namePrefix:'EINK'},{namePrefix:'HINK'}],
+    optionalServices:[SERVICE]
+  });
+  device.addEventListener('gattserverdisconnected',()=>{
+    server=null;sessionToken=0;stopCountdown();
+    $('ble').textContent='Disconnected';$('token').textContent='-';
+    controls();log('Disconnected');
+  });
+  server=await device.gatt.connect();
+  const service=await server.getPrimaryService(SERVICE);
+  try{writeChar=await service.getCharacteristic(WRITE_NR)}
+  catch{writeChar=await service.getCharacteristic(WRITE)}
+  notifyChar=await service.getCharacteristic(NOTIFY);
+  await notifyChar.startNotifications();
+  notifyChar.addEventListener('characteristicvaluechanged',onNotify);
+  $('ble').textContent=`Connected: ${device.name||'device'}`;
+  controls();log(`Connected: ${device.name||'unnamed'}`,'PASS');
+  await queryState();
+}
+
+async function e2(sub){
+  return request(Uint8Array.of(0xE2,sub,0,0,0,0,0),p=>p[0]===0xE2&&p[1]===sub);
+}
+async function e4(packet,response){return request(packet,p=>p[0]===0xE4&&p[1]===response)}
+async function e6(packet,response){return request(packet,p=>p[0]===0xE6&&p[1]===response)}
+
+async function queryState(){
+  const r=await e6(Uint8Array.of(0xE6,0x03),0x83);
+  if(r[2]!==0)throw Error(`HL25 query failed: ${hex(r)}`);
+  applyState(r);log(`HL25 state: ${stateText(r[4])}`,'OK');return r;
+}
+
+async function preflight(){
+  const lock=await e2(0xE0);
+  if(lock[2]!==0xA1)throw Error(`HL20A signature failed: ${hex(lock)}`);
+  const blocked=await e2(0x03);
+  if(blocked[2]!==0xF0)throw Error(`E2 03 is not blocked: ${hex(blocked)}`);
+  const descriptor=[];
+  for(let sub=0xD0;sub<=0xD5;sub++)descriptor.push((await e2(sub))[2]);
+  const text=hex(descriptor);
+  if(text!=='01 80 00 28 01 10')throw Error(`Wrong descriptor: ${text}`);
+  const direct=await e2(0x25);
+  if(direct[2]!==0xEE)throw Error(`Direct E2 25 unexpectedly available: ${hex(direct)}`);
+  $('lock').textContent='A1 + E2 03 F0';$('lock').className='ok';
+  $('descriptor').textContent=text;
+  log('Preflight PASS: A1, F0, descriptor, direct E2 25 disabled','PASS');
+}
+
+async function openSession(){
+  const r=await e4(Uint8Array.of(0xE4,0x00,0x48,0x4C,0x32,0x31),0x80);
+  if(r[2]!==0)throw Error(`E4 open failed: ${hex(r)}`);
+  sessionToken=r[3];$('token').textContent=String(sessionToken);
+  log(`E4 session open token=${sessionToken}, timeout=${r[4]}s`,'PASS');controls();
+}
+
+async function arm(){
+  if(!$('confirmBoard').checked)throw Error('Chưa xác nhận đúng board màn trắng.');
+  const r=await e6(Uint8Array.of(0xE6,0x00,0x48,0x4C,0x32,0x35),0x80);
+  applyState(r);
+  if(r[2]!==0)throw Error(`Arm refused status ${r[2].toString(16).padStart(2,'0')}: ${hex(r)}`);
+  startCountdown(r[5]);log(`ARMED id=${r[3]} for ${r[5]} seconds`,'PASS');
+}
+
+async function fire(){
+  if(!$('confirmBoard').checked)throw Error('Chưa xác nhận đúng board màn trắng.');
+  if(!armId)throw Error('No valid arm ID.');
+  const accepted=await e6(Uint8Array.of(0xE6,0x01,armId,0xA5,0x5A),0x81);
+  applyState(accepted);stopCountdown();
+  if(accepted[2]!==0)throw Error(`Fire refused: ${hex(accepted)}`);
+  log('FIRE accepted; auto-locked before panel access','PASS');
+  $('job').textContent='WAIT START';
+
+  const started=await waitFor(p=>p[0]===0xE2&&p[1]===0x25&&p[2]===0x10,5000);
+  $('job').textContent='REFRESHING';log(`Panel job started: ${hex(started)}`,'PASS');
+
+  const done=await waitFor(p=>p[0]===0xE2&&p[1]===0x25,10000);
+  if(done[2]!==0x02)throw Error(`Panel job ended with ${hex(done)}`);
+  $('job').textContent='COMPLETE / LOCKED';
+  log('ONE-SHOT PANEL JOB COMPLETE: E2 25 02','PASS');
+
+  const state=await queryState();
+  if((state[4]&2)===0)throw Error('USED bit was not latched.');
+
+  const second=await e6(Uint8Array.of(0xE6,0x00,0x48,0x4C,0x32,0x35),0x80);
+  if(second[2]!==0x03)throw Error(`Second arm was not blocked: ${hex(second)}`);
+  log('Second arm refused with status 03 until cold boot','PASS');
+  alert('BLE one-shot hoàn tất. Kiểm tra màn: có viền/checker hoặc thay đổi rõ ràng là panel còn sống.');
+}
+
+async function safe(fn){
+  try{setBusy(true);await fn()}
+  catch(error){log(`ERROR: ${error.message}`,'ERROR');alert(error.message)}
+  finally{setBusy(false)}
+}
+
+$('connect').onclick=()=>safe(connect);
+$('disconnect').onclick=()=>device?.gatt?.disconnect();
+$('preflight').onclick=()=>safe(preflight);
+$('query').onclick=()=>safe(queryState);
+$('openSession').onclick=()=>safe(openSession);
+$('arm').onclick=()=>safe(arm);
+$('fire').onclick=()=>{if(confirm('Thực hiện đúng MỘT refresh thật trên board màn trắng?'))safe(fire)};
+$('confirmBoard').onchange=controls;
+
+drawPreview();controls();
+log('HL25A ready. Explicit session + checkbox + arm + fire required.');
+</script>
+</body>
+</html>
