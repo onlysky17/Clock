@@ -1,0 +1,519 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HL23A — E5 Rejection Matrix</title>
+<style>
+:root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;--card:#121c2b;--line:#2d3e59;--text:#f2f6fc;--muted:#a8b7ca;--ok:#3bd7a2;--warn:#ffd166;--bad:#fb7185}
+*{box-sizing:border-box}body{margin:0;background:linear-gradient(#080e17,#101b2b);color:var(--text)}
+main{max-width:1120px;margin:auto;padding:22px}.badge{display:inline-block;padding:7px 11px;border:1px solid #2c6b52;border-radius:999px;background:#092a20;color:#a8f3d6;font-weight:800}
+.card{margin:14px 0;padding:17px;border:1px solid var(--line);border-radius:16px;background:rgba(18,28,43,.97)}
+.row{display:flex;flex-wrap:wrap;gap:9px;align-items:center}
+button{padding:10px 13px;border:1px solid #506989;border-radius:10px;background:#1a2940;color:white;font-weight:800;cursor:pointer}
+button.primary{background:#1d4ed8}button.good{background:#066047}button:disabled{opacity:.38;cursor:not-allowed}
+.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}p{color:var(--muted);line-height:1.52}code{color:#c2dcff}
+table{width:100%;border-collapse:collapse}th,td{padding:10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}th{color:#c9d8ec}
+.status{font-weight:900}.status.PASS{color:var(--ok)}.status.FAIL{color:var(--bad)}.status.WAIT{color:var(--warn)}
+progress{width:100%;height:17px;margin-top:12px}textarea{width:100%;min-height:300px;padding:12px;border:1px solid var(--line);border-radius:10px;background:#050910;color:#cfe2ff;font:12px/1.5 ui-monospace,Consolas,monospace}
+</style>
+</head>
+<body><main>
+<div class="badge">HL23A · WEB-ONLY · NEGATIVE PATHS · OLD BOARD</div>
+<h1>E5 Deterministic Rejection Matrix</h1>
+<p>Trang cố tình gửi dữ liệu sai để xác nhận firmware từ chối đúng status. Không có framebuffer storage và không có panel refresh.</p>
+
+<section class="card">
+<h2>BLE</h2>
+<div class="row">
+<button id="connect" class="primary">Connect EINK/HINK</button>
+<button id="disconnect" disabled>Disconnect</button>
+<button id="run" class="good" disabled>Run full rejection matrix</button>
+<button id="clear">Clear log</button>
+</div>
+<p>State: <strong id="ble">Disconnected</strong> · Result: <strong id="result" class="warn">NOT RUN</strong></p>
+<progress id="progress" max="4736" value="0"></progress>
+</section>
+
+<section class="card">
+<h2>Matrix</h2>
+<table>
+<thead><tr><th>Test</th><th>Expected</th><th>Observed</th><th>Result</th></tr></thead>
+<tbody id="matrix"></tbody>
+</table>
+</section>
+
+<section class="card">
+<h2>Happy-path checkpoint</h2>
+<p>Expected completion: <code>state=02 · chunks=339 · bytes=4736 · CRC=6065</code></p>
+<p id="manifest">Not completed.</p>
+</section>
+
+<section class="card"><h2>Log</h2><textarea id="log" readonly></textarea></section>
+</main>
+<script>
+'use strict';
+
+const SERVICE='18424398-7cbc-11e9-8f9e-2a86e4085a59';
+const WRITE='2d86686a-53dc-25b3-0c4a-f0e10c8dee20';
+const WRITE_NR='5a87b4ef-3bfa-76a8-e642-92933c31434f';
+const NOTIFY='15005991-b131-3396-014c-664c9867b917';
+
+const TOTAL=4736;
+const CHUNK=14;
+const EXPECTED_CRC=0x6065;
+
+const TESTS=[
+  ['preSession','Pre-session E5','status 01'],
+  ['wrongId','Wrong transfer ID','status 03'],
+  ['duplicate','Duplicate sequence','status 04'],
+  ['skipped','Skipped sequence','status 04'],
+  ['incomplete','Incomplete commit','status 07'],
+  ['badCrc','Wrong CRC after full transfer','status 06'],
+  ['complete','Correct completion manifest','00 / state 02 / 339 / 4736 / 6065'],
+  ['expiry','Session expiry mid-transfer','status 01'],
+  ['expiredReset','Old transfer after reopen','status 08'],
+  ['legacyE3','Legacy E3 regression','metadata/reset status 00'],
+  ['hl20','HL20A kill-switch regression','E2 E0 A1 + E2 03 F0'],
+  ['postClose','Post-close E5','status 01']
+];
+
+let device=null;
+let server=null;
+let writeChar=null;
+let notifyChar=null;
+let pending=null;
+let busy=false;
+let token=0;
+
+const $=id=>document.getElementById(id);
+const hex=a=>[...a].map(v=>v.toString(16).padStart(2,'0').toUpperCase()).join(' ');
+const u16=(lo,hi)=>lo|(hi<<8);
+const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+
+function log(message,tag=''){
+  $('log').value+=`${new Date().toLocaleTimeString('vi-VN',{hour12:false})} ${tag?`[${tag}] `:''}${message}\n`;
+  $('log').scrollTop=$('log').scrollHeight;
+}
+
+function buildMatrix(){
+  const body=$('matrix');
+  body.innerHTML='';
+  for(const [id,name,expected] of TESTS){
+    const row=document.createElement('tr');
+    row.innerHTML=`<td>${name}</td><td><code>${expected}</code></td><td id="${id}-actual">-</td><td id="${id}-status" class="status WAIT">WAIT</td>`;
+    body.appendChild(row);
+  }
+}
+
+function mark(id,pass,actual){
+  $(`${id}-actual`).textContent=actual;
+  const status=$(`${id}-status`);
+  status.textContent=pass?'PASS':'FAIL';
+  status.className=`status ${pass?'PASS':'FAIL'}`;
+  if(!pass)throw Error(`${id} failed: ${actual}`);
+}
+
+function controls(){
+  const connected=!!server?.connected;
+  $('connect').disabled=connected||busy;
+  $('disconnect').disabled=!connected||busy;
+  $('run').disabled=!connected||busy;
+}
+
+function setBusy(value){
+  busy=value;
+  controls();
+}
+
+function waitFor(predicate,timeout=1700,quiet=false){
+  if(pending)throw Error('ACK already pending');
+  return new Promise((resolve,reject)=>{
+    const timer=setTimeout(()=>{
+      pending=null;
+      reject(Error('ACK timeout'));
+    },timeout);
+    pending={predicate,resolve,reject,timer,quiet};
+  });
+}
+
+async function tx(packet,quiet=false){
+  if(!quiet)log(`TX: ${hex(packet)}`);
+  if(writeChar.properties?.writeWithoutResponse&&writeChar.writeValueWithoutResponse){
+    await writeChar.writeValueWithoutResponse(packet);
+  }else{
+    await writeChar.writeValue(packet);
+  }
+}
+
+async function request(packet,predicate,{timeout=1700,quiet=false}={}){
+  const promise=waitFor(predicate,timeout,quiet);
+  try{
+    await tx(packet,quiet);
+  }catch(error){
+    if(pending){
+      clearTimeout(pending.timer);
+      pending=null;
+    }
+    throw error;
+  }
+  return promise;
+}
+
+function onNotify(event){
+  const view=event.target.value;
+  const bytes=new Uint8Array(view.buffer.slice(view.byteOffset,view.byteOffset+view.byteLength));
+  if(!pending?.quiet)log(`RX: ${hex(bytes)}`);
+  if(pending&&pending.predicate(bytes)){
+    const item=pending;
+    pending=null;
+    clearTimeout(item.timer);
+    item.resolve(bytes);
+  }
+}
+
+async function connect(){
+  device=await navigator.bluetooth.requestDevice({
+    filters:[{namePrefix:'EINK'},{namePrefix:'HINK'}],
+    optionalServices:[SERVICE]
+  });
+  device.addEventListener('gattserverdisconnected',()=>{
+    server=null;
+    token=0;
+    $('ble').textContent='Disconnected';
+    controls();
+    log('Disconnected');
+  });
+  server=await device.gatt.connect();
+  const service=await server.getPrimaryService(SERVICE);
+  try{
+    writeChar=await service.getCharacteristic(WRITE_NR);
+  }catch{
+    writeChar=await service.getCharacteristic(WRITE);
+  }
+  notifyChar=await service.getCharacteristic(NOTIFY);
+  await notifyChar.startNotifications();
+  notifyChar.addEventListener('characteristicvaluechanged',onNotify);
+  $('ble').textContent=`Connected: ${device.name||'device'}`;
+  controls();
+  log(`Connected: ${device.name||'unnamed'}`,'PASS');
+}
+
+async function e4(packet,response,options){
+  return request(packet,a=>a[0]===0xE4&&a[1]===response,options);
+}
+
+async function e5(packet,response,id,options){
+  return request(packet,a=>a[0]===0xE5&&a[1]===response&&a[3]===id,options);
+}
+
+async function e3(packet,response,options){
+  return request(packet,a=>a[0]===0xE3&&a[1]===response,options);
+}
+
+async function e2(sub,options){
+  return request(
+    Uint8Array.of(0xE2,sub,0,0,0,0,0),
+    a=>a[0]===0xE2&&a[1]===sub,
+    options
+  );
+}
+
+function crc16(data,crc=0xFFFF){
+  for(const byte of data){
+    crc^=byte<<8;
+    for(let bit=0;bit<8;bit++){
+      crc=(crc&0x8000)?((crc<<1)^0x1021)&0xFFFF:(crc<<1)&0xFFFF;
+    }
+  }
+  return crc;
+}
+
+function dataByte(index){
+  return(index*17+0x5A)&0xFF;
+}
+
+function startPacket(id){
+  return Uint8Array.of(
+    0xE5,0x00,id,
+    0x80,0x00,
+    0x28,0x01,
+    0x10,
+    0x80,0x12,
+    EXPECTED_CRC&0xFF,EXPECTED_CRC>>8
+  );
+}
+
+function chunkPacket(id,seq,offset,len){
+  const data=Array.from({length:len},(_,i)=>dataByte(offset+i));
+  return Uint8Array.of(0xE5,0x01,id,seq&0xFF,seq>>8,len,...data);
+}
+
+function commitPacket(id,chunks,bytes,crc){
+  return Uint8Array.of(
+    0xE5,0x02,id,
+    chunks&0xFF,chunks>>8,
+    bytes&0xFF,bytes>>8,
+    crc&0xFF,crc>>8
+  );
+}
+
+function parseManifest(packet){
+  return{
+    status:packet[2],
+    id:packet[3],
+    state:packet[4],
+    chunks:u16(packet[5],packet[6]),
+    bytes:u16(packet[7],packet[8]),
+    crc:u16(packet[9],packet[10])
+  };
+}
+
+async function openSession(){
+  const response=await e4(
+    Uint8Array.of(0xE4,0x00,0x48,0x4C,0x32,0x31),
+    0x80
+  );
+  if(response[2]!==0)throw Error(`E4 open failed: ${hex(response)}`);
+  token=response[3];
+  log(`E4 open token=${token}, timeout=${response[4]}s`,'PASS');
+}
+
+async function closeSession(){
+  if(!token)return;
+  const response=await e4(Uint8Array.of(0xE4,0x02,token),0x82);
+  if(response[2]!==0)throw Error(`E4 close failed: ${hex(response)}`);
+  token=0;
+  log('E4 close','PASS');
+}
+
+async function normalizeNoSession(){
+  const status=await e4(Uint8Array.of(0xE4,0x03),0x83);
+  if(status[2]===1){
+    token=status[3];
+    await closeSession();
+  }else{
+    token=0;
+  }
+}
+
+async function resetTransfer(id){
+  const response=await e5(Uint8Array.of(0xE5,0x04,id),0x84,id);
+  if(response[2]!==0)throw Error(`E5 reset ${id} failed: ${hex(response)}`);
+}
+
+async function sendFullTransfer(id){
+  const start=await e5(startPacket(id),0x80,id);
+  if(start[2]!==0)throw Error(`E5 start failed: ${hex(start)}`);
+
+  let seq=0;
+  let offset=0;
+  let running=0xFFFF;
+
+  while(offset<TOTAL){
+    const len=Math.min(CHUNK,TOTAL-offset);
+    const packet=chunkPacket(id,seq,offset,len);
+    const ack=await e5(packet,0x81,id,{quiet:true});
+    if(ack[2]!==0)throw Error(`Chunk ${seq} failed: ${hex(ack)}`);
+    if(u16(ack[4],ack[5])!==seq+1)throw Error(`Next sequence mismatch at ${seq}`);
+    running=crc16(packet.slice(6),running);
+    offset+=len;
+    seq++;
+    $('progress').value=offset;
+    if((seq%64)===0)log(`Full transfer progress: ${seq} chunks / ${offset} bytes`,'OK');
+    await sleep(8);
+  }
+
+  return{seq,offset,crc:running};
+}
+
+async function runAll(){
+  buildMatrix();
+  $('result').textContent='RUNNING';
+  $('result').className='warn';
+  $('manifest').textContent='Not completed.';
+  $('progress').value=0;
+
+  const ID_A=0x31;
+  const ID_B=0x42;
+  const ID_C=0x53;
+
+  await normalizeNoSession();
+
+  const pre=await e5(startPacket(ID_A),0x80,ID_A);
+  mark('preSession',pre[2]===0x01,`status ${pre[2].toString(16).padStart(2,'0')}`);
+
+  await openSession();
+
+  let response=await e5(startPacket(ID_A),0x80,ID_A);
+  if(response[2]!==0)throw Error(`Start A failed: ${hex(response)}`);
+
+  response=await e5(chunkPacket(ID_A+1,0,0,14),0x81,ID_A+1);
+  mark('wrongId',response[2]===0x03,`status ${response[2].toString(16).padStart(2,'0')}`);
+
+  response=await e5(chunkPacket(ID_A,0,0,14),0x81,ID_A);
+  if(response[2]!==0||u16(response[4],response[5])!==1)throw Error('Initial chunk failed');
+
+  response=await e5(chunkPacket(ID_A,0,0,14),0x81,ID_A);
+  mark(
+    'duplicate',
+    response[2]===0x04&&u16(response[4],response[5])===1,
+    `status ${response[2].toString(16).padStart(2,'0')}, next=${u16(response[4],response[5])}`
+  );
+
+  response=await e5(chunkPacket(ID_A,2,28,14),0x81,ID_A);
+  mark(
+    'skipped',
+    response[2]===0x04&&u16(response[4],response[5])===1,
+    `status ${response[2].toString(16).padStart(2,'0')}, next=${u16(response[4],response[5])}`
+  );
+
+  response=await e5(chunkPacket(ID_A,1,14,14),0x81,ID_A);
+  if(response[2]!==0||u16(response[4],response[5])!==2)throw Error('Second valid chunk failed');
+
+  const first28=Uint8Array.from({length:28},(_,i)=>dataByte(i));
+  const crc28=crc16(first28);
+  response=await e5(commitPacket(ID_A,2,28,crc28),0x82,ID_A);
+  let manifest=parseManifest(response);
+  mark(
+    'incomplete',
+    manifest.status===0x07&&manifest.state===1&&manifest.chunks===2&&manifest.bytes===28,
+    `status ${manifest.status.toString(16).padStart(2,'0')}, state=${manifest.state}, chunks=${manifest.chunks}, bytes=${manifest.bytes}`
+  );
+
+  await resetTransfer(ID_A);
+
+  const full=await sendFullTransfer(ID_B);
+  if(full.seq!==339||full.offset!==TOTAL||full.crc!==EXPECTED_CRC){
+    throw Error(`Local full result mismatch: ${JSON.stringify(full)}`);
+  }
+
+  response=await e5(
+    commitPacket(ID_B,full.seq,full.offset,EXPECTED_CRC^0x0001),
+    0x82,
+    ID_B
+  );
+  manifest=parseManifest(response);
+  mark(
+    'badCrc',
+    manifest.status===0x06&&manifest.state===1&&manifest.crc===EXPECTED_CRC,
+    `status ${manifest.status.toString(16).padStart(2,'0')}, state=${manifest.state}, CRC=${manifest.crc.toString(16).padStart(4,'0')}`
+  );
+
+  response=await e5(
+    commitPacket(ID_B,full.seq,full.offset,EXPECTED_CRC),
+    0x82,
+    ID_B
+  );
+  manifest=parseManifest(response);
+  const completionOk=
+    manifest.status===0&&manifest.state===2&&manifest.chunks===339&&
+    manifest.bytes===TOTAL&&manifest.crc===EXPECTED_CRC;
+  mark(
+    'complete',
+    completionOk,
+    `status ${manifest.status.toString(16).padStart(2,'0')}, state=${manifest.state}, chunks=${manifest.chunks}, bytes=${manifest.bytes}, CRC=${manifest.crc.toString(16).padStart(4,'0')}`
+  );
+  $('manifest').textContent=
+    `COMPLETE: state=${manifest.state}, chunks=${manifest.chunks}, bytes=${manifest.bytes}, CRC=${manifest.crc.toString(16).padStart(4,'0').toUpperCase()}`;
+
+  response=await e5(Uint8Array.of(0xE5,0x03,ID_B),0x83,ID_B);
+  const statusManifest=parseManifest(response);
+  if(
+    statusManifest.status!==0||statusManifest.state!==2||
+    statusManifest.chunks!==339||statusManifest.bytes!==TOTAL||
+    statusManifest.crc!==EXPECTED_CRC
+  ){
+    throw Error('Completion status manifest mismatch');
+  }
+
+  await resetTransfer(ID_B);
+
+  response=await e5(startPacket(ID_C),0x80,ID_C);
+  if(response[2]!==0)throw Error('Start expiry transfer failed');
+
+  response=await e5(chunkPacket(ID_C,0,0,14),0x81,ID_C);
+  if(response[2]!==0)throw Error('Expiry transfer first chunk failed');
+
+  log('Waiting 22 seconds with no E4/E5/E3 traffic...','WAIT');
+  for(let remaining=22;remaining>0;remaining--){
+    $(`expiry-actual`).textContent=`waiting ${remaining}s`;
+    await sleep(1000);
+  }
+
+  response=await e5(chunkPacket(ID_C,1,14,14),0x81,ID_C);
+  mark(
+    'expiry',
+    response[2]===0x01,
+    `status ${response[2].toString(16).padStart(2,'0')}`
+  );
+
+  await openSession();
+
+  response=await e5(Uint8Array.of(0xE5,0x03,ID_C),0x83,ID_C);
+  manifest=parseManifest(response);
+  mark(
+    'expiredReset',
+    manifest.status===0x08&&manifest.state===0&&manifest.chunks===0&&manifest.bytes===0,
+    `status ${manifest.status.toString(16).padStart(2,'0')}, state=${manifest.state}, chunks=${manifest.chunks}, bytes=${manifest.bytes}`
+  );
+
+  const e3meta=await e3(
+    Uint8Array.of(0xE3,0x00,0x80,0x00,0x28,0x01,0x10,0x80,0x12),
+    0x80
+  );
+  const e3reset=await e3(Uint8Array.of(0xE3,0x03),0x83);
+  mark(
+    'legacyE3',
+    e3meta[2]===0&&e3reset[2]===0,
+    `metadata=${e3meta[2].toString(16).padStart(2,'0')}, reset=${e3reset[2].toString(16).padStart(2,'0')}`
+  );
+
+  const lock=await e2(0xE0);
+  const blocked=await e2(0x03);
+  mark(
+    'hl20',
+    lock[2]===0xA1&&blocked[2]===0xF0,
+    `E2 E0 ${lock[2].toString(16).padStart(2,'0')}, E2 03 ${blocked[2].toString(16).padStart(2,'0')}`
+  );
+
+  await closeSession();
+
+  response=await e5(Uint8Array.of(0xE5,0x03,ID_B),0x83,ID_B);
+  manifest=parseManifest(response);
+  mark(
+    'postClose',
+    manifest.status===0x01,
+    `status ${manifest.status.toString(16).padStart(2,'0')}`
+  );
+
+  $('result').textContent='PASS END-TO-END';
+  $('result').className='ok';
+  log('HL23A REJECTION MATRIX PASS END-TO-END','PASS');
+}
+
+async function safe(fn){
+  try{
+    setBusy(true);
+    await fn();
+  }catch(error){
+    $('result').textContent='FAIL';
+    $('result').className='bad';
+    log(`ERROR: ${error.message}`,'ERROR');
+    alert(error.message);
+  }finally{
+    setBusy(false);
+  }
+}
+
+$('connect').onclick=()=>safe(connect);
+$('disconnect').onclick=()=>device?.gatt?.disconnect();
+$('run').onclick=()=>safe(runAll);
+$('clear').onclick=()=>{$('log').value=''};
+
+buildMatrix();
+controls();
+log('HL23A ready. Web-only negative-path validation; no panel access.');
+</script>
+</body>
+</html>
