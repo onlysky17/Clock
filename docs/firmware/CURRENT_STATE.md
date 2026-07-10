@@ -240,3 +240,43 @@ docs/firmware/HL20A_VALIDATION_RESULT_2026-07-10.md
 
 Next:
 HL21A BLE command-session safety design.
+
+## HL21A validated state - 2026-07-10
+
+Status:
+PASS END-TO-END.
+
+Source/build:
+- Canonical source SHA256:
+  406B197D3207685A2E2CE483220B230630C4D220D2BB10DD9C2FEE6369926A34
+- Keil rebuild:
+  Code=31260
+  RO-data=3240
+  RW-data=4
+  ZI-data=8372
+- 0 errors and 0 warnings.
+
+Runtime:
+- Pre-open E3 returned session-required status 06.
+- E4 session open returned status 00, token and 20-second timeout.
+- Session status and timeout behavior passed.
+- Full E3 dry-run completed:
+  339 chunks, 4736 bytes, XOR 00.
+- Explicit close passed.
+- Post-close E3 returned status 06.
+- HL20A regression passed:
+  E2 E0 A1 and E2 03 F0.
+
+Safety:
+- Session is RAM-only.
+- No panel RAM write.
+- No EPD refresh.
+- No .bin pushed.
+- New spare board untouched.
+- HMCLOCK/self-flash remains reference-only.
+
+Validation record:
+docs/firmware/HL21A_VALIDATION_RESULT_2026-07-10.md
+
+Next:
+HL22A session-bound dry-run transfer integrity.

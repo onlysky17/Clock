@@ -437,3 +437,32 @@ docs/firmware/HL20A_VALIDATION_RESULT_2026-07-10.md
 
 Next:
 HL21A BLE command-session safety design.
+
+### HL21B
+
+Task:
+Close out HL21A BLE command-session validation.
+
+Result:
+- HL21A canonical source SHA256:
+  406B197D3207685A2E2CE483220B230630C4D220D2BB10DD9C2FEE6369926A34
+- Keil rebuild passed with 0 errors and 0 warnings.
+- Pre-open E3 rejection passed with status 06.
+- E4 open/status/timeout behavior passed.
+- Full dry-run completed with 339 chunks, 4736 bytes and XOR 00.
+- Explicit close and post-close E3 rejection passed.
+- HL20A regression remained active:
+  E2 E0 A1 and E2 03 F0.
+- No panel RAM write or refresh occurred.
+- No .bin was pushed.
+- New spare board remained untouched.
+- HMCLOCK/self-flash remains reference-only.
+
+Status:
+PASS END-TO-END
+
+Record:
+docs/firmware/HL21A_VALIDATION_RESULT_2026-07-10.md
+
+Next:
+HL22A session-bound dry-run transfer integrity.
