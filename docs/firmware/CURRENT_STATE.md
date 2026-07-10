@@ -325,3 +325,43 @@ docs/firmware/HL22A_VALIDATION_RESULT_2026-07-10.md
 
 Next:
 HL23A deterministic integrity rejection matrix.
+
+## HL23A validated state - 2026-07-10
+
+Status:
+PASS END-TO-END.
+
+Validation:
+- Pre-session E5 rejected with 01.
+- Wrong transfer ID rejected with 03.
+- Duplicate sequence rejected with 04.
+- Skipped sequence rejected with 04.
+- Incomplete commit rejected with 07.
+- Wrong CRC rejected with 06.
+- Correct completion manifest passed:
+  state=02
+  chunks=339
+  bytes=4736
+  CRC16=6065
+- Session expiry mid-transfer rejected the next E5 with 01.
+- Old transfer after reopen returned 08 and zeroed state.
+- Legacy E3 regression passed.
+- HL20A regression passed:
+  E2 E0 A1 and E2 03 F0.
+- Post-close E5 rejected with 01.
+
+Safety:
+- Web-only validation on existing HL22A firmware.
+- No firmware change, build or flash.
+- No framebuffer storage.
+- No panel RAM write.
+- No EPD refresh.
+- No .bin pushed.
+- New spare board untouched.
+- HMCLOCK/self-flash remains reference-only.
+
+Validation record:
+docs/firmware/HL23A_VALIDATION_RESULT_2026-07-10.md
+
+Next:
+HL24A canvas-to-E5 dry-run bridge.

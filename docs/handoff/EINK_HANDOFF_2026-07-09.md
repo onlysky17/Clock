@@ -497,3 +497,35 @@ docs/firmware/HL22A_VALIDATION_RESULT_2026-07-10.md
 
 Next:
 HL23A deterministic integrity rejection matrix.
+
+### HL23B
+
+Task:
+Close out HL23A deterministic E5 rejection matrix.
+
+Result:
+- All rejection cases returned their exact expected status.
+- Wrong transfer ID: 03.
+- Duplicate/skipped sequence: 04.
+- Incomplete commit: 07.
+- Wrong CRC: 06.
+- Correct completion:
+  state=02, chunks=339, bytes=4736, CRC16=6065.
+- Session expiry: 01.
+- Old transfer after reopen: 08 with zeroed state.
+- Legacy E3 regression passed.
+- HL20A A1 + E2 03 F0 regression passed.
+- Post-close E5 rejection passed.
+- No firmware edit, build or flash.
+- No framebuffer storage or panel refresh.
+- No .bin pushed.
+- New spare board untouched.
+
+Status:
+PASS END-TO-END
+
+Record:
+docs/firmware/HL23A_VALIDATION_RESULT_2026-07-10.md
+
+Next:
+HL24A canvas-to-E5 dry-run bridge.
