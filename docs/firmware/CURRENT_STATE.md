@@ -149,3 +149,25 @@ Safety:
 - No real EPD refresh tested.
 - No framebuffer written to panel.
 - Continue at company with Keil build + flash tools only when ready.
+
+## HL18B validated state - 2026-07-10
+
+Status:
+PASS END-TO-END.
+
+Validated:
+- Canonical source and SDK mirror SHA256 matched.
+- Keil build completed with 0 errors and 0 warnings.
+- Firmware packed and flashed locally.
+- BLE pair/connect passed.
+- E3 metadata, chunk, status and reset ACK passed.
+- Full 4736-byte framebuffer dry-run transport passed.
+
+Safety:
+- No framebuffer written to panel RAM.
+- No EPD refresh called from E3.
+- No refresh test performed on damaged panel/FPC.
+- No .bin pushed to GitHub.
+
+Test record:
+docs/firmware/HL18B_TEST_RESULT_2026-07-10.md

@@ -353,3 +353,30 @@ Result so far:
 
 Next:
 At company, apply/verify patch, build Keil project, then flash only if build passes.
+
+### HL18C
+
+Task:
+Close out and document the real HL18B validation result.
+
+Result:
+- HL18B canonical source and SDK source SHA256 matched.
+- Keil build passed with 0 errors and 0 warnings.
+- Local pack and flash passed.
+- BLE pair/connect passed.
+- E3 metadata ACK passed.
+- E3 chunk ACK passed.
+- E3 status/counter passed.
+- E3 reset passed.
+- Full 4736-byte dry-run transport passed.
+- No framebuffer was written to panel RAM.
+- No EPD refresh was called from the E3 path.
+- No .bin was pushed to GitHub.
+
+Status:
+PASS
+
+Next:
+HL19A BLE dry-run transport robustness only:
+timeout, retry, duplicate sequence handling and safe resume.
+No EPD refresh.
