@@ -280,3 +280,48 @@ docs/firmware/HL21A_VALIDATION_RESULT_2026-07-10.md
 
 Next:
 HL22A session-bound dry-run transfer integrity.
+
+## HL22A validated state - 2026-07-10
+
+Status:
+PASS END-TO-END.
+
+Source/build:
+- Canonical source SHA256:
+  0C4EA0DD9931FB9FC4D9B6EE12C2203E481A5DEB1E2A31FEB8404040252FFC84
+- Keil rebuild:
+  Code=32236
+  RO-data=3240
+  RW-data=4
+  ZI-data=8388
+- 0 errors and 0 warnings.
+
+Runtime:
+- E5 completion manifest:
+  state=02
+  chunks=339
+  bytes=4736
+  CRC16=6065
+- E5 status manifest matched completion.
+- Legacy E3 regression passed.
+- HL20A regression passed:
+  E2 E0 A1 and E2 03 F0.
+- E4 close passed.
+- Post-close E5 returned session-required status 01.
+- Final result:
+  HL22A PASS END-TO-END.
+
+Safety:
+- Session-bound transfer ID and CRC16 validation active.
+- No framebuffer storage.
+- No panel RAM write.
+- No EPD refresh.
+- No .bin pushed.
+- New spare board untouched.
+- HMCLOCK/self-flash remains reference-only.
+
+Validation record:
+docs/firmware/HL22A_VALIDATION_RESULT_2026-07-10.md
+
+Next:
+HL23A deterministic integrity rejection matrix.
