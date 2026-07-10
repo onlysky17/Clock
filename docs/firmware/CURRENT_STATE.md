@@ -171,3 +171,36 @@ Safety:
 
 Test record:
 docs/firmware/HL18B_TEST_RESULT_2026-07-10.md
+
+## HL19A / HL19B validated state - 2026-07-10
+
+Status:
+PASS END-TO-END.
+
+HL19A:
+- Clean 4736-byte BLE dry-run transfer passed.
+- Disconnect/reconnect Query + Resume passed.
+- Duplicate and skipped sequence guards passed.
+- Mismatched chunk-size resume guard passed.
+- Final state: 339 chunks, 4736 bytes, XOR F0.
+
+HL19B:
+- Deterministic lost-ACK simulation passed.
+- Browser deliberately ignored a chunk ACK.
+- Status-query recovery detected the accepted chunk and continued.
+- Captured run recovered 2 ACK losses.
+- Final state remained 339 chunks, 4736 bytes, XOR F0.
+
+Safety:
+- Firmware remained HL18B.
+- No firmware rebuild/reflash for HL19A/HL19B.
+- No panel RAM write.
+- No EPD refresh.
+- No .bin pushed.
+- New spare board remained untouched.
+
+Validation record:
+docs/firmware/HL19_VALIDATION_RESULT_2026-07-10.md
+
+Next:
+HL20A firmware refresh kill-switch on the old board only.

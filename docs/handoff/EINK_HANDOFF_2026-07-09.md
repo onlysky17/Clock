@@ -380,3 +380,33 @@ Next:
 HL19A BLE dry-run transport robustness only:
 timeout, retry, duplicate sequence handling and safe resume.
 No EPD refresh.
+
+### HL19C
+
+Task:
+Close out HL19A retry/resume and HL19B deterministic ACK-loss recovery.
+
+Result:
+- HL19A clean transfer passed.
+- Disconnect/reconnect Query + Resume passed.
+- Duplicate and skipped sequence protection passed.
+- Chunk-size mismatch resume guard passed.
+- HL19B simulated lost-ACK recovery passed.
+- Captured final state: 339 chunks, 4736 bytes, XOR F0.
+- Captured recovery count: 2 ACK losses recovered.
+- No firmware rebuild/reflash was needed.
+- No framebuffer was written to panel RAM.
+- No EPD refresh occurred.
+- No .bin was pushed.
+- New spare board remained untouched.
+
+Status:
+PASS
+
+Record:
+docs/firmware/HL19_VALIDATION_RESULT_2026-07-10.md
+
+Next:
+HL20A firmware refresh kill-switch.
+Keep safe descriptor/diagnostic commands, but block refresh-capable E2 commands
+at dispatch before any EPD job can start. Continue on the old board only.
