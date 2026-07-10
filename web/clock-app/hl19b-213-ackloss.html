@@ -1,0 +1,563 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#111827">
+  <title>HL19B — HINK213 2.13 ACK-loss Simulation</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --bg:#090d15; --card:#111827; --line:#273248; --text:#f3f4f6; --muted:#9ca3af;
+      --ok:#34d399; --warn:#fbbf24; --bad:#fb7185; --blue:#60a5fa;
+    }
+    * { box-sizing:border-box; }
+    body { margin:0; background:linear-gradient(180deg,#080c13,#0d1421); color:var(--text); }
+    main { max-width:1120px; margin:auto; padding:20px; }
+    h1 { font-size:clamp(1.45rem,4vw,2.25rem); margin:.2rem 0 .4rem; }
+    h2 { font-size:1.05rem; margin:0 0 14px; }
+    p { color:var(--muted); line-height:1.5; }
+    .badge { display:inline-flex; gap:7px; align-items:center; border:1px solid #285744; color:#9ff1cf;
+      background:#0b251c; padding:7px 10px; border-radius:999px; font-size:.84rem; font-weight:700; }
+    .grid { display:grid; gap:14px; grid-template-columns:repeat(12,1fr); margin-top:16px; }
+    .card { grid-column:span 12; border:1px solid var(--line); border-radius:16px; background:rgba(17,24,39,.94); padding:16px; }
+    @media(min-width:850px){ .half{grid-column:span 6}.third{grid-column:span 4}.twoThird{grid-column:span 8} }
+    .row { display:flex; flex-wrap:wrap; gap:9px; align-items:center; }
+    button,select,input { border:1px solid #334155; border-radius:10px; background:#172033; color:var(--text); padding:10px 12px; }
+    button { cursor:pointer; font-weight:700; }
+    button:hover:not(:disabled) { border-color:#6482af; transform:translateY(-1px); }
+    button:disabled { opacity:.45; cursor:not-allowed; }
+    button.primary { background:#1d4ed8; border-color:#3b82f6; }
+    button.good { background:#065f46; border-color:#10b981; }
+    button.warn { background:#713f12; border-color:#d97706; }
+    button.danger { background:#7f1d1d; border-color:#ef4444; }
+    label { display:grid; gap:5px; color:var(--muted); font-size:.82rem; }
+    input[type=number] { width:110px; }
+    .status { display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-top:12px; color:var(--muted); }
+    .status strong { color:var(--text); }
+    .safety { border-left:4px solid var(--ok); background:#0d201a; padding:12px; border-radius:8px; line-height:1.5; }
+    canvas { display:block; width:100%; max-width:740px; aspect-ratio:296/128; background:white; image-rendering:pixelated;
+      border:8px solid #222b3a; border-radius:10px; cursor:crosshair; touch-action:none; }
+    .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:9px; }
+    .stat { background:#0b1220; border:1px solid #263249; border-radius:11px; padding:11px; }
+    .stat span { display:block; color:var(--muted); font-size:.78rem; }
+    .stat strong { font-size:1.15rem; }
+    progress { width:100%; height:16px; margin-top:12px; }
+    textarea { width:100%; min-height:230px; resize:vertical; border:1px solid #263249; border-radius:10px;
+      background:#050912; color:#cce0ff; padding:12px; font:12px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace; }
+    .ok{color:var(--ok)} .warnText{color:var(--warn)} .bad{color:var(--bad)}
+    code { color:#c7dcff; }
+  </style>
+</head>
+<body>
+<main>
+  <div class="badge">HL19B WEB-ONLY ACK-LOSS TEST · NO PANEL REFRESH</div>
+  <h1>HL19B — HINK213 2.13 ACK-loss Simulation</h1>
+  <p>Kiểm chứng có kiểm soát nhánh ACK bị mất: web cố ý bỏ qua đúng một chunk ACK, sau đó query trạng thái firmware và tự phục hồi mà không gửi trùng dữ liệu.</p>
+
+  <div class="grid">
+    <section class="card">
+      <h2>Safety lock</h2>
+      <div class="safety">
+        Trang này chỉ phát protocol <code>E3 00–03</code>. Mô phỏng chỉ xảy ra trong JavaScript: firmware vẫn nhận chunk bình thường, web cố ý không tiêu thụ đúng một ACK. Không có code gửi E2, không ghi panel RAM và không gọi refresh.
+        Firmware chỉ giữ metadata/counter/XOR, không giữ framebuffer 4736 byte.
+      </div>
+    </section>
+
+    <section class="card half">
+      <h2>BLE</h2>
+      <div class="row">
+        <button id="connectBtn" class="primary">Connect EINK/HINK</button>
+        <button id="disconnectBtn" disabled>Disconnect</button>
+        <button id="clearLogBtn">Clear log</button>
+      </div>
+      <div class="status">
+        <span>State: <strong id="bleState">Disconnected</strong></span>
+        <span>Last ACK: <strong id="lastAck">-</strong></span>
+      </div>
+    </section>
+
+    <section class="card half">
+      <h2>Transport settings</h2>
+      <div class="row">
+        <label>Chunk payload
+          <select id="chunkSize">
+            <option value="14" selected>14 bytes</option>
+            <option value="12">12 bytes</option>
+            <option value="8">8 bytes</option>
+          </select>
+        </label>
+        <label>Delay (ms)<input id="delayMs" type="number" min="0" max="1000" value="20"></label>
+        <label>ACK timeout (ms)<input id="timeoutMs" type="number" min="150" max="5000" value="400"></label>
+        <label>Max retries<input id="maxRetries" type="number" min="0" max="10" value="3"></label>
+      </div>
+    </section>
+
+    <section class="card twoThird">
+      <h2>Canvas preview</h2>
+      <div class="row" style="margin-bottom:12px">
+        <button id="blackBtn">Black</button>
+        <button id="whiteBtn">White</button>
+        <button id="clearBtn">Clear</button>
+        <button id="sampleBtn">Sample Clock</button>
+        <button id="packBtn">Pack bytes</button>
+        <button id="copyBtn">Copy HEX</button>
+      </div>
+      <canvas id="canvas" width="296" height="128"></canvas>
+      <p>Display 296 × 128. Raw buffer 128 × 296. Packed MSB-first: 16 bytes/row × 296 = 4736 bytes.</p>
+    </section>
+
+    <section class="card third">
+      <h2>Dry-run actions</h2>
+      <div class="row">
+        <button id="metadataBtn" class="good" disabled>Start metadata</button>
+        <button id="sendBtn" class="primary" disabled>Send with retry</button>
+        <button id="resumeBtn" class="warn" disabled>Query + Resume</button>
+        <button id="statusBtn" disabled>Query status</button>
+        <button id="resetBtn" class="danger" disabled>Reset dry-run</button>
+        <button id="dropAckBtn" class="warn" disabled>Arm: drop next chunk ACK</button>
+      </div>
+      <p id="actionHint">Connect board cũ để bắt đầu.</p>
+      <p>Simulation: <strong id="dropAckState">OFF</strong></p>
+    </section>
+
+    <section class="card">
+      <h2>Progress</h2>
+      <div class="stats">
+        <div class="stat"><span>Payload</span><strong id="payloadStat">4736</strong> bytes</div>
+        <div class="stat"><span>Next sequence</span><strong id="seqStat">0</strong></div>
+        <div class="stat"><span>Bytes accepted</span><strong id="bytesStat">0</strong></div>
+        <div class="stat"><span>ACK count</span><strong id="ackStat">0</strong></div>
+        <div class="stat"><span>Retries</span><strong id="retryStat">0</strong></div>
+        <div class="stat"><span>Recovered ACK loss</span><strong id="recoverStat">0</strong></div>
+        <div class="stat"><span>Local XOR</span><strong id="xorStat">00</strong></div>
+      </div>
+      <progress id="progress" max="4736" value="0"></progress>
+    </section>
+
+    <section class="card half">
+      <h2>Manual E3 HEX</h2>
+      <div class="row">
+        <input id="manualHex" style="flex:1;min-width:260px" value="E3 02 05">
+        <button id="manualBtn" disabled>Send E3</button>
+      </div>
+      <p>Safety parser từ chối mọi packet không bắt đầu bằng E3 và mọi subcommand ngoài 00–03.</p>
+    </section>
+
+    <section class="card half">
+      <h2>Packed HEX preview</h2>
+      <textarea id="packedHex" readonly></textarea>
+    </section>
+
+    <section class="card">
+      <h2>Log</h2>
+      <textarea id="log" readonly></textarea>
+    </section>
+  </div>
+</main>
+
+<script>
+'use strict';
+
+const SERVICE_UUID = '18424398-7cbc-11e9-8f9e-2a86e4085a59';
+const WRITE_UUID = '2d86686a-53dc-25b3-0c4a-f0e10c8dee20';
+const WRITE_NR_UUID = '5a87b4ef-3bfa-76a8-e642-92933c31434f';
+const NOTIFY_UUID = '15005991-b131-3396-014c-664c9867b917';
+
+const RAW_W = 128, RAW_H = 296, X_BYTES = 16, TOTAL = 4736;
+const STATUS = {
+  OK:0x00, INVALID_SIZE:0x01, BAD_CHECKSUM:0x02,
+  SEQUENCE_ERROR:0x03, LOCKED:0x04, UNSUPPORTED:0x05
+};
+
+let device = null, server = null, writeChar = null, notifyChar = null;
+let pending = null, sending = false, drawBlack = true, pointerDown = false;
+let payload = new Uint8Array(TOTAL);
+let ackCount = 0, retryCount = 0, recoveredCount = 0;
+let dropNextChunkAck = false;
+
+const $ = id => document.getElementById(id);
+const canvas = $('canvas'), ctx = canvas.getContext('2d', {willReadFrequently:true});
+ctx.imageSmoothingEnabled = false;
+
+function stamp() {
+  return new Date().toLocaleTimeString('vi-VN', {hour12:false});
+}
+function log(message, cls='') {
+  const prefix = cls ? `[${cls}] ` : '';
+  $('log').value += `${stamp()} ${prefix}${message}\n`;
+  $('log').scrollTop = $('log').scrollHeight;
+}
+function hex(bytes) {
+  return [...bytes].map(v => v.toString(16).padStart(2,'0').toUpperCase()).join(' ');
+}
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function setConnected(connected) {
+  $('bleState').textContent = connected ? `Connected: ${device?.name || 'device'}` : 'Disconnected';
+  $('connectBtn').disabled = connected;
+  $('disconnectBtn').disabled = !connected;
+  for (const id of ['metadataBtn','sendBtn','resumeBtn','statusBtn','resetBtn','manualBtn','dropAckBtn']) {
+    $(id).disabled = !connected || sending;
+  }
+  $('actionHint').textContent = connected
+    ? 'Firmware HL18B hiện tại đủ dùng; HL19A chỉ nâng độ bền phía web.'
+    : 'Connect board cũ để bắt đầu.';
+}
+function setSending(value) {
+  sending = value;
+  setConnected(!!server?.connected);
+}
+function updateStats(nextSeq=Number($('seqStat').textContent)||0, bytes=Number($('bytesStat').textContent)||0) {
+  $('seqStat').textContent = String(nextSeq);
+  $('bytesStat').textContent = String(bytes);
+  $('ackStat').textContent = String(ackCount);
+  $('retryStat').textContent = String(retryCount);
+  $('recoverStat').textContent = String(recoveredCount);
+  $('progress').value = bytes;
+}
+function xorBytes(bytes) {
+  let x = 0;
+  for (const b of bytes) x ^= b;
+  return x;
+}
+function statusName(v) {
+  return Object.entries(STATUS).find(([,n]) => n === v)?.[0] || `0x${v.toString(16)}`;
+}
+
+async function connect() {
+  if (!navigator.bluetooth) throw new Error('Web Bluetooth không được hỗ trợ.');
+  device = await navigator.bluetooth.requestDevice({
+    filters: [{namePrefix:'EINK'}, {namePrefix:'HINK'}],
+    optionalServices: [SERVICE_UUID]
+  });
+  device.addEventListener('gattserverdisconnected', onDisconnected);
+  server = await device.gatt.connect();
+  const service = await server.getPrimaryService(SERVICE_UUID);
+
+  try {
+    writeChar = await service.getCharacteristic(WRITE_NR_UUID);
+    log('Using WRITE NO RESPONSE characteristic.');
+  } catch {
+    writeChar = await service.getCharacteristic(WRITE_UUID);
+    log('Using WRITE characteristic.');
+  }
+
+  notifyChar = await service.getCharacteristic(NOTIFY_UUID);
+  await notifyChar.startNotifications();
+  notifyChar.addEventListener('characteristicvaluechanged', onNotify);
+  setConnected(true);
+  log(`Connected: ${device.name || 'unnamed'}`, 'OK');
+}
+function onDisconnected() {
+  if (pending) {
+    pending.reject(new Error('BLE disconnected'));
+    pending = null;
+  }
+  server = null; writeChar = null; notifyChar = null; sending = false;
+  setConnected(false);
+  log('Disconnected', 'WARN');
+}
+function disconnect() {
+  device?.gatt?.disconnect();
+}
+function onNotify(event) {
+  const bytes = new Uint8Array(event.target.value.buffer.slice(
+    event.target.value.byteOffset,
+    event.target.value.byteOffset + event.target.value.byteLength
+  ));
+  const text = hex(bytes);
+  $('lastAck').textContent = text;
+
+  if (dropNextChunkAck && bytes[0] === 0xE3 && bytes[1] === 0x81) {
+    dropNextChunkAck = false;
+    $('dropAckState').textContent = 'CONSUMED';
+    log(`RX: ${text} — intentionally ignored once`, 'SIM-LOSS');
+    // Do not resolve the pending request. Its timeout path must query firmware
+    // status and recover because the firmware already accepted this chunk.
+    return;
+  }
+
+  log(`RX: ${text}`);
+
+  if (bytes[0] === 0xE3) {
+    ackCount++;
+    updateStats();
+  }
+  if (pending && pending.predicate(bytes)) {
+    const p = pending;
+    pending = null;
+    clearTimeout(p.timer);
+    p.resolve(bytes);
+  }
+}
+function waitNotify(predicate, timeoutMs) {
+  if (pending) throw new Error('Internal: another ACK is already pending.');
+  return new Promise((resolve,reject) => {
+    const timer = setTimeout(() => {
+      if (pending) pending = null;
+      reject(new Error('ACK timeout'));
+    }, timeoutMs);
+    pending = {predicate, resolve, reject, timer};
+  });
+}
+async function writePacket(packet) {
+  if (!writeChar) throw new Error('BLE chưa connect.');
+  log(`TX: ${hex(packet)}`);
+  if (typeof writeChar.writeValueWithoutResponse === 'function' &&
+      (writeChar.properties?.writeWithoutResponse || writeChar.uuid === WRITE_NR_UUID)) {
+    await writeChar.writeValueWithoutResponse(packet);
+  } else {
+    await writeChar.writeValue(packet);
+  }
+}
+async function request(packet, response, timeout=Number($('timeoutMs').value)) {
+  const waiter = waitNotify(bytes => bytes[0] === 0xE3 && bytes[1] === response, timeout);
+  try {
+    await writePacket(packet);
+  } catch (e) {
+    if (pending) {
+      clearTimeout(pending.timer);
+      pending = null;
+    }
+    throw e;
+  }
+  return waiter;
+}
+async function queryPage(page) {
+  const rx = await request(Uint8Array.of(0xE3,0x02,page), 0x82);
+  return rx[2];
+}
+async function queryStatus() {
+  const armed = await queryPage(0x05);
+  const chunksLo = await queryPage(0x00);
+  const chunksHi = await queryPage(0x01);
+  const bytesLo = await queryPage(0x02);
+  const bytesHi = await queryPage(0x03);
+  const remoteXor = await queryPage(0x04);
+  const state = {
+    armed: armed === 1,
+    nextSeq: chunksLo | (chunksHi << 8),
+    bytes: bytesLo | (bytesHi << 8),
+    xor: remoteXor
+  };
+  updateStats(state.nextSeq, state.bytes);
+  log(`STATUS armed=${state.armed ? 1:0} nextSeq=${state.nextSeq} bytes=${state.bytes} xor=${state.xor.toString(16).padStart(2,'0').toUpperCase()}`, 'OK');
+  return state;
+}
+async function startMetadata() {
+  pack();
+  const packet = Uint8Array.of(0xE3,0x00,0x80,0x00,0x28,0x01,0x10,0x80,0x12);
+  const rx = await request(packet,0x80);
+  if (rx[2] !== STATUS.OK) throw new Error(`Metadata rejected: ${statusName(rx[2])}`);
+  updateStats(0,0);
+  log('Metadata accepted; dry-run counters reset.', 'OK');
+}
+
+function makeChunk(seq, offset, size) {
+  const len = Math.min(size, payload.length - offset);
+  const data = payload.slice(offset, offset + len);
+  const checksum = xorBytes(data);
+  return Uint8Array.of(0xE3,0x01,seq & 0xff,(seq >> 8) & 0xff,len,checksum,...data);
+}
+function expectedOffsetForSeq(seq, chunkSize) {
+  return Math.min(seq * chunkSize, TOTAL);
+}
+async function sendChunkRobust(seq, offset, chunkSize) {
+  const maxRetries = Number($('maxRetries').value);
+  const packet = makeChunk(seq, offset, chunkSize);
+
+  for (let attempt=0; attempt<=maxRetries; attempt++) {
+    try {
+      const rx = await request(packet, 0x81);
+      const status = rx[2];
+      if (status === STATUS.OK) return {accepted:true, recovered:false};
+
+      if (status === STATUS.SEQUENCE_ERROR) {
+        const remote = await queryStatus();
+        if (remote.nextSeq > seq) {
+          recoveredCount++;
+          log(`Seq ${seq}: duplicate/ACK-loss detected; firmware already accepted it.`, 'RECOVER');
+          return {accepted:true, recovered:true};
+        }
+        if (remote.nextSeq === seq && attempt < maxRetries) {
+          retryCount++;
+          log(`Seq ${seq}: sequence error but firmware still expects this seq; retry ${attempt+1}/${maxRetries}.`, 'RETRY');
+          continue;
+        }
+        throw new Error(`Sequence mismatch: local=${seq}, firmware expects=${remote.nextSeq}`);
+      }
+      throw new Error(`Chunk ${seq} rejected: ${statusName(status)}`);
+    } catch (e) {
+      if (!/ACK timeout/.test(e.message)) throw e;
+      const remote = await queryStatus();
+      if (remote.nextSeq > seq) {
+        recoveredCount++;
+        log(`Seq ${seq}: ACK timeout, but status confirms accepted.`, 'RECOVER');
+        return {accepted:true, recovered:true};
+      }
+      if (remote.nextSeq !== seq) {
+        throw new Error(`After timeout firmware expects seq ${remote.nextSeq}, local seq ${seq}`);
+      }
+      if (attempt >= maxRetries) throw new Error(`Seq ${seq}: timeout after ${maxRetries} retries`);
+      retryCount++;
+      log(`Seq ${seq}: ACK timeout; retry ${attempt+1}/${maxRetries}.`, 'RETRY');
+    }
+  }
+  throw new Error(`Seq ${seq}: exhausted retries`);
+}
+async function sendFromState(state) {
+  pack();
+  const chunkSize = Number($('chunkSize').value);
+  const expectedOffset = expectedOffsetForSeq(state.nextSeq, chunkSize);
+  if (state.bytes !== expectedOffset) {
+    throw new Error(
+      `Resume refused: firmware bytes=${state.bytes}, but seq ${state.nextSeq} with chunk ${chunkSize} expects ${expectedOffset}. ` +
+      'Giữ đúng chunk size ban đầu hoặc Reset dry-run.'
+    );
+  }
+  if (!state.armed) throw new Error('Firmware chưa armed metadata. Bấm Start metadata trước.');
+
+  let seq = state.nextSeq;
+  let offset = state.bytes;
+  while (offset < payload.length) {
+    await sendChunkRobust(seq, offset, chunkSize);
+    const sent = Math.min(chunkSize, payload.length - offset);
+    offset += sent;
+    seq++;
+    updateStats(seq, offset);
+    const delay = Number($('delayMs').value);
+    if (delay > 0) await sleep(delay);
+  }
+
+  const finalState = await queryStatus();
+  const localXor = xorBytes(payload);
+  if (finalState.bytes !== TOTAL) throw new Error(`Final byte count mismatch: ${finalState.bytes}/${TOTAL}`);
+  if (finalState.xor !== localXor) throw new Error(`Final XOR mismatch: remote=${finalState.xor.toString(16)} local=${localXor.toString(16)}`);
+  log(`COMPLETE: ${finalState.nextSeq} chunks, ${finalState.bytes} bytes, XOR ${localXor.toString(16).padStart(2,'0').toUpperCase()}`, 'PASS');
+}
+async function sendNew() {
+  setSending(true);
+  try {
+    const state = await queryStatus();
+    if (!state.armed) throw new Error('Metadata chưa được gửi.');
+    if (state.nextSeq !== 0 || state.bytes !== 0) {
+      throw new Error('Firmware đã có tiến độ. Dùng Query + Resume hoặc Reset dry-run.');
+    }
+    await sendFromState(state);
+  } finally { setSending(false); }
+}
+async function resume() {
+  setSending(true);
+  try {
+    const state = await queryStatus();
+    await sendFromState(state);
+  } finally { setSending(false); }
+}
+function armDropNextAck() {
+  if (sending) throw new Error('Đang truyền; hãy arm trước khi bấm Send with retry.');
+  dropNextChunkAck = true;
+  $('dropAckState').textContent = 'ARMED';
+  log('Simulation armed: next E3 81 chunk ACK will be ignored locally once.', 'SIM');
+}
+
+async function resetDryRun() {
+  dropNextChunkAck = false;
+  $('dropAckState').textContent = 'OFF';
+  const rx = await request(Uint8Array.of(0xE3,0x03),0x83);
+  if (rx[2] !== STATUS.OK) throw new Error(`Reset rejected: ${statusName(rx[2])}`);
+  updateStats(0,0);
+  log('Dry-run state reset.', 'OK');
+}
+async function manualSend() {
+  const values = $('manualHex').value.trim().split(/\s+/).filter(Boolean).map(v => parseInt(v,16));
+  if (!values.length || values.some(v => !Number.isInteger(v) || v<0 || v>255)) throw new Error('HEX không hợp lệ.');
+  if (values[0] !== 0xE3) throw new Error('Safety lock: chỉ cho phép packet E3.');
+  if (values.length < 2 || ![0x00,0x01,0x02,0x03].includes(values[1])) throw new Error('Safety lock: chỉ E3 00–03.');
+  await writePacket(Uint8Array.from(values));
+}
+
+function white() { ctx.fillStyle='#fff'; ctx.fillRect(0,0,canvas.width,canvas.height); }
+function black() { ctx.fillStyle='#000'; ctx.fillRect(0,0,canvas.width,canvas.height); }
+function sampleClock() {
+  white();
+  ctx.fillStyle='#000';
+  ctx.font='bold 42px ui-monospace,monospace';
+  ctx.textAlign='center';
+  ctx.fillText('09:41',148,62);
+  ctx.font='bold 15px sans-serif';
+  ctx.fillText('FRI 10 JUL',148,90);
+  ctx.fillRect(28,104,240,3);
+  ctx.font='12px sans-serif';
+  ctx.fillText('HINK213 · DRY RUN',148,122);
+}
+function pointFromEvent(e) {
+  const rect=canvas.getBoundingClientRect();
+  return {
+    x:Math.max(0,Math.min(295,Math.floor((e.clientX-rect.left)*296/rect.width))),
+    y:Math.max(0,Math.min(127,Math.floor((e.clientY-rect.top)*128/rect.height)))
+  };
+}
+function paint(e) {
+  if (!pointerDown) return;
+  const p=pointFromEvent(e);
+  ctx.fillStyle=drawBlack?'#000':'#fff';
+  ctx.fillRect(p.x-2,p.y-2,5,5);
+}
+function pack() {
+  const image=ctx.getImageData(0,0,296,128).data;
+  const raw=new Uint8Array(TOTAL);
+  // Landscape display -> raw portrait: rawX=displayY, rawY=295-displayX.
+  for (let dy=0;dy<128;dy++) {
+    for (let dx=0;dx<296;dx++) {
+      const i=(dy*296+dx)*4;
+      const isBlack=(image[i]+image[i+1]+image[i+2])<384;
+      if (!isBlack) continue;
+      const rawX=dy, rawY=295-dx;
+      const index=rawY*X_BYTES+(rawX>>3);
+      raw[index] |= 0x80 >> (rawX & 7);
+    }
+  }
+  payload=raw;
+  const localXor=xorBytes(payload);
+  $('xorStat').textContent=localXor.toString(16).padStart(2,'0').toUpperCase();
+  $('packedHex').value=hex(payload.slice(0,512)) + (payload.length>512 ? '\n… preview first 512 / 4736 bytes' : '');
+  log(`Packed ${payload.length} bytes; XOR ${localXor.toString(16).padStart(2,'0').toUpperCase()}.`);
+  return payload;
+}
+
+async function guarded(fn) {
+  try { await fn(); }
+  catch(e) { log(e.message || String(e),'ERROR'); alert(e.message || String(e)); }
+}
+
+$('connectBtn').onclick=()=>guarded(connect);
+$('disconnectBtn').onclick=disconnect;
+$('clearLogBtn').onclick=()=>{$('log').value='';};
+$('metadataBtn').onclick=()=>guarded(startMetadata);
+$('sendBtn').onclick=()=>guarded(sendNew);
+$('resumeBtn').onclick=()=>guarded(resume);
+$('statusBtn').onclick=()=>guarded(queryStatus);
+$('resetBtn').onclick=()=>guarded(resetDryRun);
+$('dropAckBtn').onclick=()=>guarded(async()=>armDropNextAck());
+$('manualBtn').onclick=()=>guarded(manualSend);
+$('blackBtn').onclick=()=>{drawBlack=true;};
+$('whiteBtn').onclick=()=>{drawBlack=false;};
+$('clearBtn').onclick=white;
+$('sampleBtn').onclick=sampleClock;
+$('packBtn').onclick=pack;
+$('copyBtn').onclick=async()=>{pack();await navigator.clipboard.writeText(hex(payload));log('Copied full packed HEX.','OK');};
+
+canvas.addEventListener('pointerdown',e=>{pointerDown=true;canvas.setPointerCapture(e.pointerId);paint(e);});
+canvas.addEventListener('pointermove',paint);
+canvas.addEventListener('pointerup',()=>pointerDown=false);
+canvas.addEventListener('pointercancel',()=>pointerDown=false);
+
+white();
+sampleClock();
+pack();
+setConnected(false);
+log('HL19B ready. Arm one simulated lost chunk ACK, then send. Safety lock: E3 only; no panel refresh.');
+</script>
+</body>
+</html>
