@@ -60,6 +60,17 @@ static uint16_t hl18b_dry_chunks __SECTION_ZERO("retention_mem_area0");
 static uint16_t hl18b_dry_bytes __SECTION_ZERO("retention_mem_area0");
 static uint8_t hl18b_dry_xor __SECTION_ZERO("retention_mem_area0");
 
+/* HL22A session-bound transfer integrity state. Counters/checksum only. */
+static uint8_t hl22_transfer_active __SECTION_ZERO("retention_mem_area0");
+static uint8_t hl22_transfer_complete __SECTION_ZERO("retention_mem_area0");
+static uint8_t hl22_transfer_id __SECTION_ZERO("retention_mem_area0");
+static uint8_t hl22_transfer_session_token __SECTION_ZERO("retention_mem_area0");
+static uint16_t hl22_transfer_next_seq __SECTION_ZERO("retention_mem_area0");
+static uint16_t hl22_transfer_chunks __SECTION_ZERO("retention_mem_area0");
+static uint16_t hl22_transfer_bytes __SECTION_ZERO("retention_mem_area0");
+static uint16_t hl22_transfer_expected_crc __SECTION_ZERO("retention_mem_area0");
+static uint16_t hl22_transfer_running_crc __SECTION_ZERO("retention_mem_area0");
+
 /* HL21A bounded BLE command-session state (RAM only). */
 static uint8_t hl21_session_active __SECTION_ZERO("retention_mem_area0");
 static uint8_t hl21_session_token __SECTION_ZERO("retention_mem_area0");
@@ -139,6 +150,10 @@ static void hink_notify_bytes(const uint8_t *data, uint8_t len);
 static void hl18b_dry_reset(void);
 static uint8_t hl18b_dry_handle(struct custs1_val_write_ind const *param,
                                 uint8_t conidx);
+
+static void hl22_transfer_reset(void);
+static uint8_t hl22_transfer_handle(struct custs1_val_write_ind const *param,
+                                    uint8_t conidx);
 
 static void hl21_session_timeout_cb(void);
 static uint8_t hl21_session_handle(struct custs1_val_write_ind const *param,
@@ -1146,6 +1161,7 @@ static void hl21_session_expire(void)
     hl21_session_active = 0;
     hl21_session_owner_conidx = 0xFF;
     hl18b_dry_reset();
+    hl22_transfer_reset();
 }
 
 static void hl21_session_timeout_cb(void)
@@ -1306,6 +1322,370 @@ static uint8_t hl21_session_handle(struct custs1_val_write_ind const *param,
         default:
             hl21_session_notify(0x8F, HL21_SESSION_STATUS_UNSUPPORTED,
                                 hl21_session_token);
+            return 1;
+    }
+}
+
+/*
+ * HL22A_SESSION_BOUND_TRANSFER_INTEGRITY
+ *
+ * E5 stores only metadata, counters and CRC16. It never stores framebuffer
+ * bytes and never calls EPD, GPIO or SPI code.
+ *
+ * Start:  E5 00 id widthLo widthHi heightLo heightHi xBytes totalLo totalHi crcLo crcHi
+ * Chunk:  E5 01 id seqLo seqHi len data...
+ * Commit: E5 02 id chunksLo chunksHi bytesLo bytesHi crcLo crcHi
+ * Status: E5 03 id
+ * Reset:  E5 04 id
+ *
+ * CRC16-CCITT-FALSE: polynomial 0x1021, initial value 0xFFFF.
+ */
+#define HL22_FB_WIDTH                128U
+#define HL22_FB_HEIGHT               296U
+#define HL22_FB_X_BYTES              16U
+#define HL22_FB_TOTAL                4736U
+#define HL22_MAX_CHUNK               14U
+#define HL22_CRC16_INITIAL           0xFFFFU
+
+#define HL22_STATUS_OK               0x00
+#define HL22_STATUS_SESSION_REQUIRED 0x01
+#define HL22_STATUS_INVALID_SIZE     0x02
+#define HL22_STATUS_ID_MISMATCH      0x03
+#define HL22_STATUS_SEQUENCE_ERROR   0x04
+#define HL22_STATUS_OVERFLOW         0x05
+#define HL22_STATUS_CRC_MISMATCH     0x06
+#define HL22_STATUS_INCOMPLETE       0x07
+#define HL22_STATUS_NO_TRANSFER      0x08
+#define HL22_STATUS_SESSION_MISMATCH 0x09
+#define HL22_STATUS_UNSUPPORTED      0x0A
+
+#define HL22_STATE_NONE              0x00
+#define HL22_STATE_ACTIVE            0x01
+#define HL22_STATE_COMPLETE          0x02
+
+static uint16_t hl22_u16le(const uint8_t *p)
+{
+    return (uint16_t)(((uint16_t)p[1] << 8) | p[0]);
+}
+
+static uint16_t hl22_crc16_update(uint16_t crc,
+                                  const uint8_t *data,
+                                  uint8_t len)
+{
+    uint8_t i;
+    uint8_t bit;
+
+    for (i = 0; i < len; i++)
+    {
+        crc ^= (uint16_t)((uint16_t)data[i] << 8);
+        for (bit = 0; bit < 8; bit++)
+        {
+            if (crc & 0x8000U)
+            {
+                crc = (uint16_t)((crc << 1) ^ 0x1021U);
+            }
+            else
+            {
+                crc = (uint16_t)(crc << 1);
+            }
+        }
+    }
+
+    return crc;
+}
+
+static void hl22_notify_short(uint8_t response,
+                              uint8_t status,
+                              uint8_t transfer_id)
+{
+    uint8_t msg[5];
+    msg[0] = 0xE5;
+    msg[1] = response;
+    msg[2] = status;
+    msg[3] = transfer_id;
+    msg[4] = hl21_session_token;
+    hink_notify_bytes(msg, 5);
+}
+
+static void hl22_notify_chunk(uint8_t status, uint8_t transfer_id)
+{
+    uint8_t msg[6];
+    msg[0] = 0xE5;
+    msg[1] = 0x81;
+    msg[2] = status;
+    msg[3] = transfer_id;
+    msg[4] = (uint8_t)(hl22_transfer_next_seq & 0xFFU);
+    msg[5] = (uint8_t)((hl22_transfer_next_seq >> 8) & 0xFFU);
+    hink_notify_bytes(msg, 6);
+}
+
+static uint8_t hl22_transfer_state(void)
+{
+    if (hl22_transfer_complete)
+    {
+        return HL22_STATE_COMPLETE;
+    }
+    if (hl22_transfer_active)
+    {
+        return HL22_STATE_ACTIVE;
+    }
+    return HL22_STATE_NONE;
+}
+
+static void hl22_notify_manifest(uint8_t response,
+                                 uint8_t status,
+                                 uint8_t transfer_id)
+{
+    uint8_t msg[11];
+    msg[0] = 0xE5;
+    msg[1] = response;
+    msg[2] = status;
+    msg[3] = transfer_id;
+    msg[4] = hl22_transfer_state();
+    msg[5] = (uint8_t)(hl22_transfer_chunks & 0xFFU);
+    msg[6] = (uint8_t)((hl22_transfer_chunks >> 8) & 0xFFU);
+    msg[7] = (uint8_t)(hl22_transfer_bytes & 0xFFU);
+    msg[8] = (uint8_t)((hl22_transfer_bytes >> 8) & 0xFFU);
+    msg[9] = (uint8_t)(hl22_transfer_running_crc & 0xFFU);
+    msg[10] = (uint8_t)((hl22_transfer_running_crc >> 8) & 0xFFU);
+    hink_notify_bytes(msg, 11);
+}
+
+static void hl22_transfer_reset(void)
+{
+    hl22_transfer_active = 0;
+    hl22_transfer_complete = 0;
+    hl22_transfer_id = 0;
+    hl22_transfer_session_token = 0;
+    hl22_transfer_next_seq = 0;
+    hl22_transfer_chunks = 0;
+    hl22_transfer_bytes = 0;
+    hl22_transfer_expected_crc = 0;
+    hl22_transfer_running_crc = HL22_CRC16_INITIAL;
+}
+
+static uint8_t hl22_transfer_session_matches(uint8_t conidx)
+{
+    return (hl21_session_is_valid(conidx) &&
+            (hl22_transfer_session_token == hl21_session_token)) ? 1 : 0;
+}
+
+static uint8_t hl22_transfer_handle(struct custs1_val_write_ind const *param,
+                                    uint8_t conidx)
+{
+    uint8_t subcmd;
+    uint8_t transfer_id;
+    uint8_t chunk_len;
+    uint8_t status;
+    uint16_t width;
+    uint16_t height;
+    uint16_t total;
+    uint16_t seq;
+    uint16_t expected_crc;
+    uint16_t expected_chunks;
+    uint16_t expected_bytes;
+    uint16_t commit_crc;
+
+    if ((param->length < 2) || (param->value[0] != 0xE5))
+    {
+        return 0;
+    }
+
+    subcmd = param->value[1];
+    transfer_id = (param->length >= 3) ? param->value[2] : 0;
+
+    if (!hl21_session_is_valid(conidx))
+    {
+        if (subcmd == 0x01)
+        {
+            hl22_notify_chunk(HL22_STATUS_SESSION_REQUIRED, transfer_id);
+        }
+        else if ((subcmd == 0x02) || (subcmd == 0x03))
+        {
+            hl22_notify_manifest((uint8_t)(0x80U | subcmd),
+                                 HL22_STATUS_SESSION_REQUIRED,
+                                 transfer_id);
+        }
+        else
+        {
+            hl22_notify_short((uint8_t)(0x80U | subcmd),
+                              HL22_STATUS_SESSION_REQUIRED,
+                              transfer_id);
+        }
+        return 1;
+    }
+
+    hl21_session_touch();
+
+    switch (subcmd)
+    {
+        case 0x00:
+            status = HL22_STATUS_INVALID_SIZE;
+            if (param->length == 12)
+            {
+                width = hl22_u16le(&param->value[3]);
+                height = hl22_u16le(&param->value[5]);
+                total = hl22_u16le(&param->value[8]);
+                expected_crc = hl22_u16le(&param->value[10]);
+
+                if ((transfer_id != 0) &&
+                    (width == HL22_FB_WIDTH) &&
+                    (height == HL22_FB_HEIGHT) &&
+                    (param->value[7] == HL22_FB_X_BYTES) &&
+                    (total == HL22_FB_TOTAL))
+                {
+                    hl22_transfer_reset();
+                    hl22_transfer_active = 1;
+                    hl22_transfer_id = transfer_id;
+                    hl22_transfer_session_token = hl21_session_token;
+                    hl22_transfer_expected_crc = expected_crc;
+                    status = HL22_STATUS_OK;
+                }
+            }
+            hl22_notify_short(0x80, status, transfer_id);
+            return 1;
+
+        case 0x01:
+            status = HL22_STATUS_OK;
+            if (!hl22_transfer_active)
+            {
+                status = HL22_STATUS_NO_TRANSFER;
+            }
+            else if (!hl22_transfer_session_matches(conidx))
+            {
+                hl22_transfer_reset();
+                status = HL22_STATUS_SESSION_MISMATCH;
+            }
+            else if (transfer_id != hl22_transfer_id)
+            {
+                status = HL22_STATUS_ID_MISMATCH;
+            }
+            else if (param->length < 7)
+            {
+                status = HL22_STATUS_INVALID_SIZE;
+            }
+            else
+            {
+                seq = hl22_u16le(&param->value[3]);
+                chunk_len = param->value[5];
+                if ((chunk_len == 0) || (chunk_len > HL22_MAX_CHUNK) ||
+                    ((uint16_t)param->length != (uint16_t)(6U + chunk_len)))
+                {
+                    status = HL22_STATUS_INVALID_SIZE;
+                }
+                else if (seq != hl22_transfer_next_seq)
+                {
+                    status = HL22_STATUS_SEQUENCE_ERROR;
+                }
+                else if ((uint32_t)hl22_transfer_bytes + chunk_len > HL22_FB_TOTAL)
+                {
+                    status = HL22_STATUS_OVERFLOW;
+                }
+                else
+                {
+                    hl22_transfer_running_crc =
+                        hl22_crc16_update(hl22_transfer_running_crc,
+                                          &param->value[6],
+                                          chunk_len);
+                    hl22_transfer_next_seq++;
+                    hl22_transfer_chunks++;
+                    hl22_transfer_bytes =
+                        (uint16_t)(hl22_transfer_bytes + chunk_len);
+                }
+            }
+            hl22_notify_chunk(status, transfer_id);
+            return 1;
+
+        case 0x02:
+            status = HL22_STATUS_OK;
+            if (param->length != 9)
+            {
+                status = HL22_STATUS_INVALID_SIZE;
+            }
+            else if (!hl22_transfer_active)
+            {
+                status = HL22_STATUS_NO_TRANSFER;
+            }
+            else if (!hl22_transfer_session_matches(conidx))
+            {
+                hl22_transfer_reset();
+                status = HL22_STATUS_SESSION_MISMATCH;
+            }
+            else if (transfer_id != hl22_transfer_id)
+            {
+                status = HL22_STATUS_ID_MISMATCH;
+            }
+            else
+            {
+                expected_chunks = hl22_u16le(&param->value[3]);
+                expected_bytes = hl22_u16le(&param->value[5]);
+                commit_crc = hl22_u16le(&param->value[7]);
+                if ((hl22_transfer_bytes != HL22_FB_TOTAL) ||
+                    (expected_bytes != hl22_transfer_bytes) ||
+                    (expected_chunks != hl22_transfer_chunks))
+                {
+                    status = HL22_STATUS_INCOMPLETE;
+                }
+                else if ((commit_crc != hl22_transfer_running_crc) ||
+                         (commit_crc != hl22_transfer_expected_crc))
+                {
+                    status = HL22_STATUS_CRC_MISMATCH;
+                }
+                else
+                {
+                    hl22_transfer_active = 0;
+                    hl22_transfer_complete = 1;
+                }
+            }
+            hl22_notify_manifest(0x82, status, transfer_id);
+            return 1;
+
+        case 0x03:
+            if (param->length != 3)
+            {
+                hl22_notify_manifest(0x83, HL22_STATUS_INVALID_SIZE, transfer_id);
+            }
+            else if (!hl22_transfer_active && !hl22_transfer_complete)
+            {
+                hl22_notify_manifest(0x83, HL22_STATUS_NO_TRANSFER, transfer_id);
+            }
+            else if (!hl22_transfer_session_matches(conidx))
+            {
+                hl22_transfer_reset();
+                hl22_notify_manifest(0x83, HL22_STATUS_SESSION_MISMATCH, transfer_id);
+            }
+            else if (transfer_id != hl22_transfer_id)
+            {
+                hl22_notify_manifest(0x83, HL22_STATUS_ID_MISMATCH, transfer_id);
+            }
+            else
+            {
+                hl22_notify_manifest(0x83, HL22_STATUS_OK, transfer_id);
+            }
+            return 1;
+
+        case 0x04:
+            if (param->length != 3)
+            {
+                hl22_notify_short(0x84, HL22_STATUS_INVALID_SIZE, transfer_id);
+            }
+            else if (!hl22_transfer_active && !hl22_transfer_complete)
+            {
+                hl22_notify_short(0x84, HL22_STATUS_NO_TRANSFER, transfer_id);
+            }
+            else if (transfer_id != hl22_transfer_id)
+            {
+                hl22_notify_short(0x84, HL22_STATUS_ID_MISMATCH, transfer_id);
+            }
+            else
+            {
+                hl22_transfer_reset();
+                hl22_notify_short(0x84, HL22_STATUS_OK, transfer_id);
+            }
+            return 1;
+
+        default:
+            hl22_notify_short(0x8F, HL22_STATUS_UNSUPPORTED, transfer_id);
             return 1;
     }
 }
@@ -1559,7 +1939,13 @@ static uint8_t hink_handle_time_write(struct custs1_val_write_ind const *param,
         return 1;
     }
 
-    /* E3 dry-run is session-gated and still precedes every E2 branch. */
+    /* E5 adds session-bound transfer ID and CRC16 integrity. */
+    if (hl22_transfer_handle(param, hink_ble_conidx))
+    {
+        return 1;
+    }
+
+    /* Legacy E3 remains available for regression and precedes every E2 branch. */
     if (hl18b_dry_handle(param, hink_ble_conidx))
     {
         return 1;
