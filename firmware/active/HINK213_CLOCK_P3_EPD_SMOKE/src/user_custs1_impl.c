@@ -60,6 +60,13 @@ static uint16_t hl18b_dry_chunks __SECTION_ZERO("retention_mem_area0");
 static uint16_t hl18b_dry_bytes __SECTION_ZERO("retention_mem_area0");
 static uint8_t hl18b_dry_xor __SECTION_ZERO("retention_mem_area0");
 
+/* HL21A bounded BLE command-session state (RAM only). */
+static uint8_t hl21_session_active __SECTION_ZERO("retention_mem_area0");
+static uint8_t hl21_session_token __SECTION_ZERO("retention_mem_area0");
+static uint8_t hl21_session_owner_conidx __SECTION_ZERO("retention_mem_area0");
+static uint8_t hl21_session_timer_running __SECTION_ZERO("retention_mem_area0");
+static ke_msg_id_t hl21_session_timer __SECTION_ZERO("retention_mem_area0");
+
 static ke_msg_id_t hink_epd_timer __SECTION_ZERO("retention_mem_area0");
 static uint8_t hink_epd_busy_job __SECTION_ZERO("retention_mem_area0");
 static uint8_t hink_epd_job_sub __SECTION_ZERO("retention_mem_area0");
@@ -128,7 +135,16 @@ static const uint8_t hink_lut1_30[30] = {
 
 static void hink_tick_cb_handler(void);
 static void hink_notify_bytes(const uint8_t *data, uint8_t len);
-static uint8_t hl18b_dry_handle(struct custs1_val_write_ind const *param);
+
+static void hl18b_dry_reset(void);
+static uint8_t hl18b_dry_handle(struct custs1_val_write_ind const *param,
+                                uint8_t conidx);
+
+static void hl21_session_timeout_cb(void);
+static uint8_t hl21_session_handle(struct custs1_val_write_ind const *param,
+                                   uint8_t conidx);
+static uint8_t hl21_session_is_valid(uint8_t conidx);
+static void hl21_session_touch(void);
 
 static void hink_epd_notify(uint8_t subcmd, uint8_t status);
 static uint8_t hink_epd_panel_job_is_locked(uint8_t subcmd);
@@ -1088,6 +1104,213 @@ static void hink_tick_cb_handler(void)
 }
 
 /*
+ * HL21A_BLE_COMMAND_SESSION
+ *
+ * Bounded RAM-only safety session for E3 dry-run commands. This is not
+ * cryptographic authentication; it prevents stale pages and accidental writes.
+ *
+ * E4 00 48 4C 32 31 -> E4 80 status token timeoutSec  (open, ASCII "HL21")
+ * E4 01 token       -> E4 81 status token timeoutSec  (keepalive)
+ * E4 02 token       -> E4 82 status token timeoutSec  (close)
+ * E4 03             -> E4 83 active token timeoutSec  (status)
+ *
+ * A valid E3 command refreshes the 20-second timeout. Close/expiry resets all
+ * dry-run counters. No E4/E3 path calls EPD, GPIO or SPI.
+ */
+#define HL21_SESSION_TIMEOUT_10MS     2000U
+#define HL21_SESSION_TIMEOUT_SECONDS  20U
+
+#define HL21_SESSION_STATUS_OK             0x00
+#define HL21_SESSION_STATUS_INVALID        0x01
+#define HL21_SESSION_STATUS_BAD_TOKEN      0x02
+#define HL21_SESSION_STATUS_NOT_OPEN       0x03
+#define HL21_SESSION_STATUS_WRONG_OWNER    0x04
+#define HL21_SESSION_STATUS_UNSUPPORTED    0x05
+#define HL21_E3_STATUS_SESSION_REQUIRED    0x06
+
+static void hl21_session_notify(uint8_t response,
+                                uint8_t status_or_active,
+                                uint8_t token)
+{
+    uint8_t msg[5];
+    msg[0] = 0xE4;
+    msg[1] = response;
+    msg[2] = status_or_active;
+    msg[3] = token;
+    msg[4] = HL21_SESSION_TIMEOUT_SECONDS;
+    hink_notify_bytes(msg, 5);
+}
+
+static void hl21_session_expire(void)
+{
+    hl21_session_active = 0;
+    hl21_session_owner_conidx = 0xFF;
+    hl18b_dry_reset();
+}
+
+static void hl21_session_timeout_cb(void)
+{
+    hl21_session_timer_running = 0;
+    hl21_session_expire();
+}
+
+static void hl21_session_arm_timer(void)
+{
+    if (hl21_session_timer_running)
+    {
+        app_easy_timer_cancel(hl21_session_timer);
+        hl21_session_timer_running = 0;
+    }
+
+    hl21_session_timer = app_easy_timer(HL21_SESSION_TIMEOUT_10MS,
+                                        hl21_session_timeout_cb);
+    hl21_session_timer_running = 1;
+}
+
+static void hl21_session_close(void)
+{
+    if (hl21_session_timer_running)
+    {
+        app_easy_timer_cancel(hl21_session_timer);
+        hl21_session_timer_running = 0;
+    }
+
+    hl21_session_expire();
+}
+
+static uint8_t hl21_session_is_valid(uint8_t conidx)
+{
+    return (hl21_session_active &&
+            (hl21_session_owner_conidx == conidx)) ? 1 : 0;
+}
+
+static void hl21_session_touch(void)
+{
+    if (hl21_session_active)
+    {
+        hl21_session_arm_timer();
+    }
+}
+
+static uint8_t hl21_session_handle(struct custs1_val_write_ind const *param,
+                                   uint8_t conidx)
+{
+    uint8_t subcmd;
+    uint8_t token;
+
+    if ((param->length < 2) || (param->value[0] != 0xE4))
+    {
+        return 0;
+    }
+
+    subcmd = param->value[1];
+
+    switch (subcmd)
+    {
+        case 0x00:
+            if ((param->length != 6) ||
+                (param->value[2] != 0x48) ||
+                (param->value[3] != 0x4C) ||
+                (param->value[4] != 0x32) ||
+                (param->value[5] != 0x31))
+            {
+                hl21_session_notify(0x80, HL21_SESSION_STATUS_INVALID, 0);
+                return 1;
+            }
+
+            hl21_session_close();
+            hl21_session_token++;
+            if (hl21_session_token == 0)
+            {
+                hl21_session_token = 1;
+            }
+
+            hl21_session_active = 1;
+            hl21_session_owner_conidx = conidx;
+            hl21_session_arm_timer();
+            hl21_session_notify(0x80, HL21_SESSION_STATUS_OK,
+                                hl21_session_token);
+            return 1;
+
+        case 0x01:
+            if (param->length != 3)
+            {
+                hl21_session_notify(0x81, HL21_SESSION_STATUS_INVALID,
+                                    hl21_session_token);
+            }
+            else if (!hl21_session_active)
+            {
+                hl21_session_notify(0x81, HL21_SESSION_STATUS_NOT_OPEN,
+                                    hl21_session_token);
+            }
+            else if (hl21_session_owner_conidx != conidx)
+            {
+                hl21_session_notify(0x81, HL21_SESSION_STATUS_WRONG_OWNER,
+                                    hl21_session_token);
+            }
+            else if (param->value[2] != hl21_session_token)
+            {
+                hl21_session_notify(0x81, HL21_SESSION_STATUS_BAD_TOKEN,
+                                    hl21_session_token);
+            }
+            else
+            {
+                hl21_session_touch();
+                hl21_session_notify(0x81, HL21_SESSION_STATUS_OK,
+                                    hl21_session_token);
+            }
+            return 1;
+
+        case 0x02:
+            token = hl21_session_token;
+            if (param->length != 3)
+            {
+                hl21_session_notify(0x82, HL21_SESSION_STATUS_INVALID, token);
+            }
+            else if (!hl21_session_active)
+            {
+                hl21_session_notify(0x82, HL21_SESSION_STATUS_NOT_OPEN, token);
+            }
+            else if (hl21_session_owner_conidx != conidx)
+            {
+                hl21_session_notify(0x82, HL21_SESSION_STATUS_WRONG_OWNER,
+                                    token);
+            }
+            else if (param->value[2] != token)
+            {
+                hl21_session_notify(0x82, HL21_SESSION_STATUS_BAD_TOKEN, token);
+            }
+            else
+            {
+                hl21_session_close();
+                hl21_session_notify(0x82, HL21_SESSION_STATUS_OK, token);
+            }
+            return 1;
+
+        case 0x03:
+            if (param->length != 2)
+            {
+                hl21_session_notify(0x83, HL21_SESSION_STATUS_INVALID,
+                                    hl21_session_token);
+            }
+            else if (hl21_session_is_valid(conidx))
+            {
+                hl21_session_notify(0x83, 1, hl21_session_token);
+            }
+            else
+            {
+                hl21_session_notify(0x83, 0, hl21_session_token);
+            }
+            return 1;
+
+        default:
+            hl21_session_notify(0x8F, HL21_SESSION_STATUS_UNSUPPORTED,
+                                hl21_session_token);
+            return 1;
+    }
+}
+
+/*
  * HL18B_FRAMEBUFFER_DRYRUN
  * Matches web/clock-app/hl18a-213-dryrun.html.
  *
@@ -1143,7 +1366,8 @@ static void hl18b_dry_reset(void)
     hl18b_dry_xor = 0;
 }
 
-static uint8_t hl18b_dry_handle(struct custs1_val_write_ind const *param)
+static uint8_t hl18b_dry_handle(struct custs1_val_write_ind const *param,
+                                uint8_t conidx)
 {
     uint8_t subcmd;
     uint8_t status;
@@ -1163,6 +1387,29 @@ static uint8_t hl18b_dry_handle(struct custs1_val_write_ind const *param)
     }
 
     subcmd = param->value[1];
+
+    if (!hl21_session_is_valid(conidx))
+    {
+        switch (subcmd)
+        {
+            case 0x00:
+                hl18b_notify3(0x80, HL21_E3_STATUS_SESSION_REQUIRED);
+                break;
+            case 0x01:
+                hl18b_notify3(0x81, HL21_E3_STATUS_SESSION_REQUIRED);
+                break;
+            case 0x03:
+                hl18b_notify3(0x83, HL21_E3_STATUS_SESSION_REQUIRED);
+                break;
+            default:
+                hl18b_notify3(0x8F, HL21_E3_STATUS_SESSION_REQUIRED);
+                break;
+        }
+
+        return 1;
+    }
+
+    hl21_session_touch();
 
     switch (subcmd)
     {
@@ -1306,8 +1553,14 @@ static uint8_t hink_handle_time_write(struct custs1_val_write_ind const *param,
     uint8_t conidx = KE_IDX_GET(src_id);
     hink_ble_conidx = app_env[conidx].conidx;
 
-    /* E3 dry-run is handled and returned before every E2/display branch. */
-    if (hl18b_dry_handle(param))
+    /* E4 opens, maintains and closes the bounded HL21A session. */
+    if (hl21_session_handle(param, hink_ble_conidx))
+    {
+        return 1;
+    }
+
+    /* E3 dry-run is session-gated and still precedes every E2 branch. */
+    if (hl18b_dry_handle(param, hink_ble_conidx))
     {
         return 1;
     }
