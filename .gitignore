@@ -49,3 +49,5 @@ firmware/**/donor/
 
 # FW debug backups
 *.bak_fw*
+
+/_incoming/

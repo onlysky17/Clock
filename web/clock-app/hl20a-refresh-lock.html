@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HL20A — HINK213 Refresh Lock</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,sans-serif}*{box-sizing:border-box}body{margin:0;background:#0b111b;color:#eef3fb}
+main{max-width:960px;margin:auto;padding:22px}.card{background:#121c2b;border:1px solid #2b3a54;border-radius:15px;padding:16px;margin:14px 0}
+button{padding:10px 13px;border-radius:9px;border:1px solid #526887;background:#1d2b42;color:white;font-weight:700;cursor:pointer}
+button:disabled{opacity:.35;cursor:not-allowed}.good{background:#066047}.danger{background:#721d2d}.row{display:flex;flex-wrap:wrap;gap:9px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:8px}.ok{color:#3ce0a4}.warn{color:#ffd166}
+textarea{width:100%;min-height:280px;background:#050910;color:#cfe2ff;border:1px solid #2b3a54;border-radius:9px;padding:11px;font:12px/1.5 ui-monospace,monospace}
+code{color:#b9d5ff}p{color:#aebbd0;line-height:1.5}
+</style></head><body><main>
+<h1>HL20A — HINK213 2.13 Panel-job Kill-Switch</h1>
+<p>Blocked-command buttons stay disabled until firmware proves <code>E2 E0 A1</code>.</p>
+<section class="card"><h2>BLE</h2><div class="row">
+<button id="connect">Connect EINK/HINK</button><button id="disconnect" disabled>Disconnect</button><button id="clear">Clear log</button>
+</div><p>State: <strong id="state">Disconnected</strong> · Lock: <strong id="lock" class="warn">UNVERIFIED</strong></p></section>
+<section class="card"><h2>1. Safe proof</h2><div class="row">
+<button id="query" class="good" disabled>Query E2 E0</button><button id="descriptor" disabled>Read D0–D5</button>
+</div></section>
+<section class="card"><h2>2. Verify blocked jobs</h2><div id="blocked" class="grid"></div>
+<div class="row" style="margin-top:10px"><button id="all" class="danger" disabled>Verify all return F0</button></div>
+<p>The page rechecks <code>E2 E0 A1</code> before every blocked command.</p></section>
+<section class="card"><h2>Log</h2><textarea id="log" readonly></textarea></section>
+</main><script>
+'use strict';
+const S='18424398-7cbc-11e9-8f9e-2a86e4085a59',W='2d86686a-53dc-25b3-0c4a-f0e10c8dee20',WN='5a87b4ef-3bfa-76a8-e642-92933c31434f',N='15005991-b131-3396-014c-664c9867b917';
+const BLOCKED=[2,3,4,0x30,0x31,0x32,0x33,0x34,0x35,0x36,0x37,0x50,0x51,0x52,0x53,0x54];
+let d=null,g=null,w=null,n=null,p=null,verified=false;const $=x=>document.getElementById(x),hx=a=>[...a].map(v=>v.toString(16).padStart(2,'0').toUpperCase()).join(' ');
+function log(s){$('log').value+=`${new Date().toLocaleTimeString('vi-VN',{hour12:false})} ${s}\n`;$('log').scrollTop=$('log').scrollHeight}
+function lock(v){verified=v;$('lock').textContent=v?'VERIFIED A1':'UNVERIFIED';$('lock').className=v?'ok':'warn';$('all').disabled=!v||!g?.connected;document.querySelectorAll('[data-s]').forEach(b=>b.disabled=!v||!g?.connected)}
+function connected(v){$('state').textContent=v?`Connected: ${d?.name||'device'}`:'Disconnected';$('connect').disabled=v;$('disconnect').disabled=!v;$('query').disabled=!v;$('descriptor').disabled=!v;if(!v)lock(false)}
+function pkt(s){return Uint8Array.of(0xE2,s,0,0,0,0,0)}
+function wait(pred){if(p)throw Error('ACK pending');return new Promise((res,rej)=>{const t=setTimeout(()=>{p=null;rej(Error('ACK timeout'))},1200);p={pred,res,rej,t}})}
+async function tx(a){log(`TX: ${hx(a)}`);if(w.properties?.writeWithoutResponse&&w.writeValueWithoutResponse)await w.writeValueWithoutResponse(a);else await w.writeValue(a)}
+async function req(s){const q=wait(a=>a[0]===0xE2&&a[1]===s);try{await tx(pkt(s))}catch(e){if(p){clearTimeout(p.t);p=null}throw e}return q}
+function notify(e){const a=new Uint8Array(e.target.value.buffer.slice(e.target.value.byteOffset,e.target.value.byteOffset+e.target.value.byteLength));log(`RX: ${hx(a)}`);if(p&&p.pred(a)){const q=p;p=null;clearTimeout(q.t);q.res(a)}}
+async function connect(){d=await navigator.bluetooth.requestDevice({filters:[{namePrefix:'EINK'},{namePrefix:'HINK'}],optionalServices:[S]});d.addEventListener('gattserverdisconnected',()=>{g=null;connected(false);log('Disconnected')});g=await d.gatt.connect();const s=await g.getPrimaryService(S);try{w=await s.getCharacteristic(WN)}catch{w=await s.getCharacteristic(W)}n=await s.getCharacteristic(N);await n.startNotifications();n.addEventListener('characteristicvaluechanged',notify);connected(true);log(`Connected: ${d.name||'unnamed'}`)}
+async function proof(){lock(false);const r=await req(0xE0);if(r[2]!==0xA1)throw Error(`Wrong signature ${hx(r)}; blocked tests refused`);lock(true);log('PASS: E2 E0 A1 lock verified')}
+async function one(s){await proof();const r=await req(s);if(r[2]!==0xF0)throw Error(`FAIL E2 ${s.toString(16)} => ${hx(r)}`);log(`PASS: E2 ${s.toString(16).padStart(2,'0').toUpperCase()} => F0`)}
+async function desc(){const a=[];for(let s=0xD0;s<=0xD5;s++)a.push((await req(s))[2]);log(`DESCRIPTOR: ${hx(a)}`)}
+async function safe(fn){try{await fn()}catch(e){log(`ERROR: ${e.message}`);alert(e.message)}}
+for(const s of BLOCKED){const b=document.createElement('button');b.textContent=`Verify E2 ${s.toString(16).padStart(2,'0').toUpperCase()}`;b.dataset.s=s;b.disabled=true;b.onclick=()=>safe(()=>one(s));$('blocked').appendChild(b)}
+$('connect').onclick=()=>safe(connect);$('disconnect').onclick=()=>d?.gatt?.disconnect();$('clear').onclick=()=>{$('log').value=''};$('query').onclick=()=>safe(proof);$('descriptor').onclick=()=>safe(desc);$('all').onclick=()=>safe(async()=>{for(const s of BLOCKED)await one(s);log('PASS: ALL PANEL JOBS BLOCKED')});
+connected(false);log('Ready. No blocked command can be sent before A1 proof.');
+</script></body></html>

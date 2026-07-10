@@ -131,6 +131,7 @@ static void hink_notify_bytes(const uint8_t *data, uint8_t len);
 static uint8_t hl18b_dry_handle(struct custs1_val_write_ind const *param);
 
 static void hink_epd_notify(uint8_t subcmd, uint8_t status);
+static uint8_t hink_epd_panel_job_is_locked(uint8_t subcmd);
 static void hink_epd_command(uint8_t subcmd);
 static void hink_epd_mini_diag(uint8_t subcmd);
 static void hink_epd_gpio_idle_only(void);
@@ -693,12 +694,60 @@ static void hink_epd_mini_diag(uint8_t subcmd)
     }
 }
 
+/*
+ * HL20A_PANEL_JOB_KILL_SWITCH
+ *
+ * Block every E2 command that can start an asynchronous panel job.
+ * E2 E0 00 00 00 00 00 -> E2 E0 A1
+ * blocked command -> E2 <subcmd> F0
+ */
+#define HINK_EPD_LOCK_SIGNATURE       0xA1
+#define HINK_EPD_PANEL_JOB_LOCKED     0xF0
+
+static uint8_t hink_epd_panel_job_is_locked(uint8_t subcmd)
+{
+    switch (subcmd)
+    {
+        case 0x02:
+        case 0x03:
+        case 0x04:
+        case 0x30:
+        case 0x31:
+        case 0x32:
+        case 0x33:
+        case 0x34:
+        case 0x35:
+        case 0x36:
+        case 0x37:
+        case 0x50:
+        case 0x51:
+        case 0x52:
+        case 0x53:
+        case 0x54:
+            return 1;
+
+        default:
+            return 0;
+    }
+}
+
 static void hink_epd_command(uint8_t subcmd)
 {
     uint8_t msg[3];
 
+    if (hink_epd_panel_job_is_locked(subcmd))
+    {
+        hink_epd_notify(subcmd, HINK_EPD_PANEL_JOB_LOCKED);
+        return;
+    }
+
     switch (subcmd)
     {
+        case 0xE0:
+            /* Safe query proving the HL20A kill-switch is active. */
+            hink_epd_notify(0xE0, HINK_EPD_LOCK_SIGNATURE);
+            break;
+
         case 0x40:
         case 0x41:
         case 0x42:
