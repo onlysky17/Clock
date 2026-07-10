@@ -529,3 +529,34 @@ docs/firmware/HL23A_VALIDATION_RESULT_2026-07-10.md
 
 Next:
 HL24A canvas-to-E5 dry-run bridge.
+
+### HL24B
+
+Task:
+Close out HL24A canvas-to-E5 dry-run validation.
+
+Result:
+- Real 296x128 canvas packed to 4736 bytes.
+- 339 E5 chunks transmitted.
+- Dynamic CRC16 matched the actual canvas payload.
+- Completion manifest passed:
+  state=02, chunks=339, bytes=4736, CRC matched.
+- HL20A regression remained active:
+  E2 E0 A1 and E2 03 F0.
+- No firmware edit, build or flash.
+- No framebuffer storage.
+- No panel RAM write or EPD refresh.
+- No .bin pushed.
+- New spare board remained untouched.
+
+Status:
+PASS END-TO-END
+
+Record:
+docs/firmware/HL24A_VALIDATION_RESULT_2026-07-10.md
+
+Stable URL:
+https://onlysky17.github.io/Clock/test.html
+
+Next:
+HL25A one-shot panel liveness test on the white-screen board.
