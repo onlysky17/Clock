@@ -1,4 +1,4 @@
-﻿# NEXT_ACTION
+# NEXT_ACTION
 
 Next task:
 Port old Clock BLE/web protocol onto the working SDK 6.0.22 display base.
@@ -13,3 +13,15 @@ First future step:
 2. Map current HINK213_CLOCK_22_BASE BLE service layout.
 3. Decide smallest protocol bridge.
 4. Build verify before any flash burn.
+
+<!-- E4_SESSION_BRIDGE_CLOSEOUT_START -->
+## Next action: SPI persistence preflight
+
+Prepare and verify a full persistent image before any SPI write:
+
+1. Confirm the current full 256 KB board backup.
+2. Verify the golden full image and SHA256 manifest.
+3. Pack the merged firmware with tools/pack-hink.ps1.
+4. Verify output size, offsets and hashes.
+5. Do not program SPI until the packed image and recovery path are reviewed.
+<!-- E4_SESSION_BRIDGE_CLOSEOUT_END -->
