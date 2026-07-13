@@ -3,95 +3,84 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>HL24A — Canvas to E5</title>
+<title>TASK C1 - E5 Framebuffer Transfer</title>
 <style>
-:root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;--card:#121c2b;--line:#2d3e59;--text:#f2f6fc;--muted:#a8b7ca;--ok:#3bd7a2;--warn:#ffd166;--bad:#fb7185}
-*{box-sizing:border-box}body{margin:0;background:linear-gradient(#080e17,#101b2b);color:var(--text)}
-main{max-width:1120px;margin:auto;padding:22px}.badge{display:inline-block;padding:7px 11px;border:1px solid #2c6b52;border-radius:999px;background:#092a20;color:#a8f3d6;font-weight:800}
-.card{margin:14px 0;padding:17px;border:1px solid var(--line);border-radius:16px;background:rgba(18,28,43,.97)}
+:root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;--bg:#07101b;--card:#111c2c;--line:#2a3d59;--text:#f4f8ff;--muted:#9fb1c8;--ok:#45d99c;--warn:#ffd166;--bad:#ff6b86}
+*{box-sizing:border-box}body{margin:0;background:linear-gradient(#050a12,#101a2a);color:var(--text)}main{max-width:1040px;margin:auto;padding:20px}
+.badge{display:inline-block;padding:7px 11px;border:1px solid #2d6b52;border-radius:999px;background:#092a20;color:#b5f7dd;font-weight:800}
+.card{margin:14px 0;padding:16px;border:1px solid var(--line);border-radius:14px;background:rgba(17,28,44,.96)}
 .row{display:flex;flex-wrap:wrap;gap:9px;align-items:center}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:9px}
-button,input,select{padding:10px 13px;border:1px solid #506989;border-radius:10px;background:#1a2940;color:white;font-weight:700}
-button{cursor:pointer}button.primary{background:#1d4ed8}button.good{background:#066047}button.danger{background:#721d2d}button:disabled{opacity:.38;cursor:not-allowed}
-label{color:var(--muted)}.stat{padding:11px;border:1px solid var(--line);border-radius:11px;background:#0b1421}.stat span{display:block;color:var(--muted);font-size:.8rem}.stat strong{font-size:1.1rem}
-.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}p{color:var(--muted);line-height:1.52}code{color:#c2dcff}
+button,input,select{padding:10px 12px;border:1px solid #526d8f;border-radius:10px;background:#1a2940;color:white;font-weight:750}
+button{cursor:pointer}button.primary{background:#1d4ed8}button.good{background:#066047}button:disabled{opacity:.4;cursor:not-allowed}
+.stat{padding:11px;border:1px solid var(--line);border-radius:11px;background:#0b1421}.stat span{display:block;color:var(--muted);font-size:.8rem}.stat strong{font-size:1.08rem}
+.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}p{color:var(--muted);line-height:1.5}code{color:#cfe2ff}
 .canvasWrap{overflow:auto;padding:12px;border:1px solid var(--line);border-radius:12px;background:#080d14}
-canvas{display:block;width:min(100%,888px);height:auto;image-rendering:pixelated;background:#fff;touch-action:none;border:1px solid #62708a}
-progress{width:100%;height:17px;margin-top:12px}textarea{width:100%;min-height:280px;padding:12px;border:1px solid var(--line);border-radius:10px;background:#050910;color:#cfe2ff;font:12px/1.5 ui-monospace,Consolas,monospace}
+canvas{display:block;width:min(100%,312px);height:auto;image-rendering:pixelated;background:#fff;touch-action:none;border:1px solid #62708a}
+progress{width:100%;height:17px;margin-top:12px}textarea{width:100%;min-height:260px;padding:12px;border:1px solid var(--line);border-radius:10px;background:#050910;color:#cfe2ff;font:12px/1.5 ui-monospace,Consolas,monospace}
 small{color:var(--muted)}
 </style>
 </head>
 <body><main>
-<div class="badge">HL24A · ACTUAL CANVAS BYTES · E5 DRY-RUN · NO REFRESH</div>
-<h1>296×128 Canvas → 4736-byte E5 Bridge</h1>
-<p>Vẽ thật trên canvas, pack theo raw 128×296, tính CRC16 theo chính ảnh đó rồi gửi qua firmware dry-run. Firmware không lưu framebuffer và không refresh panel.</p>
+<div class="badge">TASK C1 · E5 FRAMEBUFFER TRANSFER · 104×212 · NO PANEL REFRESH</div>
+<h1>104×212 Canvas → 2756-byte E5 Transfer</h1>
+<p>Trang này chỉ tạo framebuffer đen trắng, mở E4 session, gửi E5 vào RAM firmware và so CRC. Firmware không gọi EPD driver trong TASK C1.</p>
 
 <section class="card">
-<h2>Canvas</h2>
+<h2>Canvas 104×212</h2>
 <div class="row">
-<button id="clear">Clear</button>
+<button id="clearWhite">Clear white</button>
+<button id="fillBlack">Fill black</button>
 <button id="invert">Invert</button>
-<button id="stripes">Stripes</button>
-<button id="checker">Checker</button>
-<button id="clock">Clock sample</button>
+<button id="sample">Draw sample</button>
 <label>Brush
 <select id="brush">
 <option value="1">1 px</option>
 <option value="2">2 px</option>
 <option value="3" selected>3 px</option>
 <option value="5">5 px</option>
-<option value="8">8 px</option>
 </select>
 </label>
-<label>Text
-<input id="text" value="HINK213" maxlength="24">
-</label>
-<button id="addText">Add text</button>
+<label>Text <input id="text" value="C1 TEST" maxlength="18"></label>
+<button id="addText">Simple text</button>
 </div>
 <div class="canvasWrap" style="margin-top:12px">
-<canvas id="canvas" width="296" height="128"></canvas>
+<canvas id="canvas" width="104" height="212"></canvas>
 </div>
-<p><small>Hiển thị landscape 296×128. Khi pack: displayX=rawY, displayY=127−rawX.</small></p>
+<p><small>Preview cùng orientation với bytes gửi: mỗi dòng 104 pixel = 13 byte, tổng 212 dòng.</small></p>
 </section>
 
 <section class="card">
-<h2>Packed payload</h2>
+<h2>Payload</h2>
 <div class="grid">
-<div class="stat"><span>Raw geometry</span><strong>128 × 296</strong></div>
-<div class="stat"><span>Bytes</span><strong id="byteCount">4736</strong></div>
-<div class="stat"><span>Chunks</span><strong id="chunkCount">339</strong></div>
-<div class="stat"><span>CRC16</span><strong id="crc">----</strong></div>
+<div class="stat"><span>Geometry</span><strong>104 × 212</strong></div>
+<div class="stat"><span>Stride</span><strong>13 bytes</strong></div>
+<div class="stat"><span>Bytes</span><strong id="byteCount">2756</strong></div>
+<div class="stat"><span>Chunks</span><strong id="chunkCount">197</strong></div>
+<div class="stat"><span>Browser CRC</span><strong id="browserCrc">----</strong></div>
 <div class="stat"><span>Black pixels</span><strong id="blackPixels">0</strong></div>
 </div>
 <p>First 32 bytes: <code id="firstBytes">-</code></p>
-<div class="row">
-<button id="repack">Repack now</button>
-<button id="download">Download packed .bin</button>
-</div>
+<div class="row"><button id="repack">Repack now</button></div>
 </section>
 
 <section class="card">
-<h2>BLE dry-run</h2>
+<h2>BLE E5 Transfer</h2>
 <div class="row">
 <button id="connect" class="primary">Connect EINK/HINK</button>
 <button id="disconnect" disabled>Disconnect</button>
-<button id="send" class="good" disabled>Send current canvas via E5</button>
+<button id="send" class="good" disabled>Open E4 + Send E5</button>
 <button id="clearLog">Clear log</button>
 </div>
 <p>BLE: <strong id="ble">Disconnected</strong> · Result: <strong id="result" class="warn">NOT RUN</strong></p>
-<progress id="progress" max="4736" value="0"></progress>
+<progress id="progress" max="2756" value="0"></progress>
 <div class="grid" style="margin-top:12px">
 <div class="stat"><span>Transfer ID</span><strong id="transferId">-</strong></div>
-<div class="stat"><span>Manifest state</span><strong id="manifestState">-</strong></div>
-<div class="stat"><span>Manifest chunks</span><strong id="manifestChunks">0</strong></div>
-<div class="stat"><span>Manifest bytes</span><strong id="manifestBytes">0</strong></div>
-<div class="stat"><span>Manifest CRC</span><strong id="manifestCrc">----</strong></div>
+<div class="stat"><span>State</span><strong id="fwState">-</strong></div>
+<div class="stat"><span>Chunks</span><strong id="fwChunks">0</strong></div>
+<div class="stat"><span>Bytes</span><strong id="fwBytes">0</strong></div>
+<div class="stat"><span>Firmware CRC</span><strong id="fwCrc">----</strong></div>
 </div>
-</section>
-
-<section class="card">
-<h2>Expected</h2>
-<p>Manifest phải khớp CRC động của canvas: <code>state=02 · chunks=339 · bytes=4736 · CRC=<span id="expectedCrc">----</span></code></p>
-<p>HL20A regression: <code>E2 E0 A1</code> và <code>E2 03 F0</code>.</p>
+<p>Expected PASS: <code>state=COMPLETE · chunks=197 · bytes=2756 · browser CRC = firmware CRC</code></p>
 </section>
 
 <section class="card"><h2>Log</h2><textarea id="log" readonly></textarea></section>
@@ -99,10 +88,14 @@ small{color:var(--muted)}
 <script>
 'use strict';
 
-const WIDTH=296,HEIGHT=128,RAW_WIDTH=128,RAW_HEIGHT=296,XBYTES=16,TOTAL=4736,CHUNK=14;
+const WIDTH=104;
+const HEIGHT=212;
+const STRIDE=13;
+const TOTAL=2756;
+const CHUNK=14;
+const EXPECTED_CHUNKS=197;
 const SERVICE='18424398-7cbc-11e9-8f9e-2a86e4085a59';
 const WRITE='2d86686a-53dc-25b3-0c4a-f0e10c8dee20';
-const WRITE_NR='5a87b4ef-3bfa-76a8-e642-92933c31434f';
 const NOTIFY='15005991-b131-3396-014c-664c9867b917';
 
 const $=id=>document.getElementById(id);
@@ -110,23 +103,39 @@ const canvas=$('canvas');
 const ctx=canvas.getContext('2d',{willReadFrequently:true});
 let drawing=false,lastX=0,lastY=0;
 let packed=new Uint8Array(TOTAL);
-let packedCrc=0;
-let device=null,server=null,writeChar=null,notifyChar=null,pending=null,busy=false,token=0,transferId=0;
+let browserCrc=0;
+let device=null,server=null,writeChar=null,notifyChar=null,pending=null,busy=false,token=0,transferId=1;
 
 const hex=a=>[...a].map(v=>v.toString(16).padStart(2,'0').toUpperCase()).join(' ');
 const u16=(lo,hi)=>lo|(hi<<8);
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+const crcHex=value=>value.toString(16).padStart(4,'0').toUpperCase();
+const stateName=value=>['NONE','ACTIVE','COMPLETE'][value]||String(value);
 
 function log(message,tag=''){
   $('log').value+=`${new Date().toLocaleTimeString('vi-VN',{hour12:false})} ${tag?`[${tag}] `:''}${message}\n`;
   $('log').scrollTop=$('log').scrollHeight;
 }
 
-function white(){
+function setResult(text,cls='warn'){
+  $('result').textContent=text;
+  $('result').className=cls;
+}
+
+function clearWhite(){
   ctx.save();
   ctx.fillStyle='#fff';
   ctx.fillRect(0,0,WIDTH,HEIGHT);
   ctx.restore();
+  repack();
+}
+
+function fillBlack(){
+  ctx.save();
+  ctx.fillStyle='#000';
+  ctx.fillRect(0,0,WIDTH,HEIGHT);
+  ctx.restore();
+  repack();
 }
 
 function point(event){
@@ -142,7 +151,8 @@ function startDraw(event){
   event.preventDefault();
   drawing=true;
   const p=point(event);
-  lastX=p.x;lastY=p.y;
+  lastX=p.x;
+  lastY=p.y;
 }
 
 function moveDraw(event){
@@ -159,7 +169,8 @@ function moveDraw(event){
   ctx.lineTo(p.x,p.y);
   ctx.stroke();
   ctx.restore();
-  lastX=p.x;lastY=p.y;
+  lastX=p.x;
+  lastY=p.y;
   schedulePack();
 }
 
@@ -193,12 +204,9 @@ function crc16(data,crc=0xFFFF){
   return crc;
 }
 
-function isBlack(imageData,dx,dy){
-  const index=(dy*WIDTH+dx)*4;
-  const r=imageData.data[index];
-  const g=imageData.data[index+1];
-  const b=imageData.data[index+2];
-  return((r+g+b)/3)<128;
+function isBlack(imageData,x,y){
+  const index=(y*WIDTH+x)*4;
+  return((imageData.data[index]+imageData.data[index+1]+imageData.data[index+2])/3)<0x80;
 }
 
 function packCanvas(){
@@ -206,13 +214,10 @@ function packCanvas(){
   const output=new Uint8Array(TOTAL);
   let black=0;
 
-  for(let rawY=0;rawY<RAW_HEIGHT;rawY++){
-    for(let rawX=0;rawX<RAW_WIDTH;rawX++){
-      const displayX=rawY;
-      const displayY=127-rawX;
-      if(isBlack(image,displayX,displayY)){
-        const byteIndex=rawY*XBYTES+(rawX>>3);
-        output[byteIndex]|=1<<(7-(rawX&7));
+  for(let y=0;y<HEIGHT;y++){
+    for(let x=0;x<WIDTH;x++){
+      if(isBlack(image,x,y)){
+        output[y*STRIDE+(x>>3)]|=1<<(7-(x&7));
         black++;
       }
     }
@@ -224,11 +229,10 @@ function packCanvas(){
 function repack(){
   const result=packCanvas();
   packed=result.bytes;
-  packedCrc=crc16(packed);
+  browserCrc=crc16(packed);
   $('byteCount').textContent=packed.length;
   $('chunkCount').textContent=Math.ceil(packed.length/CHUNK);
-  $('crc').textContent=packedCrc.toString(16).padStart(4,'0').toUpperCase();
-  $('expectedCrc').textContent=packedCrc.toString(16).padStart(4,'0').toUpperCase();
+  $('browserCrc').textContent=crcHex(browserCrc);
   $('blackPixels').textContent=result.black;
   $('firstBytes').textContent=hex(packed.slice(0,32));
 }
@@ -244,63 +248,36 @@ function invertCanvas(){
   repack();
 }
 
-function drawStripes(){
-  white();
-  ctx.fillStyle='#000';
-  for(let x=0;x<WIDTH;x+=32)ctx.fillRect(x,0,16,HEIGHT);
-  repack();
-}
-
-function drawChecker(){
-  white();
-  ctx.fillStyle='#000';
-  const size=16;
-  for(let y=0;y<HEIGHT;y+=size){
-    for(let x=0;x<WIDTH;x+=size){
-      if(((x/size)+(y/size))%2===0)ctx.fillRect(x,y,size,size);
-    }
-  }
-  repack();
-}
-
-function drawClock(){
-  white();
+function drawSample(){
+  clearWhite();
   ctx.save();
   ctx.fillStyle='#000';
   ctx.strokeStyle='#000';
-  ctx.lineWidth=3;
+  ctx.lineWidth=2;
   ctx.strokeRect(2,2,WIDTH-4,HEIGHT-4);
-  ctx.font='bold 44px system-ui,sans-serif';
+  ctx.font='bold 20px system-ui,sans-serif';
   ctx.textAlign='center';
   ctx.textBaseline='middle';
-  ctx.fillText('12:34',WIDTH/2,HEIGHT/2-8);
-  ctx.font='bold 16px system-ui,sans-serif';
-  ctx.fillText('HINK213 · HL24A',WIDTH/2,HEIGHT-22);
+  ctx.fillText('12:34',WIDTH/2,52);
+  ctx.font='bold 12px system-ui,sans-serif';
+  ctx.fillText('HINK213',WIDTH/2,88);
+  ctx.fillText('TASK C1',WIDTH/2,108);
+  ctx.fillRect(18,132,68,12);
+  ctx.fillRect(18,154,68,12);
   ctx.restore();
   repack();
 }
 
-function addText(){
-  const text=$('text').value.trim()||'HINK213';
+function addSimpleText(){
+  const text=$('text').value.trim()||'C1 TEST';
   ctx.save();
   ctx.fillStyle='#000';
-  ctx.font='bold 24px system-ui,sans-serif';
+  ctx.font='bold 14px system-ui,sans-serif';
   ctx.textAlign='center';
   ctx.textBaseline='middle';
   ctx.fillText(text,WIDTH/2,HEIGHT/2);
   ctx.restore();
   repack();
-}
-
-function downloadPacked(){
-  repack();
-  const blob=new Blob([packed],{type:'application/octet-stream'});
-  const url=URL.createObjectURL(blob);
-  const link=document.createElement('a');
-  link.href=url;
-  link.download=`hl24a_canvas_${packedCrc.toString(16).padStart(4,'0').toUpperCase()}.bin`;
-  link.click();
-  setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 
 function controls(){
@@ -315,7 +292,7 @@ function setBusy(value){
   controls();
 }
 
-function waitFor(predicate,timeout=1800,quiet=false){
+function waitFor(predicate,timeout=2000,quiet=false){
   if(pending)throw Error('ACK already pending');
   return new Promise((resolve,reject)=>{
     const timer=setTimeout(()=>{
@@ -328,14 +305,14 @@ function waitFor(predicate,timeout=1800,quiet=false){
 
 async function tx(packet,quiet=false){
   if(!quiet)log(`TX: ${hex(packet)}`);
-  if(writeChar.properties?.writeWithoutResponse&&writeChar.writeValueWithoutResponse){
-    await writeChar.writeValueWithoutResponse(packet);
+  if(writeChar.writeValueWithResponse){
+    await writeChar.writeValueWithResponse(packet);
   }else{
     await writeChar.writeValue(packet);
   }
 }
 
-async function request(packet,predicate,{timeout=1800,quiet=false}={}){
+async function request(packet,predicate,{timeout=2000,quiet=false}={}){
   const promise=waitFor(predicate,timeout,quiet);
   try{
     await tx(packet,quiet);
@@ -375,11 +352,7 @@ async function connect(){
   });
   server=await device.gatt.connect();
   const service=await server.getPrimaryService(SERVICE);
-  try{
-    writeChar=await service.getCharacteristic(WRITE_NR);
-  }catch{
-    writeChar=await service.getCharacteristic(WRITE);
-  }
+  writeChar=await service.getCharacteristic(WRITE);
   notifyChar=await service.getCharacteristic(NOTIFY);
   await notifyChar.startNotifications();
   notifyChar.addEventListener('characteristicvaluechanged',onNotify);
@@ -388,30 +361,34 @@ async function connect(){
   log(`Connected: ${device.name||'unnamed'}`,'PASS');
 }
 
-async function e4(packet,response,options){
-  return request(packet,a=>a[0]===0xE4&&a[1]===response,options);
-}
-
-async function e5(packet,response,id,options){
-  return request(packet,a=>a[0]===0xE5&&a[1]===response&&a[3]===id,options);
-}
-
-async function e2(sub,options){
-  return request(
-    Uint8Array.of(0xE2,sub,0,0,0,0,0),
-    a=>a[0]===0xE2&&a[1]===sub,
-    options
+async function openE4(){
+  const response=await request(
+    Uint8Array.of(0xE4,0x00,0x48,0x4C,0x32,0x31),
+    a=>a[0]===0xE4&&a[1]===0x80
   );
+  if(response[2]!==0)throw Error(`E4 open failed: ${hex(response)}`);
+  token=response[3];
+  log(`E4 open token=${token}, timeout=${response[4]}s`,'PASS');
 }
 
-function startPacket(id,crc){
+async function keepaliveE4(quiet=true){
+  if(!token)throw Error('E4 token missing');
+  const response=await request(
+    Uint8Array.of(0xE4,0x01,token),
+    a=>a[0]===0xE4&&a[1]===0x81,
+    {quiet}
+  );
+  if(response[2]!==0)throw Error(`E4 keepalive failed: ${hex(response)}`);
+}
+
+function startPacket(id){
   return Uint8Array.of(
     0xE5,0x00,id,
-    0x80,0x00,
-    0x28,0x01,
-    0x10,
-    0x80,0x12,
-    crc&0xFF,crc>>8
+    WIDTH&0xFF,WIDTH>>8,
+    HEIGHT&0xFF,HEIGHT>>8,
+    0x01,
+    STRIDE,
+    TOTAL&0xFF,TOTAL>>8
   );
 }
 
@@ -433,6 +410,10 @@ function commitPacket(id,chunks,bytes,crc){
   );
 }
 
+function statusPacket(id){
+  return Uint8Array.of(0xE5,0x03,id);
+}
+
 function parseManifest(packet){
   return{
     status:packet[2],
@@ -444,106 +425,89 @@ function parseManifest(packet){
   };
 }
 
-async function openSession(){
-  const response=await e4(
-    Uint8Array.of(0xE4,0x00,0x48,0x4C,0x32,0x31),
-    0x80
-  );
-  if(response[2]!==0)throw Error(`E4 open failed: ${hex(response)}`);
-  token=response[3];
-  log(`E4 open token=${token}, timeout=${response[4]}s`,'PASS');
+function renderManifest(manifest){
+  $('fwState').textContent=stateName(manifest.state);
+  $('fwChunks').textContent=manifest.chunks;
+  $('fwBytes').textContent=manifest.bytes;
+  $('fwCrc').textContent=crcHex(manifest.crc);
 }
 
-async function closeSession(){
-  if(!token)return;
-  const response=await e4(Uint8Array.of(0xE4,0x02,token),0x82);
-  if(response[2]!==0)throw Error(`E4 close failed: ${hex(response)}`);
-  token=0;
-  log('E4 close','PASS');
-}
-
-async function sendCanvas(){
+async function sendFramebuffer(){
   repack();
-  $('result').textContent='RUNNING';
-  $('result').className='warn';
+  setResult('RUNNING','warn');
   $('progress').value=0;
-  $('manifestState').textContent='-';
-  $('manifestChunks').textContent='0';
-  $('manifestBytes').textContent='0';
-  $('manifestCrc').textContent='----';
+  $('fwState').textContent='-';
+  $('fwChunks').textContent='0';
+  $('fwBytes').textContent='0';
+  $('fwCrc').textContent='----';
 
-  transferId=((Date.now()&0xFE)+1)&0xFF;
-  if(!transferId)transferId=0x24;
+  transferId=(transferId%255)+1;
   $('transferId').textContent=`0x${transferId.toString(16).padStart(2,'0').toUpperCase()}`;
+  log(`Packed ${packed.length} bytes, chunks=${EXPECTED_CHUNKS}, CRC=${crcHex(browserCrc)}`,'PASS');
 
-  log(`Canvas packed: ${packed.length} bytes, CRC=${packedCrc.toString(16).padStart(4,'0').toUpperCase()}`,'PASS');
+  await openE4();
 
-  await openSession();
-
-  let response=await e5(startPacket(transferId,packedCrc),0x80,transferId);
-  if(response[2]!==0)throw Error(`E5 start failed: ${hex(response)}`);
-  log(`E5 start id=0x${transferId.toString(16).padStart(2,'0').toUpperCase()}`,'PASS');
+  let response=await request(
+    startPacket(transferId),
+    a=>a[0]===0xE5&&a[1]===0x80&&a[3]===transferId
+  );
+  let manifest=parseManifest(response);
+  if(manifest.status!==0)throw Error(`E5 start failed: ${hex(response)}`);
+  renderManifest(manifest);
+  log('E5 start accepted','PASS');
 
   let seq=0;
   let offset=0;
   while(offset<packed.length){
     const end=Math.min(offset+CHUNK,packed.length);
     const data=packed.slice(offset,end);
-    response=await e5(
+    response=await request(
       chunkPacket(transferId,seq,data),
-      0x81,
-      transferId,
+      a=>a[0]===0xE5&&a[1]===0x81&&a[3]===transferId,
       {quiet:true}
     );
     if(response[2]!==0)throw Error(`Chunk ${seq} failed: ${hex(response)}`);
-    const next=u16(response[4],response[5]);
-    if(next!==seq+1)throw Error(`ACK sequence mismatch expected=${seq+1} got=${next}`);
+    const nextSeq=u16(response[4],response[5]);
+    const ackBytes=u16(response[6],response[7]);
+    if(nextSeq!==seq+1)throw Error(`Sequence ACK mismatch expected=${seq+1} got=${nextSeq}`);
     offset=end;
     seq++;
-    $('progress').value=offset;
-    if((seq%64)===0)log(`Progress ${seq} chunks / ${offset} bytes`,'OK');
-    await sleep(8);
+    $('progress').value=ackBytes;
+    if((seq%40)===0){
+      await keepaliveE4(true);
+      log(`Progress ${seq}/${EXPECTED_CHUNKS} chunks, ${ackBytes}/${TOTAL} bytes`,'OK');
+    }
   }
 
-  if(seq!==339||offset!==TOTAL)throw Error(`Local count mismatch seq=${seq} bytes=${offset}`);
+  if(seq!==EXPECTED_CHUNKS||offset!==TOTAL){
+    throw Error(`Local count mismatch chunks=${seq}, bytes=${offset}`);
+  }
 
-  response=await e5(
-    commitPacket(transferId,seq,offset,packedCrc),
-    0x82,
-    transferId
+  response=await request(
+    commitPacket(transferId,seq,offset,browserCrc),
+    a=>a[0]===0xE5&&a[1]===0x82&&a[3]===transferId
   );
+  manifest=parseManifest(response);
+  renderManifest(manifest);
+  if(manifest.status!==0)throw Error(`E5 commit failed: ${hex(response)}`);
 
-  const manifest=parseManifest(response);
-  $('manifestState').textContent=manifest.state;
-  $('manifestChunks').textContent=manifest.chunks;
-  $('manifestBytes').textContent=manifest.bytes;
-  $('manifestCrc').textContent=manifest.crc.toString(16).padStart(4,'0').toUpperCase();
+  response=await request(
+    statusPacket(transferId),
+    a=>a[0]===0xE5&&a[1]===0x83&&a[3]===transferId
+  );
+  manifest=parseManifest(response);
+  renderManifest(manifest);
 
-  const valid=
-    manifest.status===0&&
+  const pass=manifest.status===0&&
     manifest.state===2&&
-    manifest.chunks===339&&
+    manifest.chunks===EXPECTED_CHUNKS&&
     manifest.bytes===TOTAL&&
-    manifest.crc===packedCrc;
+    manifest.crc===browserCrc;
 
-  if(!valid)throw Error(`Manifest mismatch: ${hex(response)}`);
+  if(!pass)throw Error(`Final status mismatch: ${hex(response)}`);
 
-  log(
-    `CANVAS COMPLETE state=2 chunks=339 bytes=4736 CRC=${packedCrc.toString(16).padStart(4,'0').toUpperCase()}`,
-    'PASS'
-  );
-
-  const lock=await e2(0xE0);
-  if(lock[2]!==0xA1)throw Error(`HL20A signature failed: ${hex(lock)}`);
-  const blocked=await e2(0x03);
-  if(blocked[2]!==0xF0)throw Error(`HL20A block failed: ${hex(blocked)}`);
-  log('HL20A regression PASS: E2 E0 A1 + E2 03 F0','PASS');
-
-  await closeSession();
-
-  $('result').textContent='PASS END-TO-END';
-  $('result').className='ok';
-  log('HL24A CANVAS-TO-E5 PASS END-TO-END','PASS');
+  setResult('PASS COMPLETE','ok');
+  log(`PASS state=COMPLETE chunks=${manifest.chunks} bytes=${manifest.bytes} CRC=${crcHex(manifest.crc)}`,'PASS');
 }
 
 async function safe(fn){
@@ -551,33 +515,29 @@ async function safe(fn){
     setBusy(true);
     await fn();
   }catch(error){
-    $('result').textContent='FAIL';
-    $('result').className='bad';
+    setResult('FAIL','bad');
     log(`ERROR: ${error.message}`,'ERROR');
     alert(error.message);
-    try{await closeSession()}catch{}
   }finally{
     setBusy(false);
   }
 }
 
-$('clear').onclick=()=>{white();repack()};
+$('clearWhite').onclick=clearWhite;
+$('fillBlack').onclick=fillBlack;
 $('invert').onclick=invertCanvas;
-$('stripes').onclick=drawStripes;
-$('checker').onclick=drawChecker;
-$('clock').onclick=drawClock;
-$('addText').onclick=addText;
+$('sample').onclick=drawSample;
+$('addText').onclick=addSimpleText;
 $('repack').onclick=repack;
-$('download').onclick=downloadPacked;
 $('connect').onclick=()=>safe(connect);
 $('disconnect').onclick=()=>device?.gatt?.disconnect();
-$('send').onclick=()=>safe(sendCanvas);
+$('send').onclick=()=>safe(sendFramebuffer);
 $('clearLog').onclick=()=>{$('log').value=''};
 
-white();
-drawClock();
+clearWhite();
+drawSample();
 controls();
-log('HL24A ready. Actual canvas bytes, CRC16 and E5 dry-run; no panel refresh.');
+log('TASK C1 ready. E5 framebuffer transfer only; no physical panel refresh.');
 </script>
 </body>
 </html>
