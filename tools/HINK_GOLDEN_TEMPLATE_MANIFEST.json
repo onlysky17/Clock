@@ -1,8 +1,8 @@
-﻿{
+{
     "Schema":  1,
-    "Target":  "D:\\EINK\\GOOD_CONNECT\\HINK213_CLOCK_CONNECT_GOOD_FULL_256KB.bin",
-    "SHA256":  "8712715F86B85D659DE58ACE3B3E7EDBC7F6CD305E218FFCCB78A89B96608ECE",
+    "Target":  "D:\\EINK\\Clock\\tools\\packages\\HINK213_CLOCK_CONNECT_GOOD_FULL_256KB.bin",
+    "SHA256":  "C52E3E96CA76B45245FE5457721FFE6163C25C1840D120EB45F398817DA49452",
     "BoardFamily":  "HINK_E0213A41",
-    "Role":  "Recovered local multipart template",
-    "UpdatedAt":  "2026-07-12T07:06:21.4682318+07:00"
+    "Role":  "Canonical local golden full 256KB template",
+    "UpdatedAt":  "2026-07-13T10:51:34.0610382+07:00"
 }

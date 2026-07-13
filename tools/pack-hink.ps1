@@ -1,4 +1,4 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
     [string]$Raw,
@@ -9,7 +9,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$Name,
 
-    [string]$Template = "D:\EINK\GOOD_CONNECT\HINK213_CLOCK_CONNECT_GOOD_FULL_256KB.bin",
+    [string]$Template = "D:\EINK\Clock\tools\packages\HINK213_CLOCK_CONNECT_GOOD_FULL_256KB.bin",
 
     [string]$Manifest = "D:\EINK\Clock\tools\HINK_GOLDEN_TEMPLATE_MANIFEST.json"
 )
