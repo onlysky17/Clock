@@ -111,7 +111,10 @@
  #define DB_HEAP_SZ              1024
  #define ENV_HEAP_SZ             4928
  #define MSG_HEAP_SZ             6880
- #define NON_RET_HEAP_SZ         2048
+/* Fixed DA14585 RAM layout: E5 uses existing fb_rr staging; 1280 leaves linker margin.
+ * Validate runtime BLE with E4 + full E5 SysRAM test.
+ */
+ #define NON_RET_HEAP_SZ         1280
 
 /****************************************************************************************************************/
 /* NVDS configuration                                                                                           */
