@@ -470,7 +470,10 @@ void user_app_adv_undirect_complete(uint8_t status)
  */
 void user_app_disconnect(struct gapc_disconnect_ind const *param)
 {
-	printk("user_app_disconnect! reason=%02x\n", param->reason);
+	extern void hink_e4_session_reset(void);
+    hink_e4_session_reset();
+
+    printk("user_app_disconnect! reason=%02x\n", param->reason);
 
     // å–æ¶ˆå‚æ•°æ›´æ–°è¯·æ±‚å®šæ—¶å™¨
     if (app_param_update_request_timer_used != EASY_TIMER_INVALID_TIMER)
@@ -523,6 +526,9 @@ void user_catch_rest_hndl(ke_msg_id_t const msgid,
             // æ ¹æ®å¥æŸ„åˆ†å‘åˆ°å¯¹åº”çš„å¤„ç†å‡½æ•°
             switch (msg_param->handle)
             {
+                case SVC2_IDX_HINK_WRITE_VAL:
+                    user_svc1_ctrl_wr_ind_handler(msgid, msg_param, dest_id, src_id);
+                    break;
                 case SVC1_IDX_CONTROL_POINT_VAL:
                     user_svc1_ctrl_wr_ind_handler(msgid, msg_param, dest_id, src_id);
                     break;

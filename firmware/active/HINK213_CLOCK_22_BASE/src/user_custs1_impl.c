@@ -65,6 +65,13 @@ uint16_t non_db_val_counter __SECTION_ZERO("retention_mem_area0"); //@RETENTION 
 // ADCé‡‡æ ·å€¼ï¼Œç”¨äºŽç”µæ± ç”µé‡æ£€æµ‹
 int adcval;
 
+/* TASK B: bounded E4 command session over the HINK 128-bit BLE service. */
+static uint8_t hink_e4_conidx               __SECTION_ZERO("retention_mem_area0");
+static uint8_t hink_e4_session_active       __SECTION_ZERO("retention_mem_area0");
+static uint8_t hink_e4_session_token        __SECTION_ZERO("retention_mem_area0");
+static uint8_t hink_e4_session_owner_conidx __SECTION_ZERO("retention_mem_area0");
+static uint8_t hink_e4_timer_running        __SECTION_ZERO("retention_mem_area0");
+static ke_msg_id_t hink_e4_timer            __SECTION_ZERO("retention_mem_area0");
 static uint8_t h24_format = 1; // 24å°æ—¶åˆ¶æ ‡å¿—
 
 static void get_holiday(void);
@@ -955,12 +962,227 @@ void clock_draw(int flags)
  * 
  * å¤„ç†é€šè¿‡BLEæŽ¥æ”¶åˆ°çš„æŽ§åˆ¶å‘½ä»¤
  */
+#define HINK_E4_TIMEOUT_10MS     2000U
+#define HINK_E4_TIMEOUT_SECONDS  20U
+
+#define HINK_E4_STATUS_OK           0x00
+#define HINK_E4_STATUS_INVALID      0x01
+#define HINK_E4_STATUS_BAD_TOKEN    0x02
+#define HINK_E4_STATUS_NOT_OPEN     0x03
+#define HINK_E4_STATUS_WRONG_OWNER  0x04
+#define HINK_E4_STATUS_UNSUPPORTED  0x05
+
+static void hink_e4_notify_bytes(const uint8_t *data, uint8_t len)
+{
+    struct custs1_val_set_req *set_req;
+    struct custs1_val_ntf_ind_req *ntf_req;
+
+    if (ke_state_get(TASK_APP) != APP_CONNECTED)
+    {
+        return;
+    }
+
+    set_req = KE_MSG_ALLOC_DYN(CUSTS1_VAL_SET_REQ,
+                               prf_get_task_from_id(TASK_ID_CUSTS1),
+                               TASK_APP,
+                               custs1_val_set_req,
+                               len);
+    set_req->conidx = hink_e4_conidx;
+    set_req->handle = SVC2_IDX_HINK_NOTIFY_VAL;
+    set_req->length = len;
+    memcpy(set_req->value, data, len);
+    KE_MSG_SEND(set_req);
+
+    ntf_req = KE_MSG_ALLOC_DYN(CUSTS1_VAL_NTF_REQ,
+                               prf_get_task_from_id(TASK_ID_CUSTS1),
+                               TASK_APP,
+                               custs1_val_ntf_ind_req,
+                               len);
+    ntf_req->conidx = hink_e4_conidx;
+    ntf_req->handle = SVC2_IDX_HINK_NOTIFY_VAL;
+    ntf_req->length = len;
+    ntf_req->notification = true;
+    memcpy(ntf_req->value, data, len);
+    KE_MSG_SEND(ntf_req);
+}
+
+static void hink_e4_session_notify(uint8_t response,
+                                   uint8_t status_or_active,
+                                   uint8_t token)
+{
+    uint8_t msg[5];
+    msg[0] = 0xE4;
+    msg[1] = response;
+    msg[2] = status_or_active;
+    msg[3] = token;
+    msg[4] = HINK_E4_TIMEOUT_SECONDS;
+    hink_e4_notify_bytes(msg, sizeof(msg));
+}
+
+void hink_e4_session_reset(void)
+{
+    if (hink_e4_timer_running)
+    {
+        app_easy_timer_cancel(hink_e4_timer);
+        hink_e4_timer_running = 0;
+    }
+
+    hink_e4_session_active = 0;
+    hink_e4_session_owner_conidx = GAP_INVALID_CONIDX;
+}
+
+static void hink_e4_timeout_cb(void)
+{
+    hink_e4_timer_running = 0;
+    hink_e4_session_active = 0;
+    hink_e4_session_owner_conidx = GAP_INVALID_CONIDX;
+}
+
+static void hink_e4_arm_timer(void)
+{
+    if (hink_e4_timer_running)
+    {
+        app_easy_timer_cancel(hink_e4_timer);
+        hink_e4_timer_running = 0;
+    }
+
+    hink_e4_timer = app_easy_timer(HINK_E4_TIMEOUT_10MS, hink_e4_timeout_cb);
+    hink_e4_timer_running = 1;
+}
+
+static uint8_t hink_e4_session_is_valid(uint8_t conidx)
+{
+    return (hink_e4_session_active &&
+            (hink_e4_session_owner_conidx == conidx)) ? 1U : 0U;
+}
+
+static uint8_t hink_e4_session_handle(struct custs1_val_write_ind const *param,
+                                      uint8_t conidx)
+{
+    uint8_t subcmd;
+    uint8_t token;
+
+    if ((param->length < 2U) || (param->value[0] != 0xE4))
+    {
+        return 0;
+    }
+
+    subcmd = param->value[1];
+
+    switch (subcmd)
+    {
+        case 0x00:
+            if ((param->length != 6U) ||
+                (param->value[2] != 0x48) ||
+                (param->value[3] != 0x4C) ||
+                (param->value[4] != 0x32) ||
+                (param->value[5] != 0x31))
+            {
+                hink_e4_session_notify(0x80, HINK_E4_STATUS_INVALID, 0);
+                return 1;
+            }
+
+            hink_e4_session_reset();
+            hink_e4_session_token++;
+            if (hink_e4_session_token == 0U)
+            {
+                hink_e4_session_token = 1U;
+            }
+            hink_e4_session_active = 1U;
+            hink_e4_session_owner_conidx = conidx;
+            hink_e4_arm_timer();
+            hink_e4_session_notify(0x80, HINK_E4_STATUS_OK, hink_e4_session_token);
+            return 1;
+
+        case 0x01:
+            if (param->length != 3U)
+            {
+                hink_e4_session_notify(0x81, HINK_E4_STATUS_INVALID, hink_e4_session_token);
+            }
+            else if (!hink_e4_session_active)
+            {
+                hink_e4_session_notify(0x81, HINK_E4_STATUS_NOT_OPEN, hink_e4_session_token);
+            }
+            else if (hink_e4_session_owner_conidx != conidx)
+            {
+                hink_e4_session_notify(0x81, HINK_E4_STATUS_WRONG_OWNER, hink_e4_session_token);
+            }
+            else if (param->value[2] != hink_e4_session_token)
+            {
+                hink_e4_session_notify(0x81, HINK_E4_STATUS_BAD_TOKEN, hink_e4_session_token);
+            }
+            else
+            {
+                hink_e4_arm_timer();
+                hink_e4_session_notify(0x81, HINK_E4_STATUS_OK, hink_e4_session_token);
+            }
+            return 1;
+
+        case 0x02:
+            token = hink_e4_session_token;
+            if (param->length != 3U)
+            {
+                hink_e4_session_notify(0x82, HINK_E4_STATUS_INVALID, token);
+            }
+            else if (!hink_e4_session_active)
+            {
+                hink_e4_session_notify(0x82, HINK_E4_STATUS_NOT_OPEN, token);
+            }
+            else if (hink_e4_session_owner_conidx != conidx)
+            {
+                hink_e4_session_notify(0x82, HINK_E4_STATUS_WRONG_OWNER, token);
+            }
+            else if (param->value[2] != token)
+            {
+                hink_e4_session_notify(0x82, HINK_E4_STATUS_BAD_TOKEN, token);
+            }
+            else
+            {
+                hink_e4_session_reset();
+                hink_e4_session_notify(0x82, HINK_E4_STATUS_OK, token);
+            }
+            return 1;
+
+        case 0x03:
+            if (param->length != 2U)
+            {
+                hink_e4_session_notify(0x83, HINK_E4_STATUS_INVALID, hink_e4_session_token);
+            }
+            else if (hink_e4_session_is_valid(conidx))
+            {
+                hink_e4_session_notify(0x83, 1U, hink_e4_session_token);
+            }
+            else
+            {
+                hink_e4_session_notify(0x83, 0U, hink_e4_session_token);
+            }
+            return 1;
+
+        default:
+            hink_e4_session_notify(0x8F, HINK_E4_STATUS_UNSUPPORTED, hink_e4_session_token);
+            return 1;
+    }
+}
 void user_svc1_ctrl_wr_ind_handler(ke_msg_id_t const msgid, 
                                   struct custs1_val_write_ind const *param, 
                                   ke_task_id_t const dest_id, 
                                   ke_task_id_t const src_id)
 {
     // æ‰“å°æŽ¥æ”¶åˆ°çš„æŽ§åˆ¶å‘½ä»¤
+    uint8_t conidx;
+
+    if (param->length == 0U)
+    {
+        return;
+    }
+
+    conidx = KE_IDX_GET(src_id);
+    hink_e4_conidx = app_env[conidx].conidx;
+    if (hink_e4_session_handle(param, hink_e4_conidx))
+    {
+        return;
+    }
+
     printk("Control Point: %02x\n", param->value[0]);
 }
 
