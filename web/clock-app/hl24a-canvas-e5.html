@@ -66,6 +66,15 @@ small{color:var(--muted)}
 </section>
 
 <section class="card">
+<h2>One-Tap Clock Sync</h2>
+<div class="row">
+<button id="syncClock" class="good">Đồng bộ giờ lên màn</button>
+</div>
+<p>Trạng thái đồng bộ: <strong id="syncStatus" class="warn">SẴN SÀNG</strong></p>
+<p><small>Bấm một lần để vẽ giờ hiện tại, gửi E5, đợi E5 COMPLETE rồi refresh E6. Trang không tự chạy khi mở và không tự refresh theo phút.</small></p>
+</section>
+
+<section class="card">
 <h2>BLE E5 Transfer</h2>
 <div class="row">
 <button id="connect" class="primary">Connect EINK/HINK</button>
@@ -122,6 +131,7 @@ let packed=new Uint8Array(TOTAL);
 let browserCrc=0;
 let device=null,server=null,writeChar=null,notifyChar=null,pending=null,busy=false,token=0,transferId=1;
 let e6Running=false,e5Success=false,latestFwCrc=null;
+let oneTapRunning=false;
 
 const hex=a=>[...a].map(v=>v.toString(16).padStart(2,'0').toUpperCase()).join(' ');
 const u16=(lo,hi)=>lo|(hi<<8);
@@ -137,6 +147,11 @@ function log(message,tag=''){
 function setResult(text,cls='warn'){
   $('result').textContent=text;
   $('result').className=cls;
+}
+
+function setSyncStatus(text,cls='warn'){
+  $('syncStatus').textContent=text;
+  $('syncStatus').className=cls;
 }
 
 function clearWhite(){
@@ -331,20 +346,22 @@ function addSimpleText(){
 function controls(){
   const connected=!!server?.connected;
   const e5Complete=e5Success && (browserCrc === latestFwCrc);
-  $('connect').disabled=connected||busy||e6Running;
-  $('disconnect').disabled=!connected||busy||e6Running;
-  $('send').disabled=!connected||busy||e6Running;
-  $('refresh').disabled=!connected||!token||!e5Complete||busy||e6Running;
+  const locked=busy||e6Running||oneTapRunning;
+  $('connect').disabled=connected||locked;
+  $('disconnect').disabled=!connected||locked;
+  $('send').disabled=!connected||locked;
+  $('syncClock').disabled=!connected||locked;
+  $('refresh').disabled=!connected||!token||!e5Complete||locked;
 
-  $('clearWhite').disabled=e6Running;
-  $('fillBlack').disabled=e6Running;
-  $('invert').disabled=e6Running;
-  $('updateClock').disabled=e6Running;
-  $('sample').disabled=e6Running;
-  $('addText').disabled=e6Running;
-  $('repack').disabled=e6Running;
-  $('brush').disabled=e6Running;
-  $('text').disabled=e6Running;
+  $('clearWhite').disabled=locked;
+  $('fillBlack').disabled=locked;
+  $('invert').disabled=locked;
+  $('updateClock').disabled=locked;
+  $('sample').disabled=locked;
+  $('addText').disabled=locked;
+  $('repack').disabled=locked;
+  $('brush').disabled=locked;
+  $('text').disabled=locked;
 }
 
 function setBusy(value){
@@ -661,6 +678,38 @@ async function refreshPanel() {
   }
 }
 
+async function syncClockToPanel(){
+  if(oneTapRunning||e6Running)return;
+  if(!server?.connected)throw Error('BLE chưa kết nối. Hãy Connect EINK/HINK trước.');
+
+  oneTapRunning=true;
+  controls();
+  try{
+    setSyncStatus('Đang cập nhật giờ','warn');
+    drawCurrentClock();
+
+    setSyncStatus('Đang gửi E5','warn');
+    await sendFramebuffer();
+    if(!(e5Success && latestFwCrc === browserCrc)){
+      throw Error('E5 chưa COMPLETE hoặc CRC chưa khớp.');
+    }
+
+    setSyncStatus('Đang refresh E6','warn');
+    await refreshPanel();
+    if($('e6Result').textContent !== 'COMPLETE'){
+      throw Error('E6 chưa COMPLETE.');
+    }
+
+    setSyncStatus('Hoàn tất','ok');
+  }catch(error){
+    setSyncStatus(`Lỗi: ${$('syncStatus').textContent}`, 'bad');
+    throw error;
+  }finally{
+    oneTapRunning=false;
+    controls();
+  }
+}
+
 async function safe(fn){
   try{
     setBusy(true);
@@ -685,12 +734,13 @@ $('connect').onclick=()=>safe(connect);
 $('disconnect').onclick=()=>device?.gatt?.disconnect();
 $('send').onclick=()=>safe(sendFramebuffer);
 $('refresh').onclick=()=>safe(refreshPanel);
+$('syncClock').onclick=()=>safe(syncClockToPanel);
 $('clearLog').onclick=()=>{$('log').value=''};
 
 clearWhite();
 drawCurrentClock();
 controls();
-log('TASK D1A ready. Preview uses phone/browser local time; Send E5 and Refresh E6 remain manual.');
+log('TASK D1B ready. One-tap sync is manual: redraw clock, send E5, then refresh E6.');
 </script>
 </body>
 </html>
