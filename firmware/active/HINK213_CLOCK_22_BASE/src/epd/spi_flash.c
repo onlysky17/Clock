@@ -367,12 +367,11 @@ int selflash(int otp_boot)
 
 	int xres = *(u16*)(pbuf+10);
 	int yres = *(u16*)(pbuf+12);
-	if(xres<512 && yres<512){
-		detect_w = xres;
-		detect_h = yres;
-		detect_mode = pbuf[9]? EPD_BWR : EPD_BW;
-		printk("EPD  Res: %dx%d  %d\n", xres, yres, pbuf[9]);
-	}
+	/* HINK-E0213A53 plugged panel is physically verified as 122x250 BW. */
+	detect_w = EPD_FRAME_WIDTH;
+	detect_h = EPD_FRAME_HEIGHT;
+	detect_mode = EPD_BW;
+	printk("EPD  Res: %dx%d  %d (profile %dx%d)\n", detect_w, detect_h, pbuf[9], xres, yres);
 
 	int region_table = (int)&Region$$Table$$Base;
 	int firm_size = *(u32*)(region_table+0x10) - 0x07fc0000;

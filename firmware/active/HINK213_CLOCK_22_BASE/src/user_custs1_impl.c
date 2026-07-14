@@ -74,13 +74,13 @@ static uint8_t hink_e4_timer_running        __SECTION_ZERO("retention_mem_area0"
 static ke_msg_id_t hink_e4_timer            __SECTION_ZERO("retention_mem_area0");
 static uint8_t h24_format = 1; // 24å°æ—¶åˆ¶æ ‡å¿—
 
-#define HINK_E5_WIDTH          104U
-#define HINK_E5_HEIGHT         212U
-#define HINK_E5_STRIDE         13U
-#define HINK_E5_TOTAL_BYTES    2756U
+#define HINK_E5_WIDTH          EPD_FRAME_WIDTH
+#define HINK_E5_HEIGHT         EPD_FRAME_HEIGHT
+#define HINK_E5_STRIDE         EPD_FRAME_STRIDE
+#define HINK_E5_TOTAL_BYTES    EPD_FRAME_BYTES
 #define HINK_E5_CHUNK_MAX      14U
-#define HINK_E5_TOTAL_CHUNKS   197U
-#define HINK_E5_STAGING_BUFFER fb_rr
+#define HINK_E5_TOTAL_CHUNKS   286U
+#define HINK_E5_STAGING_BUFFER fb_bw
 #define HINK_E5_STATE_NONE     0U
 #define HINK_E5_STATE_ACTIVE   1U
 #define HINK_E5_STATE_COMPLETE 2U
@@ -102,6 +102,18 @@ static uint8_t hink_e5_transfer_id;
 static uint16_t hink_e5_next_seq;
 static uint16_t hink_e5_bytes;
 static uint16_t hink_e5_crc;
+
+#define HINK_E6_STATE_IDLE               0x00
+#define HINK_E6_STATE_ACCEPTED_PENDING   0x01
+#define HINK_E6_STATE_REFRESHING         0x02
+#define HINK_E6_STATE_COMPLETE           0x03
+#define HINK_E6_STATE_ERROR              0x04
+
+static uint8_t hink_e6_state             __SECTION_ZERO("retention_mem_area0");
+static uint8_t hink_e6_transfer_id       __SECTION_ZERO("retention_mem_area0");
+static timer_hnd hink_e6_timer_hnd       __SECTION_ZERO("retention_mem_area0");
+
+static void hink_e6_timer_cb(void);
 
 static void get_holiday(void);
 static void hink_e4_arm_timer(void);
@@ -770,7 +782,8 @@ typedef struct {
 // åæ ‡7: ä¸Šä¸‹åˆ
 
 LAYOUT layouts[3] = {
-	{212, 104, 0, 1,
+	/* Legacy 212x104 slot disabled for the fixed HINK-E0213A53 physical override. */
+	{0, 0, 0, 1,
 		{15, 172, 190,  16,  12,  98, 150, 12},
 		{ 6,   7,  14,  27,  82,  82,  82, 44},
 	},
@@ -829,6 +842,9 @@ static void epd_wait_timer(void)
         epd_hw_close();
         // è®¾ç½®ç³»ç»Ÿè¿›å…¥æ‰©å±•ç¡çœ æ¨¡å¼
         arch_set_sleep_mode(ARCH_EXT_SLEEP_ON);
+        if (hink_e6_state == HINK_E6_STATE_REFRESHING) {
+            hink_e6_state = HINK_E6_STATE_COMPLETE;
+        }
     }
 }
 
@@ -1290,12 +1306,30 @@ static uint8_t hink_e5_framebuffer_handle(struct custs1_val_write_ind const *par
     switch (subcmd)
     {
         case 0x00:
+            if (hink_e6_state == HINK_E6_STATE_ACCEPTED_PENDING ||
+                hink_e6_state == HINK_E6_STATE_REFRESHING)
+            {
+                hink_e5_notify(0x80, HINK_E5_STATUS_INVALID, transfer_id, 0U);
+                return 1U;
+            }
             return hink_e5_handle_start(param, conidx);
 
         case 0x01:
+            if (hink_e6_state == HINK_E6_STATE_ACCEPTED_PENDING ||
+                hink_e6_state == HINK_E6_STATE_REFRESHING)
+            {
+                hink_e5_notify(0x81, HINK_E5_STATUS_INVALID, transfer_id, 1U);
+                return 1U;
+            }
             return hink_e5_handle_chunk(param, conidx);
 
         case 0x02:
+            if (hink_e6_state == HINK_E6_STATE_ACCEPTED_PENDING ||
+                hink_e6_state == HINK_E6_STATE_REFRESHING)
+            {
+                hink_e5_notify(0x82, HINK_E5_STATUS_INVALID, transfer_id, 2U);
+                return 1U;
+            }
             return hink_e5_handle_commit(param, conidx);
 
         case 0x03:
@@ -1313,6 +1347,12 @@ static uint8_t hink_e5_framebuffer_handle(struct custs1_val_write_ind const *par
             return 1U;
 
         case 0x04:
+            if (hink_e6_state == HINK_E6_STATE_ACCEPTED_PENDING ||
+                hink_e6_state == HINK_E6_STATE_REFRESHING)
+            {
+                hink_e5_notify(0x84, HINK_E5_STATUS_INVALID, transfer_id, 0U);
+                return 1U;
+            }
             if (!hink_e5_require_session(conidx, 0x84, transfer_id))
             {
                 return 1U;
@@ -1324,6 +1364,164 @@ static uint8_t hink_e5_framebuffer_handle(struct custs1_val_write_ind const *par
 
         default:
             hink_e5_notify(0x8F, HINK_E5_STATUS_UNSUPPORTED, transfer_id, 0U);
+            return 1U;
+    }
+}
+
+static void hink_e6_notify(uint8_t response, uint8_t code, uint8_t transfer_id, uint8_t state)
+{
+    uint8_t msg[6];
+    msg[0] = 0xE6;
+    msg[1] = response;
+    msg[2] = code;
+    msg[3] = transfer_id;
+    msg[4] = state;
+    msg[5] = 0x14; // E4 timeout in hex (20 seconds)
+    hink_e4_notify_bytes(msg, sizeof(msg));
+}
+
+static void hink_e6_reset_state(void)
+{
+    if (hink_e6_timer_hnd != EASY_TIMER_INVALID_TIMER)
+    {
+        app_easy_timer_cancel(hink_e6_timer_hnd);
+        hink_e6_timer_hnd = EASY_TIMER_INVALID_TIMER;
+    }
+    hink_e6_state = HINK_E6_STATE_IDLE;
+    hink_e6_transfer_id = 0U;
+}
+
+static void hink_e6_timer_cb(void)
+{
+    hink_e6_timer_hnd = EASY_TIMER_INVALID_TIMER;
+
+    if (hink_e6_state != HINK_E6_STATE_ACCEPTED_PENDING)
+    {
+        return;
+    }
+
+    epd_hw_open();
+    epd_update_mode(UPDATE_FULL);
+    epd_init();
+    epd_screen_update();
+    epd_update();
+    arch_set_sleep_mode(ARCH_SLEEP_OFF);
+    epd_wait_hnd = app_easy_timer(40, epd_wait_timer);
+
+    if (epd_wait_hnd == EASY_TIMER_INVALID_TIMER)
+    {
+        hink_e6_state = HINK_E6_STATE_ERROR;
+        epd_cmd1(0x10, 0x01);
+        epd_power(0);
+        epd_hw_close();
+        arch_set_sleep_mode(ARCH_EXT_SLEEP_ON);
+    }
+    else
+    {
+        hink_e6_state = HINK_E6_STATE_REFRESHING;
+    }
+}
+
+static uint8_t hink_e6_handle_request(struct custs1_val_write_ind const *param, uint8_t conidx, uint8_t transfer_id)
+{
+    if (param->length != 3U)
+    {
+        hink_e6_notify(0x80, 0x01, transfer_id, hink_e6_state); // MALFORMED
+        return 1U;
+    }
+
+    if (!hink_e4_session_active)
+    {
+        hink_e6_notify(0x80, 0x02, transfer_id, hink_e6_state); // NO_E4_SESSION
+        return 1U;
+    }
+
+    if (hink_e4_session_owner_conidx != conidx)
+    {
+        hink_e6_notify(0x80, 0x03, transfer_id, hink_e6_state); // WRONG_OWNER
+        return 1U;
+    }
+
+    if (hink_e5_state != HINK_E5_STATE_COMPLETE)
+    {
+        hink_e6_notify(0x80, 0x04, transfer_id, hink_e6_state); // FRAME_NOT_COMPLETE
+        return 1U;
+    }
+
+    if (transfer_id != hink_e5_transfer_id)
+    {
+        hink_e6_notify(0x80, 0x07, transfer_id, hink_e6_state); // WRONG_TRANSFER_ID
+        return 1U;
+    }
+
+    if (hink_e6_state == HINK_E6_STATE_ACCEPTED_PENDING ||
+        hink_e6_state == HINK_E6_STATE_REFRESHING ||
+        epd_wait_hnd != EASY_TIMER_INVALID_TIMER)
+    {
+        hink_e6_notify(0x80, 0x05, transfer_id, hink_e6_state); // BUSY
+        return 1U;
+    }
+
+    hink_e6_state = HINK_E6_STATE_ACCEPTED_PENDING;
+    hink_e6_transfer_id = transfer_id;
+
+    hink_e6_timer_hnd = app_easy_timer(5, hink_e6_timer_cb);
+    if (hink_e6_timer_hnd == EASY_TIMER_INVALID_TIMER)
+    {
+        hink_e6_state = HINK_E6_STATE_ERROR;
+        hink_e6_notify(0x80, 0x06, transfer_id, hink_e6_state); // INTERNAL_ERROR
+    }
+    else
+    {
+        hink_e4_arm_timer();
+        hink_e6_notify(0x80, 0x00, transfer_id, hink_e6_state); // OK
+    }
+
+    return 1U;
+}
+
+static uint8_t hink_e6_handle_status(struct custs1_val_write_ind const *param, uint8_t conidx, uint8_t transfer_id)
+{
+    if (param->length != 3U)
+    {
+        hink_e6_notify(0x81, 0x01, transfer_id, hink_e6_state); // MALFORMED
+        return 1U;
+    }
+
+    if (transfer_id != hink_e6_transfer_id)
+    {
+        hink_e6_notify(0x81, 0x07, transfer_id, hink_e6_state); // WRONG_TRANSFER_ID
+        return 1U;
+    }
+
+    hink_e4_arm_timer();
+    hink_e6_notify(0x81, 0x00, transfer_id, hink_e6_state); // OK
+    return 1U;
+}
+
+static uint8_t hink_e6_refresh_handle(struct custs1_val_write_ind const *param, uint8_t conidx)
+{
+    uint8_t subcmd;
+    uint8_t transfer_id;
+
+    if ((param->length < 2U) || (param->value[0] != 0xE6))
+    {
+        return 0U;
+    }
+
+    subcmd = param->value[1];
+    transfer_id = (param->length >= 3U) ? param->value[2] : 0U;
+
+    switch (subcmd)
+    {
+        case 0x00:
+            return hink_e6_handle_request(param, conidx, transfer_id);
+
+        case 0x01:
+            return hink_e6_handle_status(param, conidx, transfer_id);
+
+        default:
+            hink_e6_notify(0x8F, 0x01, transfer_id, hink_e6_state);
             return 1U;
     }
 }
@@ -1341,6 +1539,19 @@ static void hink_e4_session_notify(uint8_t response,
     hink_e4_notify_bytes(msg, sizeof(msg));
 }
 
+static void hink_e6_session_cleanup(void)
+{
+    if (hink_e6_state == HINK_E6_STATE_ACCEPTED_PENDING)
+    {
+        hink_e6_reset_state();
+    }
+    else if (hink_e6_state == HINK_E6_STATE_COMPLETE || hink_e6_state == HINK_E6_STATE_ERROR)
+    {
+        hink_e6_state = HINK_E6_STATE_IDLE;
+        hink_e6_transfer_id = 0U;
+    }
+}
+
 void hink_e4_session_reset(void)
 {
     if (hink_e4_timer_running)
@@ -1352,6 +1563,7 @@ void hink_e4_session_reset(void)
     hink_e5_reset_state();
     hink_e4_session_active = 0;
     hink_e4_session_owner_conidx = GAP_INVALID_CONIDX;
+    hink_e6_session_cleanup();
 }
 
 static void hink_e4_timeout_cb(void)
@@ -1360,6 +1572,7 @@ static void hink_e4_timeout_cb(void)
     hink_e5_reset_state();
     hink_e4_session_active = 0;
     hink_e4_session_owner_conidx = GAP_INVALID_CONIDX;
+    hink_e6_session_cleanup();
 }
 
 static void hink_e4_arm_timer(void)
@@ -1507,6 +1720,10 @@ void user_svc1_ctrl_wr_ind_handler(ke_msg_id_t const msgid,
         return;
     }
     if (hink_e5_framebuffer_handle(param, hink_e4_conidx))
+    {
+        return;
+    }
+    if (hink_e6_refresh_handle(param, hink_e4_conidx))
     {
         return;
     }

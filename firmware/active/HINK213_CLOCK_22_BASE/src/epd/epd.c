@@ -354,17 +354,33 @@ void epd_sleep(void)
 
 void epd_screen_update(void)
 {
-	int i;
+	int row;
+	int col;
+	int offset;
 
-	epd_cmd(0x24);  // write RAM for black(0)/white(1)
-	for(i=0; i<win_h*line_bytes; i++){
-		epd_data(fb_bw[i]);
+	for(row=0; row<win_h; row++){
+		offset = row*line_bytes;
+		epd_cmd1(0x4e, 0x00);
+		epd_cmd(0x4f);
+		epd_data(row&0xff);
+		epd_data(row>>8);
+		epd_cmd(0x24);  // write RAM for black(0)/white(1)
+		for(col=0; col<line_bytes; col++){
+			epd_data(fb_bw[offset+col]);
+		}
 	}
 
 	if(scr_mode&EPD_BWR){
-		epd_cmd(0x26);
-		for(i=0; i<win_h*line_bytes; i++){
-			epd_data(fb_rr[i]);
+		for(row=0; row<win_h; row++){
+			offset = row*line_bytes;
+			epd_cmd1(0x4e, 0x00);
+			epd_cmd(0x4f);
+			epd_data(row&0xff);
+			epd_data(row>>8);
+			epd_cmd(0x26);
+			for(col=0; col<line_bytes; col++){
+				epd_data(fb_rr[offset+col]);
+			}
 		}
 	}
 }
