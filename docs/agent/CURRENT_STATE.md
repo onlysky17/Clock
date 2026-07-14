@@ -54,5 +54,16 @@ Stable E5/E6 contract:
 - E5 CRC16.
 - E6 one-shot refresh.
 
+D2A device time protocol design:
+- D2A is design-only and does not change firmware/web runtime.
+- Proposed command family is D2 and does not modify E4/E5/E6.
+- Opcode audit found current E4/E5/E6 usage and no active D2 conflict.
+- `D2 00 SET_TIME`: 9-byte RAM-only time sync packet using UTC epoch uint32 LE, timezone offset minutes int16 LE, and flags.
+- `D2 01 GET_TIME_STATUS`: 2-byte status request.
+- `D2 81` status response: 15 bytes with result, state, current epoch, timezone, flags, and uptime.
+- Initial persistence is RAM-only; cold boot returns time to UNSET until a new sync.
+- Initial STALE threshold proposal is 24 hours.
+- Firmware persistent SPI final remains unchanged.
+
 Do not commit `.bin` firmware images. The final `.bin` remains local under:
 D:\EINK\Clock\_incoming
