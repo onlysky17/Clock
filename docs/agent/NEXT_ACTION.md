@@ -22,19 +22,32 @@ If continuing development:
 Final firmware image remains local only:
 D:\EINK\Clock\_incoming\TASK_C2J_FINAL_PACKED_256KB.bin
 
-## Proposed next task
+## Current protocol design
 
 TASK D2A — DEVICE TIME SYNC PROTOCOL DESIGN
 
+Status:
+- Protocol contract designed.
+- No firmware implementation yet.
+- No web runtime implementation yet.
+- No EPD changes.
+
 Goal:
 - Design a protocol to send epoch/timezone from the web page down to firmware.
-- Do not implement it yet.
-- Do not auto refresh device-side yet.
-- Do not modify EPD.
+- Use `D2 00 SET_TIME` and `D2 01 GET_TIME_STATUS`.
+- Keep D2 RAM-only at first.
 
-Design questions to close in D2A:
-- Data format for epoch/timezone/local offset.
-- Whether and how time should persist across reboot.
-- Drift behavior while BLE is disconnected.
-- Reconnect behavior and conflict handling.
-- How device-side time interacts with the existing web-driven E5/E6 clock flow.
+## Next implementation task
+
+TASK D2B — Firmware time state + D2 command handler
+
+D2B scope:
+- Implement `SET_TIME` and `GET_TIME_STATUS`.
+- Store time state in RAM only.
+- Do not refresh panel.
+- Do not write SPI/flash.
+- Do not alter E5/E6.
+
+Later tasks:
+- D2C — Web time sync controls: send time down to firmware and display status.
+- D2D — Device-side minute renderer: firmware refreshes clock by minute after refresh policy and battery review.
