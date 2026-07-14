@@ -111,7 +111,6 @@ static uint16_t hink_e5_crc;
 
 static uint8_t hink_e6_state             __SECTION_ZERO("retention_mem_area0");
 static uint8_t hink_e6_transfer_id       __SECTION_ZERO("retention_mem_area0");
-static uint8_t hink_e6_panel_latched     __SECTION_ZERO("retention_mem_area0");
 static timer_hnd hink_e6_timer_hnd       __SECTION_ZERO("retention_mem_area0");
 
 static void hink_e6_timer_cb(void);
@@ -522,7 +521,6 @@ void clock_push(void)
 
 void clock_print(void)
 {
-	printk("\n%04d-%02d-%02d %02d:%02d:%02d  L: %d-%d\n", year, month+1, date+1, hour, minute, second, l_month+1, l_date+1);
 }
 
 
@@ -852,7 +850,7 @@ static void epd_wait_timer(void)
 
 void QR_draw()
 {
-	if(hink_e6_panel_latched){
+	if(hink_e6_state >= HINK_E6_STATE_REFRESHING){
 		return;
 	}
 
@@ -884,7 +882,7 @@ void QR_draw()
 
 void LB_draw()
 {
-	if(hink_e6_panel_latched){
+	if(hink_e6_state >= HINK_E6_STATE_REFRESHING){
 		return;
 	}
 
@@ -927,7 +925,7 @@ void clock_draw(int flags)
 	char tbuf[64];
 	LAYOUT *lt = &layouts[current_layout];
 
-	if(hink_e6_panel_latched){
+	if(hink_e6_state >= HINK_E6_STATE_REFRESHING){
 		return;
 	}
 
@@ -1414,8 +1412,6 @@ static void hink_e6_timer_cb(void)
     }
 
     hink_e6_state = HINK_E6_STATE_REFRESHING;
-    hink_e6_panel_latched = 1U;
-
     epd_hw_open();
     epd_update_mode(UPDATE_FULL);
     epd_init();
@@ -1431,10 +1427,6 @@ static void hink_e6_timer_cb(void)
         epd_power(0);
         epd_hw_close();
         arch_set_sleep_mode(ARCH_EXT_SLEEP_ON);
-    }
-    else
-    {
-        hink_e6_state = HINK_E6_STATE_REFRESHING;
     }
 }
 
@@ -1561,15 +1553,10 @@ static void hink_e6_session_cleanup(void)
     {
         hink_e6_reset_state();
     }
-    else if (hink_e6_state == HINK_E6_STATE_COMPLETE || hink_e6_state == HINK_E6_STATE_ERROR)
+    else if (hink_e6_timer_hnd != EASY_TIMER_INVALID_TIMER)
     {
-        if (hink_e6_timer_hnd != EASY_TIMER_INVALID_TIMER)
-        {
-            app_easy_timer_cancel(hink_e6_timer_hnd);
-            hink_e6_timer_hnd = EASY_TIMER_INVALID_TIMER;
-        }
-        hink_e6_state = HINK_E6_STATE_IDLE;
-        hink_e6_transfer_id = 0U;
+        app_easy_timer_cancel(hink_e6_timer_hnd);
+        hink_e6_timer_hnd = EASY_TIMER_INVALID_TIMER;
     }
 }
 
@@ -1749,7 +1736,6 @@ void user_svc1_ctrl_wr_ind_handler(ke_msg_id_t const msgid,
         return;
     }
 
-    printk("Control Point: %02x\n", param->value[0]);
 }
 
 /**
@@ -1785,7 +1771,6 @@ void user_svc1_long_val_wr_ind_handler(ke_msg_id_t const msgid,
 		diff_sec  = param->value[1];
 		diff_sec |= param->value[2]<<8;
 		diff_sec  = (diff_sec<<16)>>16;
-		printk("Calibration: %02x\n", diff_sec);
 		clock_fixup_set(diff_sec, cal_minute);
 		cal_minute = 0;
 	}else if(param->value[0]>=0xa0){
