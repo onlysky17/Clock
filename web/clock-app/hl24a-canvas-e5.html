@@ -10,7 +10,7 @@
 .badge{display:inline-block;padding:7px 11px;border:1px solid #2d6b52;border-radius:999px;background:#092a20;color:#b5f7dd;font-weight:800}
 .card{margin:14px 0;padding:16px;border:1px solid var(--line);border-radius:14px;background:rgba(17,28,44,.96)}
 .row{display:flex;flex-wrap:wrap;gap:9px;align-items:center}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:9px}
-button,input,select{padding:10px 12px;border:1px solid #526d8f;border-radius:10px;background:#1a2940;color:white;font-weight:750}
+button,input,select{min-height:40px;padding:10px 12px;border:1px solid #526d8f;border-radius:10px;background:#1a2940;color:white;font-weight:750}
 button{cursor:pointer}button.primary{background:#1d4ed8}button.good{background:#066047}button:disabled{opacity:.4;cursor:not-allowed}
 .stat{padding:11px;border:1px solid var(--line);border-radius:11px;background:#0b1421}.stat span{display:block;color:var(--muted);font-size:.8rem}.stat strong{font-size:1.08rem}
 .ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}p{color:var(--muted);line-height:1.5}code{color:#cfe2ff}
@@ -31,6 +31,7 @@ small{color:var(--muted)}
 <button id="clearWhite">Clear white</button>
 <button id="fillBlack">Fill black</button>
 <button id="invert">Invert</button>
+<button id="updateClock" class="primary">Cập nhật giờ hiện tại</button>
 <button id="sample">Draw sample</button>
 <label>Brush
 <select id="brush">
@@ -288,6 +289,33 @@ function drawSample(){
   repack();
 }
 
+function drawCurrentClock(){
+  const now=new Date();
+  const timeText=new Intl.DateTimeFormat('vi-VN',{
+    hour:'2-digit',
+    minute:'2-digit',
+    hour12:false
+  }).format(now);
+  const dateText=new Intl.DateTimeFormat('vi-VN',{
+    weekday:'short',
+    day:'2-digit',
+    month:'2-digit'
+  }).format(now).replace(',', '');
+
+  clearWhite();
+  ctx.save();
+  ctx.fillStyle='#000';
+  ctx.textAlign='center';
+  ctx.textBaseline='middle';
+  ctx.font='bold 54px system-ui,sans-serif';
+  ctx.fillText(timeText,WIDTH/2,48);
+  ctx.font='bold 19px system-ui,sans-serif';
+  ctx.fillText(dateText,WIDTH/2,94);
+  ctx.restore();
+  repack();
+  log(`Preview clock updated: ${timeText} · ${dateText}`);
+}
+
 function addSimpleText(){
   const text=$('text').value.trim()||'C1 TEST';
   ctx.save();
@@ -311,6 +339,7 @@ function controls(){
   $('clearWhite').disabled=e6Running;
   $('fillBlack').disabled=e6Running;
   $('invert').disabled=e6Running;
+  $('updateClock').disabled=e6Running;
   $('sample').disabled=e6Running;
   $('addText').disabled=e6Running;
   $('repack').disabled=e6Running;
@@ -648,6 +677,7 @@ async function safe(fn){
 $('clearWhite').onclick=clearWhite;
 $('fillBlack').onclick=fillBlack;
 $('invert').onclick=invertCanvas;
+$('updateClock').onclick=drawCurrentClock;
 $('sample').onclick=drawSample;
 $('addText').onclick=addSimpleText;
 $('repack').onclick=repack;
@@ -658,9 +688,9 @@ $('refresh').onclick=()=>safe(refreshPanel);
 $('clearLog').onclick=()=>{$('log').value=''};
 
 clearWhite();
-drawSample();
+drawCurrentClock();
 controls();
-log('TASK C2G ready. Preview is panel-oriented; payload is packed into 122x250 RAM for E6 refresh.');
+log('TASK D1A ready. Preview uses phone/browser local time; Send E5 and Refresh E6 remain manual.');
 </script>
 </body>
 </html>
