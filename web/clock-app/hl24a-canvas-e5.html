@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TASK C1 - E5 Framebuffer Transfer</title>
+<title>TASK C2C - E5/E6 Panel Preview</title>
 <style>
 :root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;--bg:#07101b;--card:#111c2c;--line:#2a3d59;--text:#f4f8ff;--muted:#9fb1c8;--ok:#45d99c;--warn:#ffd166;--bad:#ff6b86}
 *{box-sizing:border-box}body{margin:0;background:linear-gradient(#050a12,#101a2a);color:var(--text)}main{max-width:1040px;margin:auto;padding:20px}
@@ -15,18 +15,18 @@ button{cursor:pointer}button.primary{background:#1d4ed8}button.good{background:#
 .stat{padding:11px;border:1px solid var(--line);border-radius:11px;background:#0b1421}.stat span{display:block;color:var(--muted);font-size:.8rem}.stat strong{font-size:1.08rem}
 .ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}p{color:var(--muted);line-height:1.5}code{color:#cfe2ff}
 .canvasWrap{overflow:auto;padding:12px;border:1px solid var(--line);border-radius:12px;background:#080d14}
-canvas{display:block;width:min(100%,312px);height:auto;image-rendering:pixelated;background:#fff;touch-action:none;border:1px solid #62708a}
+canvas{display:block;width:min(100%,424px);height:auto;image-rendering:pixelated;background:#fff;touch-action:none;border:1px solid #62708a}
 progress{width:100%;height:17px;margin-top:12px}textarea{width:100%;min-height:260px;padding:12px;border:1px solid var(--line);border-radius:10px;background:#050910;color:#cfe2ff;font:12px/1.5 ui-monospace,Consolas,monospace}
 small{color:var(--muted)}
 </style>
 </head>
 <body><main>
-<div class="badge">TASK C1 · E5 FRAMEBUFFER TRANSFER · 104×212 · NO PANEL REFRESH</div>
-<h1>104×212 Canvas → 2756-byte E5 Transfer</h1>
-<p>Trang này chỉ tạo framebuffer đen trắng, mở E4 session, gửi E5 vào RAM firmware và so CRC. Firmware không gọi EPD driver trong TASK C1.</p>
+<div class="badge">TASK C2C · E5 FRAMEBUFFER · E6 PANEL REFRESH · HINK213 BW</div>
+<h1>212×104 Preview → 104×212 RAM → E6 Refresh</h1>
+<p>Preview hiển thị theo hướng panel thật. Payload vẫn gửi đúng RAM controller 104×212, 13 byte/dòng, 2756 byte.</p>
 
 <section class="card">
-<h2>Canvas 104×212</h2>
+<h2>Canvas 212×104</h2>
 <div class="row">
 <button id="clearWhite">Clear white</button>
 <button id="fillBlack">Fill black</button>
@@ -44,15 +44,16 @@ small{color:var(--muted)}
 <button id="addText">Simple text</button>
 </div>
 <div class="canvasWrap" style="margin-top:12px">
-<canvas id="canvas" width="104" height="212"></canvas>
+<canvas id="canvas" width="212" height="104"></canvas>
 </div>
-<p><small>Preview cùng orientation với bytes gửi: mỗi dòng 104 pixel = 13 byte, tổng 212 dòng.</small></p>
+<p><small>Preview landscape 212×104 được pack theo ROTATE_3 vào RAM 104×212, MSB-first, bit 1 = trắng.</small></p>
 </section>
 
 <section class="card">
 <h2>Payload</h2>
 <div class="grid">
-<div class="stat"><span>Geometry</span><strong>104 × 212</strong></div>
+<div class="stat"><span>Preview</span><strong>212 × 104</strong></div>
+<div class="stat"><span>RAM</span><strong>104 × 212</strong></div>
 <div class="stat"><span>Stride</span><strong>13 bytes</strong></div>
 <div class="stat"><span>Bytes</span><strong id="byteCount">2756</strong></div>
 <div class="stat"><span>Chunks</span><strong id="chunkCount">197</strong></div>
@@ -100,8 +101,10 @@ small{color:var(--muted)}
 <script>
 'use strict';
 
-const WIDTH=104;
-const HEIGHT=212;
+const WIDTH=212;
+const HEIGHT=104;
+const RAM_WIDTH=104;
+const RAM_HEIGHT=212;
 const STRIDE=13;
 const TOTAL=2756;
 const CHUNK=14;
@@ -225,13 +228,15 @@ function isBlack(imageData,x,y){
 
 function packCanvas(){
   const image=ctx.getImageData(0,0,WIDTH,HEIGHT);
-  const output=new Uint8Array(TOTAL);
+  const output=new Uint8Array(TOTAL).fill(0xFF);
   let black=0;
 
   for(let y=0;y<HEIGHT;y++){
     for(let x=0;x<WIDTH;x++){
       if(isBlack(image,x,y)){
-        output[y*STRIDE+(x>>3)]|=1<<(7-(x&7));
+        const ramX=y;
+        const ramY=RAM_HEIGHT-1-x;
+        output[ramY*STRIDE+(ramX>>3)]&=~(1<<(7-(ramX&7)));
         black++;
       }
     }
@@ -274,12 +279,11 @@ function drawSample(){
   ctx.font='bold 20px system-ui,sans-serif';
   ctx.textAlign='center';
   ctx.textBaseline='middle';
-  ctx.fillText('12:34',WIDTH/2,52);
+  ctx.fillText('12:34',WIDTH/2,34);
   ctx.font='bold 12px system-ui,sans-serif';
-  ctx.fillText('HINK213',WIDTH/2,88);
-  ctx.fillText('TASK C1',WIDTH/2,108);
-  ctx.fillRect(18,132,68,12);
-  ctx.fillRect(18,154,68,12);
+  ctx.fillText('HINK213',WIDTH/2,58);
+  ctx.fillText('TASK C2C',WIDTH/2,76);
+  ctx.fillRect(34,88,144,8);
   ctx.restore();
   repack();
 }
@@ -414,8 +418,8 @@ async function keepaliveE4(quiet=true){
 function startPacket(id){
   return Uint8Array.of(
     0xE5,0x00,id,
-    WIDTH&0xFF,WIDTH>>8,
-    HEIGHT&0xFF,HEIGHT>>8,
+    RAM_WIDTH&0xFF,RAM_WIDTH>>8,
+    RAM_HEIGHT&0xFF,RAM_HEIGHT>>8,
     0x01,
     STRIDE,
     TOTAL&0xFF,TOTAL>>8
@@ -656,7 +660,7 @@ $('clearLog').onclick=()=>{$('log').value=''};
 clearWhite();
 drawSample();
 controls();
-log('TASK C1 ready. E5 framebuffer transfer only; no physical panel refresh.');
+log('TASK C2C ready. Preview is panel-oriented; payload is packed into 104x212 RAM for E6 refresh.');
 </script>
 </body>
 </html>
