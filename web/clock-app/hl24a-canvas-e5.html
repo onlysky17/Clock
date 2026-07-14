@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TASK C2C - E5/E6 Panel Preview</title>
+<title>TASK C2G - E5/E6 Panel Preview</title>
 <style>
 :root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;--bg:#07101b;--card:#111c2c;--line:#2a3d59;--text:#f4f8ff;--muted:#9fb1c8;--ok:#45d99c;--warn:#ffd166;--bad:#ff6b86}
 *{box-sizing:border-box}body{margin:0;background:linear-gradient(#050a12,#101a2a);color:var(--text)}main{max-width:1040px;margin:auto;padding:20px}
@@ -15,18 +15,18 @@ button{cursor:pointer}button.primary{background:#1d4ed8}button.good{background:#
 .stat{padding:11px;border:1px solid var(--line);border-radius:11px;background:#0b1421}.stat span{display:block;color:var(--muted);font-size:.8rem}.stat strong{font-size:1.08rem}
 .ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}p{color:var(--muted);line-height:1.5}code{color:#cfe2ff}
 .canvasWrap{overflow:auto;padding:12px;border:1px solid var(--line);border-radius:12px;background:#080d14}
-canvas{display:block;width:min(100%,424px);height:auto;image-rendering:pixelated;background:#fff;touch-action:none;border:1px solid #62708a}
+canvas{display:block;width:min(100%,500px);height:auto;image-rendering:pixelated;background:#fff;touch-action:none;border:1px solid #62708a}
 progress{width:100%;height:17px;margin-top:12px}textarea{width:100%;min-height:260px;padding:12px;border:1px solid var(--line);border-radius:10px;background:#050910;color:#cfe2ff;font:12px/1.5 ui-monospace,Consolas,monospace}
 small{color:var(--muted)}
 </style>
 </head>
 <body><main>
-<div class="badge">TASK C2C · E5 FRAMEBUFFER · E6 PANEL REFRESH · HINK213 BW</div>
-<h1>212×104 Preview → 104×212 RAM → E6 Refresh</h1>
-<p>Preview hiển thị theo hướng panel thật. Payload vẫn gửi đúng RAM controller 104×212, 13 byte/dòng, 2756 byte.</p>
+<div class="badge">TASK C2G · E5 FRAMEBUFFER · E6 PANEL REFRESH · HINK213 BW</div>
+<h1>250×122 Preview → 122×250 RAM → E6 Refresh</h1>
+<p>Preview hiển thị theo hướng panel thật. Payload gửi RAM controller 122×250, 16 byte/dòng, 4000 byte.</p>
 
 <section class="card">
-<h2>Canvas 212×104</h2>
+<h2>Canvas 250×122</h2>
 <div class="row">
 <button id="clearWhite">Clear white</button>
 <button id="fillBlack">Fill black</button>
@@ -44,19 +44,19 @@ small{color:var(--muted)}
 <button id="addText">Simple text</button>
 </div>
 <div class="canvasWrap" style="margin-top:12px">
-<canvas id="canvas" width="212" height="104"></canvas>
+<canvas id="canvas" width="250" height="122"></canvas>
 </div>
-<p><small>Preview landscape 212×104 được pack theo ROTATE_3 vào RAM 104×212, MSB-first, bit 1 = trắng.</small></p>
+<p><small>Preview landscape 250×122 được pack theo ROTATE_3 vào RAM 122×250, MSB-first, bit 1 = trắng. Sáu padding bit cuối mỗi RAM row giữ trắng.</small></p>
 </section>
 
 <section class="card">
 <h2>Payload</h2>
 <div class="grid">
-<div class="stat"><span>Preview</span><strong>212 × 104</strong></div>
-<div class="stat"><span>RAM</span><strong>104 × 212</strong></div>
-<div class="stat"><span>Stride</span><strong>13 bytes</strong></div>
-<div class="stat"><span>Bytes</span><strong id="byteCount">2756</strong></div>
-<div class="stat"><span>Chunks</span><strong id="chunkCount">197</strong></div>
+<div class="stat"><span>Preview</span><strong>250 × 122</strong></div>
+<div class="stat"><span>RAM</span><strong>122 × 250</strong></div>
+<div class="stat"><span>Stride</span><strong>16 bytes</strong></div>
+<div class="stat"><span>Bytes</span><strong id="byteCount">4000</strong></div>
+<div class="stat"><span>Chunks</span><strong id="chunkCount">286</strong></div>
 <div class="stat"><span>Browser CRC</span><strong id="browserCrc">----</strong></div>
 <div class="stat"><span>Black pixels</span><strong id="blackPixels">0</strong></div>
 </div>
@@ -73,7 +73,7 @@ small{color:var(--muted)}
 <button id="clearLog">Clear log</button>
 </div>
 <p>BLE: <strong id="ble">Disconnected</strong> · Result: <strong id="result" class="warn">NOT RUN</strong></p>
-<progress id="progress" max="2756" value="0"></progress>
+<progress id="progress" max="4000" value="0"></progress>
 <div class="grid" style="margin-top:12px">
 <div class="stat"><span>Transfer ID</span><strong id="transferId">-</strong></div>
 <div class="stat"><span>State</span><strong id="fwState">-</strong></div>
@@ -81,7 +81,7 @@ small{color:var(--muted)}
 <div class="stat"><span>Bytes</span><strong id="fwBytes">0</strong></div>
 <div class="stat"><span>Firmware CRC</span><strong id="fwCrc">----</strong></div>
 </div>
-<p>Expected PASS: <code>state=COMPLETE · chunks=197 · bytes=2756 · browser CRC = firmware CRC</code></p>
+<p>Expected PASS: <code>state=COMPLETE · chunks=286 · bytes=4000 · browser CRC = firmware CRC</code></p>
 </section>
 
 <section class="card">
@@ -101,14 +101,14 @@ small{color:var(--muted)}
 <script>
 'use strict';
 
-const WIDTH=212;
-const HEIGHT=104;
-const RAM_WIDTH=104;
-const RAM_HEIGHT=212;
-const STRIDE=13;
-const TOTAL=2756;
+const WIDTH=250;
+const HEIGHT=122;
+const RAM_WIDTH=122;
+const RAM_HEIGHT=250;
+const STRIDE=16;
+const TOTAL=4000;
 const CHUNK=14;
-const EXPECTED_CHUNKS=197;
+const EXPECTED_CHUNKS=286;
 const SERVICE='18424398-7cbc-11e9-8f9e-2a86e4085a59';
 const WRITE='2d86686a-53dc-25b3-0c4a-f0e10c8dee20';
 const NOTIFY='15005991-b131-3396-014c-664c9867b917';
@@ -282,8 +282,8 @@ function drawSample(){
   ctx.fillText('12:34',WIDTH/2,34);
   ctx.font='bold 12px system-ui,sans-serif';
   ctx.fillText('HINK213',WIDTH/2,58);
-  ctx.fillText('TASK C2C',WIDTH/2,76);
-  ctx.fillRect(34,88,144,8);
+  ctx.fillText('TASK C2G',WIDTH/2,76);
+  ctx.fillRect(42,96,166,10);
   ctx.restore();
   repack();
 }
@@ -660,7 +660,7 @@ $('clearLog').onclick=()=>{$('log').value=''};
 clearWhite();
 drawSample();
 controls();
-log('TASK C2C ready. Preview is panel-oriented; payload is packed into 104x212 RAM for E6 refresh.');
+log('TASK C2G ready. Preview is panel-oriented; payload is packed into 122x250 RAM for E6 refresh.');
 </script>
 </body>
 </html>
