@@ -1,27 +1,20 @@
 # NEXT_ACTION
 
-Next task:
-Port old Clock BLE/web protocol onto the working SDK 6.0.22 display base.
+Current final state is closed out:
+- C2G full-panel PASS.
+- C2H one-shot latch PASS.
+- C2J size trim PASS.
+- SPI persistent final PASS.
 
-Start from:
-firmware/active/HINK213_CLOCK_22_BASE
+No immediate recovery action is required.
 
-Do not modify EPD driver first. Display path is already proven working.
+If continuing development:
+1. Start from `main`.
+2. Preserve the final geometry contract: logical `250 x 122`, controller RAM `122 x 250`, stride `16`, payload `4000` bytes.
+3. Keep the canonical web URL as `https://onlysky17.github.io/Clock/test.html`.
+4. Do not use the old `104 x 212` golden geometry for this physical panel.
+5. Do not commit `.bin` firmware images.
+6. Before any future SPI write, verify a fresh backup and a packed image SHA256.
 
-First future step:
-1. Map old Clock BLE services/write handlers from SDK 6.0.18.
-2. Map current HINK213_CLOCK_22_BASE BLE service layout.
-3. Decide smallest protocol bridge.
-4. Build verify before any flash burn.
-
-<!-- E4_SESSION_BRIDGE_CLOSEOUT_START -->
-## Next action: SPI persistence preflight
-
-Prepare and verify a full persistent image before any SPI write:
-
-1. Confirm the current full 256 KB board backup.
-2. Verify the golden full image and SHA256 manifest.
-3. Pack the merged firmware with tools/pack-hink.ps1.
-4. Verify output size, offsets and hashes.
-5. Do not program SPI until the packed image and recovery path are reviewed.
-<!-- E4_SESSION_BRIDGE_CLOSEOUT_END -->
+Final firmware image remains local only:
+D:\EINK\Clock\_incoming\TASK_C2J_FINAL_PACKED_256KB.bin
