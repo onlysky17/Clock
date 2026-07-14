@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TASK C2G - E5/E6 Panel Preview</title>
+<title>TASK D1C - Auto Minute Clock Sync</title>
 <style>
 :root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;--bg:#07101b;--card:#111c2c;--line:#2a3d59;--text:#f4f8ff;--muted:#9fb1c8;--ok:#45d99c;--warn:#ffd166;--bad:#ff6b86}
 *{box-sizing:border-box}body{margin:0;background:linear-gradient(#050a12,#101a2a);color:var(--text)}main{max-width:1040px;margin:auto;padding:20px}
@@ -21,8 +21,8 @@ small{color:var(--muted)}
 </style>
 </head>
 <body><main>
-<div class="badge">TASK C2G · E5 FRAMEBUFFER · E6 PANEL REFRESH · HINK213 BW</div>
-<h1>250×122 Preview → 122×250 RAM → E6 Refresh</h1>
+<div class="badge">TASK D1C • AUTO MINUTE CLOCK SYNC • HINK213 BW</div>
+<h1>250×122 Clock Preview → Auto E5/E6 Minute Sync</h1>
 <p>Preview hiển thị theo hướng panel thật. Payload gửi RAM controller 122×250, 16 byte/dòng, 4000 byte.</p>
 
 <section class="card">
@@ -41,7 +41,7 @@ small{color:var(--muted)}
 <option value="5">5 px</option>
 </select>
 </label>
-<label>Text <input id="text" value="C1 TEST" maxlength="18"></label>
+<label>Text <input id="text" value="D1C CLOCK" maxlength="18"></label>
 <button id="addText">Simple text</button>
 </div>
 <div class="canvasWrap" style="margin-top:12px">
@@ -311,7 +311,7 @@ function drawSample(){
   ctx.fillText('12:34',WIDTH/2,34);
   ctx.font='bold 12px system-ui,sans-serif';
   ctx.fillText('HINK213',WIDTH/2,58);
-  ctx.fillText('TASK C2G',WIDTH/2,76);
+  ctx.fillText('D1C CLOCK',WIDTH/2,76);
   ctx.fillRect(42,96,166,10);
   ctx.restore();
   repack();
@@ -345,7 +345,7 @@ function drawCurrentClock(){
 }
 
 function addSimpleText(){
-  const text=$('text').value.trim()||'C1 TEST';
+  const text=$('text').value.trim()||'D1C CLOCK';
   ctx.save();
   ctx.fillStyle='#000';
   ctx.font='bold 14px system-ui,sans-serif';
