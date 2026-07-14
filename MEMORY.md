@@ -31,3 +31,33 @@ Final geometry:
 - Stride: `16` bytes
 - Framebuffer payload: `4000` bytes
 - Do not use the old `104 x 212` golden geometry for this physical panel.
+
+## TASK D1 Clock Web Milestone
+
+- Canonical web URL: `https://onlysky17.github.io/Clock/test.html`
+- Current page title: `TASK D1C - Auto Minute Clock Sync`
+- Current badge: `TASK D1C • AUTO MINUTE CLOCK SYNC • HINK213 BW`
+- Current heading: `250×122 Clock Preview → Auto E5/E6 Minute Sync`
+- The current page no longer shows `TASK C2G`, `C2G`, or `C1 TEST` labels.
+
+Verified web clock state:
+- D1A PASS: preview uses browser local time, large `HH:mm`, short Vietnamese weekday/date, and the update button only redraws/repacks without sending BLE.
+- D1B PASS: `Đồng bộ giờ lên màn` draws the current clock, sends E5, waits for E5 COMPLETE with CRC match, then sends E6 and waits for E6 COMPLETE.
+- D1C PASS: `Tự đồng bộ khi phút đổi` defaults OFF, first enable does not send immediately, sends only when the full minute key changes, does not overlap transfers, and turns OFF on disconnect/error.
+- D1C physical auto minute sync PASS.
+
+Stable web/firmware contract:
+- Logical canvas: `250 x 122`
+- Controller RAM: `122 x 250`
+- Stride: `16`
+- Payload: `4000` bytes
+- Chunks: `286`
+- E5 CRC16
+- E6 one-shot refresh
+- Persistent firmware still runs from SPI after cold boot, does not need SysRAM, and does not refresh black after disconnect.
+
+Next proposed milestone:
+- `TASK D2A — DEVICE TIME SYNC PROTOCOL DESIGN`
+- D2A should design epoch/timezone transfer from web to firmware only.
+- D2A should not implement yet, should not auto refresh device-side, and should not modify EPD.
+- D2A must decide data format, persistence, drift handling, and reconnect behavior.

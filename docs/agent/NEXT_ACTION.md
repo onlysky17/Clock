@@ -5,6 +5,9 @@ Current final state is closed out:
 - C2H one-shot latch PASS.
 - C2J size trim PASS.
 - SPI persistent final PASS.
+- D1A preview giờ thật PASS.
+- D1B one-tap E5 to E6 PASS.
+- D1C auto sync khi phút đổi PASS.
 
 No immediate recovery action is required.
 
@@ -18,3 +21,20 @@ If continuing development:
 
 Final firmware image remains local only:
 D:\EINK\Clock\_incoming\TASK_C2J_FINAL_PACKED_256KB.bin
+
+## Proposed next task
+
+TASK D2A — DEVICE TIME SYNC PROTOCOL DESIGN
+
+Goal:
+- Design a protocol to send epoch/timezone from the web page down to firmware.
+- Do not implement it yet.
+- Do not auto refresh device-side yet.
+- Do not modify EPD.
+
+Design questions to close in D2A:
+- Data format for epoch/timezone/local offset.
+- Whether and how time should persist across reboot.
+- Drift behavior while BLE is disconnected.
+- Reconnect behavior and conflict handling.
+- How device-side time interacts with the existing web-driven E5/E6 clock flow.
