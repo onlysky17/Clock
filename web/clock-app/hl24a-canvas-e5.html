@@ -75,6 +75,13 @@ small{color:var(--muted)}
 </section>
 
 <section class="card">
+<h2>Auto Minute Sync</h2>
+<label class="row"><input id="autoSync" type="checkbox"> Tự đồng bộ khi phút đổi</label>
+<p>Auto sync: <strong id="autoStatus" class="warn" aria-live="polite">Auto sync đang tắt</strong></p>
+<p><small>Mặc định tắt. Khi bật, trang chỉ đồng bộ nếu BLE đã kết nối và phút local của browser đổi sang phút mới.</small></p>
+</section>
+
+<section class="card">
 <h2>BLE E5 Transfer</h2>
 <div class="row">
 <button id="connect" class="primary">Connect EINK/HINK</button>
@@ -132,6 +139,7 @@ let browserCrc=0;
 let device=null,server=null,writeChar=null,notifyChar=null,pending=null,busy=false,token=0,transferId=1;
 let e6Running=false,e5Success=false,latestFwCrc=null;
 let oneTapRunning=false;
+let autoSyncTimer=0,autoSyncEnabled=false,autoArmedMinuteKey='',lastAutoSentMinuteKey='';
 
 const hex=a=>[...a].map(v=>v.toString(16).padStart(2,'0').toUpperCase()).join(' ');
 const u16=(lo,hi)=>lo|(hi<<8);
@@ -152,6 +160,11 @@ function setResult(text,cls='warn'){
 function setSyncStatus(text,cls='warn'){
   $('syncStatus').textContent=text;
   $('syncStatus').className=cls;
+}
+
+function setAutoStatus(text,cls='warn'){
+  $('autoStatus').textContent=text;
+  $('autoStatus').className=cls;
 }
 
 function clearWhite(){
@@ -351,6 +364,7 @@ function controls(){
   $('disconnect').disabled=!connected||locked;
   $('send').disabled=!connected||locked;
   $('syncClock').disabled=!connected||locked;
+  $('autoSync').disabled=locked;
   $('refresh').disabled=!connected||!token||!e5Complete||locked;
 
   $('clearWhite').disabled=locked;
@@ -362,6 +376,70 @@ function controls(){
   $('repack').disabled=locked;
   $('brush').disabled=locked;
   $('text').disabled=locked;
+}
+
+function minuteKey(date=new Date()){
+  const pad=value=>String(value).padStart(2,'0');
+  return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}-${pad(date.getHours())}-${pad(date.getMinutes())}`;
+}
+
+function stopAutoSync(message='Auto sync đang tắt',cls='warn'){
+  autoSyncEnabled=false;
+  $('autoSync').checked=false;
+  if(autoSyncTimer){
+    clearInterval(autoSyncTimer);
+    autoSyncTimer=0;
+  }
+  setAutoStatus(message,cls);
+  controls();
+}
+
+function startAutoSync(){
+  if(autoSyncEnabled)return;
+  autoSyncEnabled=true;
+  autoArmedMinuteKey=minuteKey();
+  $('autoSync').checked=true;
+  setAutoStatus('Đang chờ phút mới','warn');
+  if(!autoSyncTimer){
+    autoSyncTimer=setInterval(checkAutoSyncMinute,1000);
+  }
+  controls();
+}
+
+async function checkAutoSyncMinute(){
+  if(!autoSyncEnabled)return;
+  if(!server?.connected){
+    stopAutoSync('Lỗi, đã tắt Auto sync','bad');
+    return;
+  }
+  if(busy||e6Running||oneTapRunning)return;
+
+  const currentMinuteKey=minuteKey();
+  if(currentMinuteKey===autoArmedMinuteKey||currentMinuteKey===lastAutoSentMinuteKey){
+    return;
+  }
+
+  try{
+    setAutoStatus('Đang đồng bộ','warn');
+    await syncClockToPanel();
+    if($('e6Result').textContent !== 'COMPLETE'){
+      throw Error('E6 chưa COMPLETE.');
+    }
+    lastAutoSentMinuteKey=currentMinuteKey;
+    autoArmedMinuteKey=currentMinuteKey;
+    setAutoStatus('Đồng bộ hoàn tất','ok');
+  }catch(error){
+    log(`Auto sync error: ${error.message}`,'ERROR');
+    stopAutoSync('Lỗi, đã tắt Auto sync','bad');
+  }
+}
+
+function toggleAutoSync(){
+  if($('autoSync').checked){
+    startAutoSync();
+  }else{
+    stopAutoSync();
+  }
 }
 
 function setBusy(value){
@@ -427,7 +505,7 @@ async function connect(){
     latestFwCrc=null;
     e6Running=false;
     $('ble').textContent='Disconnected';
-    controls();
+    stopAutoSync('Auto sync đang tắt');
     log('Disconnected');
   });
   server=await device.gatt.connect();
@@ -735,12 +813,13 @@ $('disconnect').onclick=()=>device?.gatt?.disconnect();
 $('send').onclick=()=>safe(sendFramebuffer);
 $('refresh').onclick=()=>safe(refreshPanel);
 $('syncClock').onclick=()=>safe(syncClockToPanel);
+$('autoSync').onchange=toggleAutoSync;
 $('clearLog').onclick=()=>{$('log').value=''};
 
 clearWhite();
 drawCurrentClock();
 controls();
-log('TASK D1B ready. One-tap sync is manual: redraw clock, send E5, then refresh E6.');
+log('TASK D1C ready. Auto sync is off by default and only runs after the minute changes.');
 </script>
 </body>
 </html>
