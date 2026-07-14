@@ -37,17 +37,31 @@ Goal:
 - Use `D2 00 SET_TIME` and `D2 01 GET_TIME_STATUS`.
 - Keep D2 RAM-only at first.
 
-## Next implementation task
+## Current implementation task
 
 TASK D2B — Firmware time state + D2 command handler
 
-D2B scope:
-- Implement `SET_TIME` and `GET_TIME_STATUS`.
-- Store time state in RAM only.
-- Do not refresh panel.
-- Do not write SPI/flash.
-- Do not alter E5/E6.
+D2B status:
+- Firmware handler implemented in canonical source.
+- Time state is RAM-only.
+- No panel refresh.
+- No SPI/flash writes.
+- E5/E6 unchanged.
+
+Validation still required outside Codex:
+- Sync canonical source to SDK.
+- Run one Keil rebuild.
+- Load SysRAM or next packed test image only after build result is reviewed.
+
+## Next implementation task
+
+TASK D2C — Web time sync controls
+
+D2C scope:
+- Add web controls to send `D2 00 SET_TIME`.
+- Add status display using `D2 01 GET_TIME_STATUS`.
+- Do not add device-side auto panel clock yet.
+- Keep existing D1 web E5/E6 flow intact.
 
 Later tasks:
-- D2C — Web time sync controls: send time down to firmware and display status.
 - D2D — Device-side minute renderer: firmware refreshes clock by minute after refresh policy and battery review.

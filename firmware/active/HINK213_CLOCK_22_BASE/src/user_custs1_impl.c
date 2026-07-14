@@ -113,6 +113,33 @@ static uint8_t hink_e6_state             __SECTION_ZERO("retention_mem_area0");
 static uint8_t hink_e6_transfer_id       __SECTION_ZERO("retention_mem_area0");
 static timer_hnd hink_e6_timer_hnd       __SECTION_ZERO("retention_mem_area0");
 
+#define HINK_D2_SET_TIME_LEN        9U
+#define HINK_D2_GET_STATUS_LEN      2U
+#define HINK_D2_STATUS_LEN          15U
+#define HINK_D2_EPOCH_MIN           1704067200UL
+#define HINK_D2_EPOCH_MAX           4102444799UL
+#define HINK_D2_STALE_SECONDS       86400UL
+#define HINK_D2_FLAGS_RESERVED_MASK 0xFCU
+
+#define HINK_D2_RESULT_OK             0x00U
+#define HINK_D2_RESULT_INVALID_LENGTH 0x01U
+#define HINK_D2_RESULT_INVALID_FLAGS  0x02U
+#define HINK_D2_RESULT_INVALID_TIME   0x03U
+#define HINK_D2_RESULT_NOT_INIT       0x04U
+#define HINK_D2_RESULT_INTERNAL       0x05U
+
+#define HINK_D2_STATE_UNSET   0x00U
+#define HINK_D2_STATE_SYNCED  0x01U
+#define HINK_D2_STATE_RUNNING 0x02U
+#define HINK_D2_STATE_STALE   0x03U
+
+static uint32_t hink_d2_uptime_seconds     __SECTION_ZERO("retention_mem_area0");
+static uint32_t hink_d2_synced_epoch       __SECTION_ZERO("retention_mem_area0");
+static uint32_t hink_d2_uptime_at_sync     __SECTION_ZERO("retention_mem_area0");
+static int16_t hink_d2_timezone_minutes    __SECTION_ZERO("retention_mem_area0");
+static uint8_t hink_d2_flags               __SECTION_ZERO("retention_mem_area0");
+static uint8_t hink_d2_state               __SECTION_ZERO("retention_mem_area0");
+
 static void hink_e6_timer_cb(void);
 
 static void get_holiday(void);
@@ -446,6 +473,11 @@ void date_inc(void)
 int clock_update(int inc)
 {
 	int retv = 0;
+
+    if (inc > 0)
+    {
+        hink_d2_uptime_seconds += (uint32_t)inc;
+    }
 
 	second += inc;
 	if(second<60)
@@ -1066,6 +1098,138 @@ static void hink_e4_notify_bytes(const uint8_t *data, uint8_t len)
 static uint16_t hink_u16_le(const uint8_t *data)
 {
     return (uint16_t)data[0] | ((uint16_t)data[1] << 8);
+}
+
+static uint32_t hink_u32_le(const uint8_t *data)
+{
+    return ((uint32_t)data[0]) |
+           ((uint32_t)data[1] << 8) |
+           ((uint32_t)data[2] << 16) |
+           ((uint32_t)data[3] << 24);
+}
+
+static void hink_put_u32_le(uint8_t *data, uint32_t value)
+{
+    data[0] = (uint8_t)(value & 0xFFU);
+    data[1] = (uint8_t)((value >> 8) & 0xFFU);
+    data[2] = (uint8_t)((value >> 16) & 0xFFU);
+    data[3] = (uint8_t)((value >> 24) & 0xFFU);
+}
+
+static void hink_put_u16_le(uint8_t *data, uint16_t value)
+{
+    data[0] = (uint8_t)(value & 0xFFU);
+    data[1] = (uint8_t)(value >> 8);
+}
+
+static uint32_t hink_d2_elapsed_seconds(void)
+{
+    return hink_d2_uptime_seconds - hink_d2_uptime_at_sync;
+}
+
+static uint8_t hink_d2_runtime_state(void)
+{
+    if (hink_d2_state == HINK_D2_STATE_UNSET)
+    {
+        return HINK_D2_STATE_UNSET;
+    }
+
+    return (hink_d2_elapsed_seconds() >= HINK_D2_STALE_SECONDS) ?
+           HINK_D2_STATE_STALE :
+           HINK_D2_STATE_RUNNING;
+}
+
+static uint32_t hink_d2_current_epoch(void)
+{
+    return (hink_d2_state == HINK_D2_STATE_UNSET) ?
+           0UL :
+           (hink_d2_synced_epoch + hink_d2_elapsed_seconds());
+}
+
+static void hink_d2_notify(uint8_t result, uint8_t state)
+{
+    uint8_t msg[HINK_D2_STATUS_LEN];
+
+    msg[0] = 0xD2;
+    msg[1] = 0x81;
+    msg[2] = result;
+    msg[3] = state;
+    hink_put_u32_le(&msg[4], hink_d2_current_epoch());
+    hink_put_u16_le(&msg[8], (uint16_t)hink_d2_timezone_minutes);
+    msg[10] = hink_d2_flags;
+    hink_put_u32_le(&msg[11], hink_d2_uptime_seconds);
+    hink_e4_notify_bytes(msg, HINK_D2_STATUS_LEN);
+}
+
+static uint8_t hink_d2_time_handle(struct custs1_val_write_ind const *param)
+{
+    uint8_t subcmd;
+    uint32_t epoch;
+    int16_t timezone;
+    uint8_t flags;
+
+    if ((param->length < 2U) || (param->value[0] != 0xD2))
+    {
+        return 0U;
+    }
+
+    subcmd = param->value[1];
+
+    if (subcmd == 0x00U)
+    {
+        if (param->length != HINK_D2_SET_TIME_LEN)
+        {
+            hink_d2_notify(HINK_D2_RESULT_INVALID_LENGTH, hink_d2_runtime_state());
+            return 1U;
+        }
+
+        flags = param->value[8];
+        if ((flags & HINK_D2_FLAGS_RESERVED_MASK) != 0U)
+        {
+            hink_d2_notify(HINK_D2_RESULT_INVALID_FLAGS, hink_d2_runtime_state());
+            return 1U;
+        }
+
+        epoch = hink_u32_le(&param->value[2]);
+        timezone = (int16_t)hink_u16_le(&param->value[6]);
+        if ((epoch < HINK_D2_EPOCH_MIN) ||
+            (epoch > HINK_D2_EPOCH_MAX) ||
+            (timezone < -720) ||
+            (timezone > 840))
+        {
+            hink_d2_notify(HINK_D2_RESULT_INVALID_TIME, hink_d2_runtime_state());
+            return 1U;
+        }
+
+        hink_d2_synced_epoch = epoch;
+        hink_d2_timezone_minutes = timezone;
+        hink_d2_flags = flags;
+        hink_d2_uptime_at_sync = hink_d2_uptime_seconds;
+        hink_d2_state = HINK_D2_STATE_SYNCED;
+        hink_d2_notify(HINK_D2_RESULT_OK, HINK_D2_STATE_SYNCED);
+        return 1U;
+    }
+
+    if (subcmd == 0x01U)
+    {
+        if (param->length != HINK_D2_GET_STATUS_LEN)
+        {
+            hink_d2_notify(HINK_D2_RESULT_INVALID_LENGTH, hink_d2_runtime_state());
+            return 1U;
+        }
+
+        if (hink_d2_state == HINK_D2_STATE_UNSET)
+        {
+            hink_d2_notify(HINK_D2_RESULT_NOT_INIT, HINK_D2_STATE_UNSET);
+            return 1U;
+        }
+
+        hink_d2_notify(HINK_D2_RESULT_OK, hink_d2_runtime_state());
+        return 1U;
+    }
+
+    hink_d2_notify(HINK_D2_RESULT_INVALID_LENGTH, hink_d2_runtime_state());
+    return 1U;
 }
 
 static uint16_t hink_e5_crc16_ccitt_update(uint16_t crc, const uint8_t *data, uint8_t len)
@@ -1724,6 +1888,10 @@ void user_svc1_ctrl_wr_ind_handler(ke_msg_id_t const msgid,
     conidx = KE_IDX_GET(src_id);
     hink_e4_conidx = app_env[conidx].conidx;
     if (hink_e4_session_handle(param, hink_e4_conidx))
+    {
+        return;
+    }
+    if (hink_d2_time_handle(param))
     {
         return;
     }

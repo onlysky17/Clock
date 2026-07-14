@@ -65,5 +65,14 @@ D2A device time protocol design:
 - Initial STALE threshold proposal is 24 hours.
 - Firmware persistent SPI final remains unchanged.
 
+D2B firmware time handler:
+- Firmware D2 handler is implemented in `firmware/active/HINK213_CLOCK_22_BASE/src/user_custs1_impl.c`.
+- `D2 00 SET_TIME` validates exact 9-byte payload, epoch range, timezone range, and reserved flags.
+- `D2 01 GET_TIME_STATUS` validates exact 2-byte payload and returns deterministic status.
+- Status notify is `D2 81` with 15 bytes.
+- Time state is RAM-only and uses the existing software clock tick path; no new panel timer is created.
+- SET_TIME always returns a status notify for consistency with current E4/E5/E6 command responses.
+- D2B does not refresh the panel, does not write SPI/flash/NVDS, and does not modify E5/E6.
+
 Do not commit `.bin` firmware images. The final `.bin` remains local under:
 D:\EINK\Clock\_incoming
