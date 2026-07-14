@@ -83,6 +83,18 @@ small{color:var(--muted)}
 <p>Expected PASS: <code>state=COMPLETE · chunks=197 · bytes=2756 · browser CRC = firmware CRC</code></p>
 </section>
 
+<section class="card">
+<h2>BLE E6 One-Shot Refresh</h2>
+<div class="row">
+<button id="refresh" class="primary" disabled>Refresh panel (E6)</button>
+</div>
+<p>BLE E6 Result: <strong id="e6Result" class="warn">NOT RUN</strong></p>
+<div class="grid" style="margin-top:12px">
+<div class="stat"><span>E6 Code</span><strong id="e6Code">-</strong></div>
+<div class="stat"><span>E6 State</span><strong id="e6State">-</strong></div>
+</div>
+</section>
+
 <section class="card"><h2>Log</h2><textarea id="log" readonly></textarea></section>
 </main>
 <script>
@@ -105,6 +117,7 @@ let drawing=false,lastX=0,lastY=0;
 let packed=new Uint8Array(TOTAL);
 let browserCrc=0;
 let device=null,server=null,writeChar=null,notifyChar=null,pending=null,busy=false,token=0,transferId=1;
+let e6Running=false,e5Success=false,latestFwCrc=null;
 
 const hex=a=>[...a].map(v=>v.toString(16).padStart(2,'0').toUpperCase()).join(' ');
 const u16=(lo,hi)=>lo|(hi<<8);
@@ -148,6 +161,7 @@ function point(event){
 }
 
 function startDraw(event){
+  if(e6Running)return;
   event.preventDefault();
   drawing=true;
   const p=point(event);
@@ -156,7 +170,7 @@ function startDraw(event){
 }
 
 function moveDraw(event){
-  if(!drawing)return;
+  if(!drawing||e6Running)return;
   event.preventDefault();
   const p=point(event);
   ctx.save();
@@ -230,11 +244,13 @@ function repack(){
   const result=packCanvas();
   packed=result.bytes;
   browserCrc=crc16(packed);
+  e5Success=false;
   $('byteCount').textContent=packed.length;
   $('chunkCount').textContent=Math.ceil(packed.length/CHUNK);
   $('browserCrc').textContent=crcHex(browserCrc);
   $('blackPixels').textContent=result.black;
   $('firstBytes').textContent=hex(packed.slice(0,32));
+  controls();
 }
 
 function invertCanvas(){
@@ -282,9 +298,20 @@ function addSimpleText(){
 
 function controls(){
   const connected=!!server?.connected;
-  $('connect').disabled=connected||busy;
-  $('disconnect').disabled=!connected||busy;
-  $('send').disabled=!connected||busy;
+  const e5Complete=e5Success && (browserCrc === latestFwCrc);
+  $('connect').disabled=connected||busy||e6Running;
+  $('disconnect').disabled=!connected||busy||e6Running;
+  $('send').disabled=!connected||busy||e6Running;
+  $('refresh').disabled=!connected||!token||!e5Complete||busy||e6Running;
+
+  $('clearWhite').disabled=e6Running;
+  $('fillBlack').disabled=e6Running;
+  $('invert').disabled=e6Running;
+  $('sample').disabled=e6Running;
+  $('addText').disabled=e6Running;
+  $('repack').disabled=e6Running;
+  $('brush').disabled=e6Running;
+  $('text').disabled=e6Running;
 }
 
 function setBusy(value){
@@ -346,6 +373,9 @@ async function connect(){
   device.addEventListener('gattserverdisconnected',()=>{
     server=null;
     token=0;
+    e5Success=false;
+    latestFwCrc=null;
+    e6Running=false;
     $('ble').textContent='Disconnected';
     controls();
     log('Disconnected');
@@ -426,10 +456,12 @@ function parseManifest(packet){
 }
 
 function renderManifest(manifest){
+  latestFwCrc=manifest.crc;
   $('fwState').textContent=stateName(manifest.state);
   $('fwChunks').textContent=manifest.chunks;
   $('fwBytes').textContent=manifest.bytes;
   $('fwCrc').textContent=crcHex(manifest.crc);
+  controls();
 }
 
 async function sendFramebuffer(){
@@ -507,7 +539,93 @@ async function sendFramebuffer(){
   if(!pass)throw Error(`Final status mismatch: ${hex(response)}`);
 
   setResult('PASS COMPLETE','ok');
+  e5Success=true;
+  controls();
   log(`PASS state=COMPLETE chunks=${manifest.chunks} bytes=${manifest.bytes} CRC=${crcHex(manifest.crc)}`,'PASS');
+}
+
+const e6StateName = val => ['IDLE','ACCEPTED_PENDING','REFRESHING','COMPLETE','ERROR'][val]||String(val);
+const e6CodeName = val => ['OK','MALFORMED','NO_E4_SESSION','WRONG_OWNER','FRAME_NOT_COMPLETE','BUSY','INTERNAL_ERROR','WRONG_TRANSFER_ID'][val]||String(val);
+
+async function refreshPanel() {
+  e6Running = true;
+  controls();
+  $('e6Result').textContent = 'RUNNING';
+  $('e6Result').className = 'warn';
+  $('e6Code').textContent = '-';
+  $('e6State').textContent = '-';
+
+  try {
+    log(`Starting E6 refresh for transfer ID 0x${transferId.toString(16).toUpperCase()}...`);
+
+    const response = await request(
+      Uint8Array.of(0xE6, 0x00, transferId),
+      a => a[0] === 0xE6 && a[1] === 0x80 && a[3] === transferId
+    );
+
+    const code = response[2];
+    const state = response[4];
+
+    $('e6Code').textContent = e6CodeName(code);
+    $('e6State').textContent = e6StateName(state);
+
+    if (code !== 0x00) {
+      throw Error(`E6 request rejected: code=${e6CodeName(code)}`);
+    }
+
+    log(`E6 request accepted. State=${e6StateName(state)}`);
+
+    const startTime = Date.now();
+    const TIMEOUT = 30000;
+    let currentState = state;
+
+    while (currentState !== 0x03 && currentState !== 0x04) {
+      if (Date.now() - startTime > TIMEOUT) {
+        throw Error('E6 refresh timeout');
+      }
+
+      await sleep(500);
+
+      await keepaliveE4(true);
+
+      const pollRes = await request(
+        Uint8Array.of(0xE6, 0x01, transferId),
+        a => a[0] === 0xE6 && a[1] === 0x81 && a[3] === transferId
+      );
+
+      const pollCode = pollRes[2];
+      const pollState = pollRes[4];
+
+      $('e6Code').textContent = e6CodeName(pollCode);
+      $('e6State').textContent = e6StateName(pollState);
+
+      if (pollCode !== 0x00) {
+        throw Error(`E6 poll error: code=${e6CodeName(pollCode)}`);
+      }
+
+      if (pollState !== currentState) {
+        log(`E6 state changed: ${e6StateName(currentState)} -> ${e6StateName(pollState)}`);
+        currentState = pollState;
+      }
+    }
+
+    if (currentState === 0x03) {
+      $('e6Result').textContent = 'COMPLETE';
+      $('e6Result').className = 'ok';
+      log('E6 One-Shot Refresh Completed Successfully!', 'PASS');
+    } else {
+      throw Error('E6 refresh completed with ERROR state');
+    }
+
+  } catch (err) {
+    $('e6Result').textContent = 'ERROR';
+    $('e6Result').className = 'bad';
+    log(`E6 Error: ${err.message}`, 'ERROR');
+    alert(err.message);
+  } finally {
+    e6Running = false;
+    controls();
+  }
 }
 
 async function safe(fn){
@@ -532,6 +650,7 @@ $('repack').onclick=repack;
 $('connect').onclick=()=>safe(connect);
 $('disconnect').onclick=()=>device?.gatt?.disconnect();
 $('send').onclick=()=>safe(sendFramebuffer);
+$('refresh').onclick=()=>safe(refreshPanel);
 $('clearLog').onclick=()=>{$('log').value=''};
 
 clearWhite();
