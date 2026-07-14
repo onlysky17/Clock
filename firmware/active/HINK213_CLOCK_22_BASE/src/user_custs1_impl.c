@@ -111,6 +111,7 @@ static uint16_t hink_e5_crc;
 
 static uint8_t hink_e6_state             __SECTION_ZERO("retention_mem_area0");
 static uint8_t hink_e6_transfer_id       __SECTION_ZERO("retention_mem_area0");
+static uint8_t hink_e6_panel_latched     __SECTION_ZERO("retention_mem_area0");
 static timer_hnd hink_e6_timer_hnd       __SECTION_ZERO("retention_mem_area0");
 
 static void hink_e6_timer_cb(void);
@@ -851,6 +852,10 @@ static void epd_wait_timer(void)
 
 void QR_draw()
 {
+	if(hink_e6_panel_latched){
+		return;
+	}
+
 	// æ­¤å¤„æ·»åŠ QRç ç»˜åˆ¶é€»è¾‘
 	epd_hw_open();
 
@@ -879,6 +884,10 @@ void QR_draw()
 
 void LB_draw()
 {
+	if(hink_e6_panel_latched){
+		return;
+	}
+
 	// æ­¤å¤„æ·»åŠ ä½Žç”µåŽ‹ç çš„ç»˜åˆ¶é€»è¾‘
 	epd_hw_open();
 
@@ -917,6 +926,10 @@ void clock_draw(int flags)
 {
 	char tbuf[64];
 	LAYOUT *lt = &layouts[current_layout];
+
+	if(hink_e6_panel_latched){
+		return;
+	}
 
 	if(ota_state){
 		return;
@@ -1400,6 +1413,9 @@ static void hink_e6_timer_cb(void)
         return;
     }
 
+    hink_e6_state = HINK_E6_STATE_REFRESHING;
+    hink_e6_panel_latched = 1U;
+
     epd_hw_open();
     epd_update_mode(UPDATE_FULL);
     epd_init();
@@ -1547,6 +1563,11 @@ static void hink_e6_session_cleanup(void)
     }
     else if (hink_e6_state == HINK_E6_STATE_COMPLETE || hink_e6_state == HINK_E6_STATE_ERROR)
     {
+        if (hink_e6_timer_hnd != EASY_TIMER_INVALID_TIMER)
+        {
+            app_easy_timer_cancel(hink_e6_timer_hnd);
+            hink_e6_timer_hnd = EASY_TIMER_INVALID_TIMER;
+        }
         hink_e6_state = HINK_E6_STATE_IDLE;
         hink_e6_transfer_id = 0U;
     }
