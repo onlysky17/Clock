@@ -10,10 +10,8 @@
 int fb_w;
 int fb_h;
 
-/* HINK-E0213A41/A55 104x212 BW: 104/8*212 = 2756 */
-#define FB_SIZE 2756
-u8 fb_bw[FB_SIZE];
-u8 fb_rr[FB_SIZE];
+/* HINK-E0213A53 physical override: 122x250 controller RAM, 16*250 = 4000. */
+u8 fb_bw[EPD_FRAME_BYTES];
 
 /******************************************************************************/
 

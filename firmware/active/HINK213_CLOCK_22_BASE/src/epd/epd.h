@@ -124,7 +124,10 @@ extern int win_h;
 extern int fb_w;
 extern int fb_h;
 
-extern u8 fb_bw[];
-extern u8 fb_rr[];
+#define EPD_FRAME_WIDTH   122
+#define EPD_FRAME_HEIGHT  250
+#define EPD_FRAME_STRIDE  16
+#define EPD_FRAME_BYTES   (EPD_FRAME_STRIDE * EPD_FRAME_HEIGHT)
 
-
+extern u8 fb_bw[EPD_FRAME_BYTES];
+#define fb_rr fb_bw
