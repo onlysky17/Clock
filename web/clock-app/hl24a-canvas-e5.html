@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TASK D2C - Device Time Sync Controls</title>
+<title>TASK D2D - Device Clock Renderer</title>
 <style>
 :root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;--bg:#07101b;--card:#111c2c;--line:#2a3d59;--text:#f4f8ff;--muted:#9fb1c8;--ok:#45d99c;--warn:#ffd166;--bad:#ff6b86}
 *{box-sizing:border-box}body{margin:0;background:linear-gradient(#050a12,#101a2a);color:var(--text)}main{max-width:1040px;margin:auto;padding:20px}
@@ -21,8 +21,8 @@ small{color:var(--muted)}
 </style>
 </head>
 <body><main>
-<div class="badge">TASK D2C • DEVICE TIME SYNC • HINK213 BW</div>
-<h1>250×122 Clock Preview → D2 Device Time + E5/E6 Panel Sync</h1>
+<div class="badge">TASK D2D • DEVICE CLOCK RENDERER • HINK213 BW</div>
+<h1>250×122 Clock → Device-Time Render + E5/E6 Tools</h1>
 <p>Preview hiển thị theo hướng panel thật. Payload gửi RAM controller 122×250, 16 byte/dòng, 4000 byte.</p>
 
 <section class="card">
@@ -86,8 +86,10 @@ small{color:var(--muted)}
 <div class="row">
 <button id="d2SetTime" class="primary">Gửi giờ xuống thiết bị</button>
 <button id="d2GetStatus">Đọc trạng thái giờ</button>
+<button id="d2RenderClock" class="good">Vẽ giờ từ thiết bị lên màn</button>
 </div>
 <p>D2: <strong id="d2StatusText" class="warn" aria-live="polite">DISCONNECTED</strong></p>
+<p>D2 render: <strong id="d2RenderStatus" class="warn" aria-live="polite">NOT RUN</strong></p>
 <div class="grid" style="margin-top:12px">
 <div class="stat"><span>Result</span><strong id="d2Result">-</strong></div>
 <div class="stat"><span>State</span><strong id="d2State">-</strong></div>
@@ -97,7 +99,7 @@ small{color:var(--muted)}
 <div class="stat"><span>Flags</span><strong id="d2Flags">-</strong></div>
 <div class="stat"><span>Uptime seconds</span><strong id="d2Uptime">-</strong></div>
 </div>
-<p><small>D2 chỉ đồng bộ state giờ RAM trong firmware. Không gửi E5, không refresh E6, không vẽ lại preview.</small></p>
+<p><small>D2 SET/GET chỉ đồng bộ state giờ RAM trong firmware. D2 render yêu cầu firmware tự vẽ từ giờ RAM và refresh panel, không gửi E5 và không vẽ lại preview.</small></p>
 </section>
 
 <section class="card">
@@ -174,13 +176,21 @@ const d2ResultName=value=>({
   0x02:'INVALID_FLAGS',
   0x03:'INVALID_TIME_RANGE',
   0x04:'NOT_INITIALIZED',
-  0x05:'INTERNAL_ERROR'
+  0x05:'INTERNAL_ERROR',
+  0x06:'BUSY'
 }[value]||`UNKNOWN_${value}`);
 const d2StateName=value=>({
   0x00:'UNSET',
   0x01:'SYNCED',
   0x02:'RUNNING',
   0x03:'STALE'
+}[value]||`UNKNOWN_${value}`);
+const d2RenderStateName=value=>({
+  0x00:'IDLE',
+  0x01:'ACCEPTED',
+  0x02:'RENDERING',
+  0x03:'COMPLETE',
+  0x04:'ERROR'
 }[value]||`UNKNOWN_${value}`);
 
 function log(message,tag=''){
@@ -408,6 +418,7 @@ function controls(){
   $('autoSync').disabled=locked;
   $('d2SetTime').disabled=!connected||locked;
   $('d2GetStatus').disabled=!connected||locked;
+  $('d2RenderClock').disabled=!connected||locked;
   $('refresh').disabled=!connected||!token||!e5Complete||locked;
 
   $('clearWhite').disabled=locked;
@@ -455,7 +466,7 @@ async function checkAutoSyncMinute(){
     stopAutoSync('Lỗi, đã tắt Auto sync','bad');
     return;
   }
-  if(busy||e6Running||oneTapRunning)return;
+  if(busy||e6Running||oneTapRunning||d2Running)return;
 
   const currentMinuteKey=minuteKey();
   if(currentMinuteKey===autoArmedMinuteKey||currentMinuteKey===lastAutoSentMinuteKey){
@@ -486,6 +497,8 @@ function resetD2UiDisconnected(){
   $('d2Timezone').textContent='-';
   $('d2Flags').textContent='-';
   $('d2Uptime').textContent='-';
+  $('d2RenderStatus').textContent='NOT RUN';
+  $('d2RenderStatus').className='warn';
 }
 
 function toggleAutoSync(){
@@ -562,6 +575,10 @@ function buildD2GetStatusPacket(){
   return Uint8Array.of(0xD2,0x01);
 }
 
+function buildD2RenderClockPacket(){
+  return Uint8Array.of(0xD2,0x02);
+}
+
 function parseD2Status(bytes){
   if(bytes.length!==15||bytes[0]!==0xD2||bytes[1]!==0x81){
     throw Error(`Unknown D2 response: ${hex(bytes)}`);
@@ -576,6 +593,13 @@ function parseD2Status(bytes){
     flags:bytes[10],
     uptime:u32(bytes[11],bytes[12],bytes[13],bytes[14])
   };
+}
+
+function parseD2RenderStatus(bytes){
+  if(bytes.length!==4||bytes[0]!==0xD2||bytes[1]!==0x82){
+    throw Error(`Unknown D2 render response: ${hex(bytes)}`);
+  }
+  return{result:bytes[2],state:bytes[3]};
 }
 
 function renderDeviceLocalTime(epoch,timezone){
@@ -599,9 +623,19 @@ function renderD2Status(status){
 function handleD2Notify(bytes){
   if(bytes[0]!==0xD2)return;
   try{
-    const status=parseD2Status(bytes);
-    renderD2Status(status);
-    log(`D2 status result=${d2ResultName(status.result)} state=${d2StateName(status.state)} epoch=${status.epoch} tz=${status.timezone} uptime=${status.uptime}`,'D2');
+    if(bytes[1]===0x81){
+      const status=parseD2Status(bytes);
+      renderD2Status(status);
+      log(`D2 status result=${d2ResultName(status.result)} state=${d2StateName(status.state)} epoch=${status.epoch} tz=${status.timezone} uptime=${status.uptime}`,'D2');
+    }else if(bytes[1]===0x82){
+      const status=parseD2RenderStatus(bytes);
+      const complete=status.result===0x00&&status.state===0x03;
+      $('d2RenderStatus').textContent=`${d2ResultName(status.result)} / ${d2RenderStateName(status.state)}`;
+      $('d2RenderStatus').className=complete?'ok':(status.result===0x00?'warn':'bad');
+      log(`D2 render result=${d2ResultName(status.result)} state=${d2RenderStateName(status.state)}`,'D2');
+    }else{
+      log(`Unknown D2 response: ${hex(bytes)}`,'D2');
+    }
   }catch(error){
     log(error.message,'D2');
   }
@@ -693,6 +727,36 @@ async function d2GetTimeStatus(){
     {timeout:2500}
   );
   parseD2Status(response);
+}
+
+async function d2RenderClockFromDevice(){
+  $('d2RenderStatus').textContent='REQUESTING';
+  $('d2RenderStatus').className='warn';
+  const accepted=parseD2RenderStatus(await request(
+    buildD2RenderClockPacket(),
+    a=>a[0]===0xD2&&a[1]===0x82,
+    {timeout:2500}
+  ));
+  if(accepted.result!==0x00||accepted.state!==0x01){
+    throw Error(`D2 render rejected: ${d2ResultName(accepted.result)} / ${d2RenderStateName(accepted.state)}`);
+  }
+
+  const deadline=Date.now()+30000;
+  while(Date.now()<deadline){
+    const status=parseD2RenderStatus(await waitFor(
+      a=>a[0]===0xD2&&a[1]===0x82,
+      deadline-Date.now()
+    ));
+    if(status.result!==0x00||status.state===0x04){
+      throw Error(`D2 render error: ${d2ResultName(status.result)} / ${d2RenderStateName(status.state)}`);
+    }
+    if(status.state===0x03){
+      $('d2RenderStatus').textContent='OK / COMPLETE';
+      $('d2RenderStatus').className='ok';
+      return;
+    }
+  }
+  throw Error('D2 render timeout');
 }
 
 async function keepaliveE4(quiet=true){
@@ -981,6 +1045,7 @@ $('refresh').onclick=()=>safe(refreshPanel);
 $('syncClock').onclick=()=>safe(syncClockToPanel);
 $('d2SetTime').onclick=()=>runD2Flow(d2SetCurrentTime);
 $('d2GetStatus').onclick=()=>runD2Flow(d2GetTimeStatus);
+$('d2RenderClock').onclick=()=>runD2Flow(d2RenderClockFromDevice);
 $('autoSync').onchange=toggleAutoSync;
 $('clearLog').onclick=()=>{$('log').value=''};
 
@@ -988,7 +1053,7 @@ clearWhite();
 drawCurrentClock();
 resetD2UiDisconnected();
 controls();
-log('TASK D2C ready. D2 controls sync device RAM time only; panel refresh remains manual E5/E6.');
+log('TASK D2D ready. D2 controls sync device RAM time; D2 render asks firmware to draw and refresh from that time.');
 </script>
 </body>
 </html>
