@@ -39,29 +39,21 @@ Goal:
 
 ## Current implementation task
 
-TASK D2B — Firmware time state + D2 command handler
+TASK D2D — DEVICE CLOCK RENDER COMMAND
 
-D2B status:
-- Firmware handler implemented in canonical source.
-- Time state is RAM-only.
-- No panel refresh.
-- No SPI/flash writes.
-- E5/E6 unchanged.
+D2D scope:
+- Add manual `D2 02 RENDER_CLOCK_NOW`.
+- Firmware renders from RAM-only D2 epoch/timezone state.
+- Firmware draws into existing `fb_bw` and performs one physical refresh from an application timer callback.
+- Web adds a manual "Vẽ giờ từ thiết bị lên màn" button and parses `D2 82` render status.
+- No automatic minute refresh yet.
+- E5/E6 transfer contracts remain unchanged.
+- Legacy QR and low-battery visual redraw paths are disabled as an accepted size tradeoff; current HINK213 clock-panel flow is unaffected.
 
 Validation still required outside Codex:
 - Sync canonical source to SDK.
-- Run one Keil rebuild.
-- Load SysRAM or next packed test image only after build result is reviewed.
-
-## Next implementation task
-
-TASK D2C — Web time sync controls
-
-D2C scope:
-- Add web controls to send `D2 00 SET_TIME`.
-- Add status display using `D2 01 GET_TIME_STATUS`.
-- Do not add device-side auto panel clock yet.
-- Keep existing D1 web E5/E6 flow intact.
+- Run one Keil rebuild and confirm raw size still fits the packer limit.
+- Test through canonical URL after flashing/loading the D2D build.
 
 Later tasks:
-- D2D — Device-side minute renderer: firmware refreshes clock by minute after refresh policy and battery review.
+- D2E — Device-side auto minute render policy after D2D size and physical behavior are verified.

@@ -116,6 +116,8 @@ static timer_hnd hink_e6_timer_hnd       __SECTION_ZERO("retention_mem_area0");
 #define HINK_D2_SET_TIME_LEN        9U
 #define HINK_D2_GET_STATUS_LEN      2U
 #define HINK_D2_STATUS_LEN          15U
+#define HINK_D2_RENDER_LEN          2U
+#define HINK_D2_RENDER_STATUS_LEN   4U
 #define HINK_D2_EPOCH_MIN           1704067200UL
 #define HINK_D2_EPOCH_MAX           4102444799UL
 #define HINK_D2_STALE_SECONDS       86400UL
@@ -127,19 +129,30 @@ static timer_hnd hink_e6_timer_hnd       __SECTION_ZERO("retention_mem_area0");
 #define HINK_D2_RESULT_INVALID_TIME   0x03U
 #define HINK_D2_RESULT_NOT_INIT       0x04U
 #define HINK_D2_RESULT_INTERNAL       0x05U
+#define HINK_D2_RESULT_BUSY           0x06U
 
 #define HINK_D2_STATE_UNSET   0x00U
 #define HINK_D2_STATE_SYNCED  0x01U
 #define HINK_D2_STATE_RUNNING 0x02U
 #define HINK_D2_STATE_STALE   0x03U
 
+#define HINK_D2_RENDER_IDLE      0x00U
+#define HINK_D2_RENDER_ACCEPTED  0x01U
+#define HINK_D2_RENDER_RENDERING 0x02U
+#define HINK_D2_RENDER_COMPLETE  0x03U
+#define HINK_D2_RENDER_ERROR     0x04U
+
 static uint32_t hink_d2_uptime_seconds     __SECTION_ZERO("retention_mem_area0");
 static uint32_t hink_d2_synced_epoch       __SECTION_ZERO("retention_mem_area0");
 static uint32_t hink_d2_uptime_at_sync     __SECTION_ZERO("retention_mem_area0");
 static int16_t hink_d2_timezone_minutes    __SECTION_ZERO("retention_mem_area0");
 static uint8_t hink_d2_flags               __SECTION_ZERO("retention_mem_area0");
+static uint8_t hink_d2_render_state        __SECTION_ZERO("retention_mem_area0");
 
 static void hink_e6_timer_cb(void);
+static void hink_d2_render_timer_cb(void);
+static void hink_d2_render_notify(uint8_t result, uint8_t state);
+static uint8_t hink_d2_render_handle(struct custs1_val_write_ind const *param);
 
 static void get_holiday(void);
 static void hink_e4_arm_timer(void);
@@ -243,6 +256,7 @@ int cal_minute=-1;
 
 
 //GUIQRLB
+#if 0
 // æ¥è‡ª pic.py è‡ªåŠ¨ç”Ÿæˆçš„ C æ•°ç»„
 const unsigned char QR_31x31[31][4] = {
     {0x00, 0x00, 0x00, 0x00},
@@ -312,6 +326,8 @@ const unsigned char LB_31x31[31][4] = {
     {0x00, 0x00, 0x00, 0x00},
 };
 
+
+#endif
 
 /**
  * èŽ·å–å†œåŽ†æœˆä»½çš„å¤©æ•°
@@ -833,13 +849,19 @@ static void epd_wait_timer(void)
         if (hink_e6_state == HINK_E6_STATE_REFRESHING) {
             hink_e6_state = HINK_E6_STATE_COMPLETE;
         }
+        if (hink_d2_render_state == HINK_D2_RENDER_RENDERING) {
+            hink_d2_render_state = HINK_D2_RENDER_COMPLETE;
+            hink_d2_render_notify(HINK_D2_RESULT_OK, HINK_D2_RENDER_COMPLETE);
+        }
     }
 }
 
 
 void QR_draw()
 {
-	if(hink_e6_state >= HINK_E6_STATE_REFRESHING){
+	return;
+#if 0
+    if(hink_e6_state >= HINK_E6_STATE_REFRESHING && hink_d2_render_state != HINK_D2_RENDER_RENDERING){
 		return;
 	}
 
@@ -867,10 +889,13 @@ void QR_draw()
 	// æ›´æ–°æ—¶å¦‚æžœæ·±åº¦ä¼‘çœ ï¼Œä¼šèŠ±å±ã€‚ è¿™é‡Œæš‚æ—¶å…³é—­ä¼‘çœ ã€‚
 	arch_set_sleep_mode(ARCH_SLEEP_OFF);
 	epd_wait_hnd = app_easy_timer(40, epd_wait_timer);
+#endif
 }
 
 void LB_draw()
 {
+	return;
+#if 0
 	if(hink_e6_state >= HINK_E6_STATE_REFRESHING){
 		return;
 	}
@@ -892,6 +917,7 @@ void LB_draw()
 	// æ›´æ–°æ—¶å¦‚æžœæ·±åº¦ä¼‘çœ ï¼Œä¼šèŠ±å±ã€‚ è¿™é‡Œæš‚æ—¶å…³é—­ä¼‘çœ ã€‚
 	arch_set_sleep_mode(ARCH_SLEEP_OFF);
 	epd_wait_hnd = app_easy_timer(40, epd_wait_timer);
+#endif
 }
 
 /**
@@ -1157,6 +1183,11 @@ static uint8_t hink_d2_time_handle(struct custs1_val_write_ind const *param)
         goto notify_state;
     }
 
+    if (subcmd == 0x02U)
+    {
+        return hink_d2_render_handle(param);
+    }
+
     if (subcmd == 0x01U)
     {
         if (param->length != HINK_D2_GET_STATUS_LEN)
@@ -1189,6 +1220,124 @@ notify_state:
     msg[10] = hink_d2_flags;
     hink_put_u32_le(&msg[11], uptime);
     hink_e4_notify_bytes(msg, HINK_D2_STATUS_LEN);
+    return 1U;
+}
+
+static void hink_d2_render_notify(uint8_t result, uint8_t state)
+{
+    uint8_t msg[HINK_D2_RENDER_STATUS_LEN];
+    msg[0] = 0xD2;
+    msg[1] = 0x82;
+    msg[2] = result;
+    msg[3] = state;
+    hink_e4_notify_bytes(msg, HINK_D2_RENDER_STATUS_LEN);
+}
+
+static void hink_d2_render_timer_cb(void)
+{
+    uint32_t epoch;
+    char tbuf[6];
+    uint8_t h = 0U;
+    uint8_t m = 0U;
+
+    if (hink_d2_render_state != HINK_D2_RENDER_ACCEPTED)
+    {
+        return;
+    }
+
+    epoch = hink_d2_current_epoch();
+    if (hink_d2_timezone_minutes >= 0)
+    {
+        epoch += (uint32_t)hink_d2_timezone_minutes * 60UL;
+    }
+    else
+    {
+        epoch -= (uint32_t)(-hink_d2_timezone_minutes) * 60UL;
+    }
+    while (epoch >= 86400UL)
+    {
+        epoch -= 86400UL;
+    }
+    while (epoch >= 3600UL)
+    {
+        epoch -= 3600UL;
+        h++;
+    }
+    while (epoch >= 60UL)
+    {
+        epoch -= 60UL;
+        m++;
+    }
+    hour = h;
+    minute = m;
+    second = (int)epoch;
+
+    hink_d2_render_state = HINK_D2_RENDER_RENDERING;
+    hink_d2_render_notify(HINK_D2_RESULT_OK, HINK_D2_RENDER_RENDERING);
+
+    memset(fb_bw, 0xff, scr_h * line_bytes);
+    sprintf(tbuf, "%02d:%02d", h, m);
+    select_font(layouts[current_layout].font_dseg);
+    draw_text(layouts[current_layout].x[3], layouts[current_layout].y[3], tbuf, BLACK);
+
+    epd_hw_open();
+    epd_update_mode(UPDATE_FULL);
+    epd_init();
+    epd_screen_update();
+    epd_update();
+    arch_set_sleep_mode(ARCH_SLEEP_OFF);
+    epd_wait_hnd = app_easy_timer(40, epd_wait_timer);
+
+    if (epd_wait_hnd == EASY_TIMER_INVALID_TIMER)
+    {
+        hink_d2_render_state = HINK_D2_RENDER_ERROR;
+        hink_d2_render_notify(HINK_D2_RESULT_INTERNAL, HINK_D2_RENDER_ERROR);
+        epd_cmd1(0x10, 0x01);
+        epd_power(0);
+        epd_hw_close();
+        arch_set_sleep_mode(ARCH_EXT_SLEEP_ON);
+    }
+}
+
+static uint8_t hink_d2_render_handle(struct custs1_val_write_ind const *param)
+{
+    timer_hnd hnd;
+
+    if (param->length != HINK_D2_RENDER_LEN)
+    {
+        hink_d2_render_notify(HINK_D2_RESULT_INVALID_LENGTH, hink_d2_render_state);
+        return 1U;
+    }
+
+    if (hink_d2_synced_epoch == 0UL)
+    {
+        hink_d2_render_notify(HINK_D2_RESULT_NOT_INIT, HINK_D2_RENDER_IDLE);
+        return 1U;
+    }
+
+    if ((hink_e5_state == HINK_E5_STATE_ACTIVE) ||
+        (hink_e6_state == HINK_E6_STATE_ACCEPTED_PENDING) ||
+        (hink_e6_state == HINK_E6_STATE_REFRESHING) ||
+        (hink_d2_render_state == HINK_D2_RENDER_ACCEPTED) ||
+        (hink_d2_render_state == HINK_D2_RENDER_RENDERING) ||
+        (epd_wait_hnd != EASY_TIMER_INVALID_TIMER))
+    {
+        hink_d2_render_notify(HINK_D2_RESULT_BUSY, hink_d2_render_state);
+        return 1U;
+    }
+
+    hink_d2_render_state = HINK_D2_RENDER_ACCEPTED;
+    hnd = app_easy_timer(5, hink_d2_render_timer_cb);
+    if (hnd == EASY_TIMER_INVALID_TIMER)
+    {
+        hink_d2_render_state = HINK_D2_RENDER_ERROR;
+        hink_d2_render_notify(HINK_D2_RESULT_INTERNAL, HINK_D2_RENDER_ERROR);
+    }
+    else
+    {
+        hink_d2_render_notify(HINK_D2_RESULT_OK, HINK_D2_RENDER_ACCEPTED);
+    }
+
     return 1U;
 }
 
