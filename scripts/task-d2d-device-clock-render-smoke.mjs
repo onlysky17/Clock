@@ -43,7 +43,7 @@ function functionBody(source, name) {
 
 const renderHandler = functionBody(firmware, 'hink_d2_render_handle');
 const renderTimer = functionBody(firmware, 'hink_d2_render_timer_cb');
-const clockDraw = functionBody(firmware, 'clock_draw');
+const waitTimer = functionBody(firmware, 'epd_wait_timer');
 const d2WebFlow = functionBody(web, 'd2RenderClockFromDevice');
 
 assert(/#define\s+HINK_D2_RENDER_LEN\s+2U/.test(firmware), 'D2 02 request length must be 2 bytes');
@@ -56,13 +56,24 @@ assert(/HINK_E5_STATE_ACTIVE/.test(renderHandler), 'D2D E5 busy guard missing');
 assert(/HINK_E6_STATE_ACCEPTED_PENDING/.test(renderHandler) && /HINK_E6_STATE_REFRESHING/.test(renderHandler), 'D2D E6 busy guard missing');
 assert(/HINK_D2_RENDER_ACCEPTED/.test(renderHandler) && /HINK_D2_RENDER_RENDERING/.test(renderHandler), 'D2D render re-entry guard missing');
 assert(/app_easy_timer\s*\(\s*5\s*,\s*hink_d2_render_timer_cb\s*\)/.test(renderHandler), 'D2D must schedule application timer');
-assert(/clock_draw\s*\(\s*DRAW_BT\s*\|\s*UPDATE_FULL\s*\)/.test(renderTimer), 'D2D timer must reuse existing clock renderer');
+assert(!/clock_draw\s*\(/.test(renderTimer), 'D2D timer must not call legacy clock_draw');
 assert(/hink_d2_current_epoch\s*\(\s*\)/.test(renderTimer), 'D2D render must use current D2 epoch');
 assert(/hink_d2_timezone_minutes/.test(renderTimer), 'D2D render must use timezone offset');
-assert(/memset\s*\(\s*fb_bw/.test(clockDraw), 'D2D render must use existing fb_bw through clock_draw');
+assert(/hink_d2_render_notify\s*\(\s*HINK_D2_RESULT_OK\s*,\s*HINK_D2_RENDER_RENDERING\s*\)/.test(renderTimer), 'D2D timer must notify RENDERING');
+assert(/memset\s*\(\s*fb_bw\s*,\s*0xff/i.test(renderTimer), 'D2D render must clear fb_bw white');
+assert(!/memset\s*\(\s*fb_rr/.test(renderTimer), 'D2D render must not clear fb_rr');
+assert(/select_font\s*\(/.test(renderTimer) && /draw_text\s*\(/.test(renderTimer), 'D2D render must use linked text drawing primitives');
+assert(/epd_hw_open\s*\(/.test(renderTimer), 'D2D timer must start EPD hardware open');
+assert(/epd_update_mode\s*\(/.test(renderTimer), 'D2D timer must set EPD update mode');
+assert(/epd_init\s*\(/.test(renderTimer), 'D2D timer must initialize EPD');
+assert(/epd_screen_update\s*\(/.test(renderTimer), 'D2D timer must write framebuffer to EPD RAM');
+assert(/epd_update\s*\(/.test(renderTimer), 'D2D timer must trigger EPD update');
+assert(/app_easy_timer\s*\(\s*40\s*,\s*epd_wait_timer\s*\)/.test(renderTimer), 'D2D timer must arm EPD wait timer');
+assert((renderTimer.match(/epd_screen_update\s*\(/g) || []).length === 1, 'D2D timer must have one physical refresh sequence');
+assert(/hink_d2_render_state\s*==\s*HINK_D2_RENDER_RENDERING/.test(waitTimer), 'epd_wait_timer must detect D2D RENDERING');
+assert(/hink_d2_render_notify\s*\(\s*HINK_D2_RESULT_OK\s*,\s*HINK_D2_RENDER_COMPLETE\s*\)/.test(waitTimer), 'epd_wait_timer must notify D2D COMPLETE');
 assert(!/malloc\s*\(/.test(firmware), 'firmware must not use malloc');
 assert(!/hink_d2[^;{]*\[[^\]]*4000|static[^;]*4000/.test(firmware), 'D2D must not add a second framebuffer');
-assert((clockDraw.match(/epd_screen_update\s*\(/g) || []).length === 1, 'D2D reused clock_draw path must call one physical refresh');
 assert(!/hink_e5_framebuffer_handle|sendFramebuffer/.test(renderHandler + renderTimer), 'D2D firmware must not call E5');
 assert(!/hink_d2_set_clock_from_epoch|hink_d2_draw_clock_frame|hink_d2_is_leap/.test(firmware), 'D2D must not keep the removed parallel renderer/calendar table');
 
