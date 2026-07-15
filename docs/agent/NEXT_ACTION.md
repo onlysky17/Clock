@@ -8,6 +8,10 @@ Current final state is closed out:
 - D1A preview giờ thật PASS.
 - D1B one-tap E5 to E6 PASS.
 - D1C auto sync khi phút đổi PASS.
+- D2B RAM-only time handler PASS.
+- D2C web device time controls PASS.
+- D2D device-side clock renderer PASS.
+- D2D persistent SPI PASS.
 
 No immediate recovery action is required.
 
@@ -20,7 +24,16 @@ If continuing development:
 6. Before any future SPI write, verify a fresh backup and a packed image SHA256.
 
 Final firmware image remains local only:
-D:\EINK\Clock\_incoming\TASK_C2J_FINAL_PACKED_256KB.bin
+D:\EINK\Clock\_incoming\TASK_D2D_FINAL_PACKED_256KB.bin
+
+Final D2D image facts:
+- Packed size: 262144 bytes.
+- Packed SHA256: `F9C08469C1267C291EA722818E6A7451773D86C5AA271741BEF113AB2537142B`.
+- Raw canonical build size: 65164 bytes.
+- Packer raw limit: 65528 bytes.
+- D2 time state is RAM-only and is lost after reset/cold boot.
+- After cold boot, use: Connect -> Gửi giờ xuống thiết bị -> Vẽ giờ từ thiết bị lên màn.
+- QR and low-battery legacy visual redraw paths are disabled as an accepted firmware-size tradeoff; current HINK213 clock-panel flow is unaffected.
 
 ## Current protocol design
 
@@ -55,5 +68,5 @@ Validation still required outside Codex:
 - Run one Keil rebuild and confirm raw size still fits the packer limit.
 - Test through canonical URL after flashing/loading the D2D build.
 
-Later tasks:
-- D2E — Device-side auto minute render policy after D2D size and physical behavior are verified.
+Next milestone:
+- D3A — Device auto-minute clock policy/design.

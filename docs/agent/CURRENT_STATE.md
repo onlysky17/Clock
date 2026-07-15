@@ -76,3 +76,41 @@ D2B firmware time handler:
 
 Do not commit `.bin` firmware images. The final `.bin` remains local under:
 D:\EINK\Clock\_incoming
+
+## D2E D2D final persistent state
+
+Current persistent firmware image:
+D:\EINK\Clock\_incoming\TASK_D2D_FINAL_PACKED_256KB.bin
+
+SHA256:
+F9C08469C1267C291EA722818E6A7451773D86C5AA271741BEF113AB2537142B
+
+Verified D2 final state:
+- D2B firmware RAM-only time handler PASS.
+- D2C web device time controls PASS.
+- D2D firmware-rendered clock command PASS.
+- D2D persistent SPI PASS.
+- SPI Burn/Verify PASS.
+- Cold boot PASS.
+- D2 SET_TIME PASS.
+- D2 GET_TIME_STATUS PASS.
+- D2 02 render PASS.
+- D2 82 ACCEPTED -> RENDERING -> COMPLETE.
+- BLE remains connected during render.
+- Firmware renders HH:mm directly into the existing `fb_bw`.
+- D2D does not use E5 transfer and does not call legacy `clock_draw`.
+- No second black refresh.
+
+Build/package facts:
+- Raw canonical build size: 65164 bytes.
+- Packer raw limit: 65528 bytes.
+- Final packed size: 262144 bytes.
+- Final packed SHA256: F9C08469C1267C291EA722818E6A7451773D86C5AA271741BEF113AB2537142B.
+
+Runtime note:
+- D2 time state is still RAM-only and is lost after reset/cold boot.
+- After cold boot, use: Connect -> Gửi giờ xuống thiết bị -> Vẽ giờ từ thiết bị lên màn.
+- QR and low-battery legacy visual redraw paths are disabled as an accepted firmware-size tradeoff; current HINK213 clock-panel flow is unaffected.
+
+Next milestone:
+- TASK D3A — device auto-minute clock policy/design.

@@ -61,3 +61,37 @@ Next proposed milestone:
 - D2A should design epoch/timezone transfer from web to firmware only.
 - D2A should not implement yet, should not auto refresh device-side, and should not modify EPD.
 - D2A must decide data format, persistence, drift handling, and reconnect behavior.
+
+## TASK D2E D2D Final SPI Closeout
+
+- Repo: `D:\EINK\Clock`
+- Canonical web URL: `https://onlysky17.github.io/Clock/test.html`
+- Canonical source: `D:\EINK\Clock\firmware\active\HINK213_CLOCK_22_BASE`
+- Final packed firmware image: `D:\EINK\Clock\_incoming\TASK_D2D_FINAL_PACKED_256KB.bin`
+- Final packed size: `262144` bytes
+- Final packed SHA256: `F9C08469C1267C291EA722818E6A7451773D86C5AA271741BEF113AB2537142B`
+- Raw canonical build size: `65164` bytes
+- Packer raw limit: `65528` bytes
+- Golden full image: `D:\EINK\Clock\tools\packages\HINK213_CLOCK_CONNECT_GOOD_FULL_256KB.bin`
+- Golden SHA256: `C52E3E96CA76B45245FE5457721FFE6163C25C1840D120EB45F398817DA49452`
+- Do not commit `.bin` firmware images.
+
+Verified D2 state:
+- D2B firmware RAM-only time handler PASS.
+- D2C web device time controls PASS.
+- D2D firmware-rendered clock command PASS.
+- D2D persistent SPI PASS after Burn/Verify and cold boot.
+- `D2 00 SET_TIME` PASS.
+- `D2 01 GET_TIME_STATUS` PASS.
+- `D2 02 RENDER_CLOCK_NOW` PASS.
+- `D2 82` sequence: ACCEPTED -> RENDERING -> COMPLETE.
+- BLE stays connected during D2D render.
+- Firmware renders `HH:mm` directly into `fb_bw`.
+- D2D does not use E5 transfer and does not call legacy `clock_draw`.
+- No unintended second black refresh.
+
+Operational notes:
+- Time state is still RAM-only and is lost after reset/cold boot.
+- After cold boot, run: Connect -> Gửi giờ xuống thiết bị -> Vẽ giờ từ thiết bị lên màn.
+- QR and low-battery legacy visual redraw paths are disabled as an accepted firmware-size tradeoff; current HINK213 clock-panel flow is unaffected.
+- Next milestone: `TASK D3A — device auto-minute clock policy/design`.
