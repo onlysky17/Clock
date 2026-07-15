@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TASK D1C - Auto Minute Clock Sync</title>
+<title>TASK D2C - Device Time Sync Controls</title>
 <style>
 :root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;--bg:#07101b;--card:#111c2c;--line:#2a3d59;--text:#f4f8ff;--muted:#9fb1c8;--ok:#45d99c;--warn:#ffd166;--bad:#ff6b86}
 *{box-sizing:border-box}body{margin:0;background:linear-gradient(#050a12,#101a2a);color:var(--text)}main{max-width:1040px;margin:auto;padding:20px}
@@ -21,8 +21,8 @@ small{color:var(--muted)}
 </style>
 </head>
 <body><main>
-<div class="badge">TASK D1C • AUTO MINUTE CLOCK SYNC • HINK213 BW</div>
-<h1>250×122 Clock Preview → Auto E5/E6 Minute Sync</h1>
+<div class="badge">TASK D2C • DEVICE TIME SYNC • HINK213 BW</div>
+<h1>250×122 Clock Preview → D2 Device Time + E5/E6 Panel Sync</h1>
 <p>Preview hiển thị theo hướng panel thật. Payload gửi RAM controller 122×250, 16 byte/dòng, 4000 byte.</p>
 
 <section class="card">
@@ -79,6 +79,25 @@ small{color:var(--muted)}
 <label class="row"><input id="autoSync" type="checkbox"> Tự đồng bộ khi phút đổi</label>
 <p>Auto sync: <strong id="autoStatus" class="warn" aria-live="polite">Auto sync đang tắt</strong></p>
 <p><small>Mặc định tắt. Khi bật, trang chỉ đồng bộ nếu BLE đã kết nối và phút local của browser đổi sang phút mới.</small></p>
+</section>
+
+<section class="card">
+<h2>DEVICE TIME SYNC — D2</h2>
+<div class="row">
+<button id="d2SetTime" class="primary">Gửi giờ xuống thiết bị</button>
+<button id="d2GetStatus">Đọc trạng thái giờ</button>
+</div>
+<p>D2: <strong id="d2StatusText" class="warn" aria-live="polite">DISCONNECTED</strong></p>
+<div class="grid" style="margin-top:12px">
+<div class="stat"><span>Result</span><strong id="d2Result">-</strong></div>
+<div class="stat"><span>State</span><strong id="d2State">-</strong></div>
+<div class="stat"><span>Device epoch UTC</span><strong id="d2Epoch">-</strong></div>
+<div class="stat"><span>Local time</span><strong id="d2LocalTime">-</strong></div>
+<div class="stat"><span>Timezone offset phút</span><strong id="d2Timezone">-</strong></div>
+<div class="stat"><span>Flags</span><strong id="d2Flags">-</strong></div>
+<div class="stat"><span>Uptime seconds</span><strong id="d2Uptime">-</strong></div>
+</div>
+<p><small>D2 chỉ đồng bộ state giờ RAM trong firmware. Không gửi E5, không refresh E6, không vẽ lại preview.</small></p>
 </section>
 
 <section class="card">
@@ -140,12 +159,29 @@ let device=null,server=null,writeChar=null,notifyChar=null,pending=null,busy=fal
 let e6Running=false,e5Success=false,latestFwCrc=null;
 let oneTapRunning=false;
 let autoSyncTimer=0,autoSyncEnabled=false,autoArmedMinuteKey='',lastAutoSentMinuteKey='';
+let d2Running=false;
 
 const hex=a=>[...a].map(v=>v.toString(16).padStart(2,'0').toUpperCase()).join(' ');
 const u16=(lo,hi)=>lo|(hi<<8);
+const u32=(b0,b1,b2,b3)=>((b0>>>0)|(b1<<8)|(b2<<16)|(b3<<24))>>>0;
+const i16=(lo,hi)=>{const value=u16(lo,hi);return value&0x8000?value-0x10000:value};
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const crcHex=value=>value.toString(16).padStart(4,'0').toUpperCase();
 const stateName=value=>['NONE','ACTIVE','COMPLETE'][value]||String(value);
+const d2ResultName=value=>({
+  0x00:'OK',
+  0x01:'INVALID_LENGTH',
+  0x02:'INVALID_FLAGS',
+  0x03:'INVALID_TIME_RANGE',
+  0x04:'NOT_INITIALIZED',
+  0x05:'INTERNAL_ERROR'
+}[value]||`UNKNOWN_${value}`);
+const d2StateName=value=>({
+  0x00:'UNSET',
+  0x01:'SYNCED',
+  0x02:'RUNNING',
+  0x03:'STALE'
+}[value]||`UNKNOWN_${value}`);
 
 function log(message,tag=''){
   $('log').value+=`${new Date().toLocaleTimeString('vi-VN',{hour12:false})} ${tag?`[${tag}] `:''}${message}\n`;
@@ -165,6 +201,11 @@ function setSyncStatus(text,cls='warn'){
 function setAutoStatus(text,cls='warn'){
   $('autoStatus').textContent=text;
   $('autoStatus').className=cls;
+}
+
+function setD2Status(text,cls='warn'){
+  $('d2StatusText').textContent=text;
+  $('d2StatusText').className=cls;
 }
 
 function clearWhite(){
@@ -359,12 +400,14 @@ function addSimpleText(){
 function controls(){
   const connected=!!server?.connected;
   const e5Complete=e5Success && (browserCrc === latestFwCrc);
-  const locked=busy||e6Running||oneTapRunning;
+  const locked=busy||e6Running||oneTapRunning||d2Running;
   $('connect').disabled=connected||locked;
   $('disconnect').disabled=!connected||locked;
   $('send').disabled=!connected||locked;
   $('syncClock').disabled=!connected||locked;
   $('autoSync').disabled=locked;
+  $('d2SetTime').disabled=!connected||locked;
+  $('d2GetStatus').disabled=!connected||locked;
   $('refresh').disabled=!connected||!token||!e5Complete||locked;
 
   $('clearWhite').disabled=locked;
@@ -434,6 +477,17 @@ async function checkAutoSyncMinute(){
   }
 }
 
+function resetD2UiDisconnected(){
+  setD2Status('DISCONNECTED','warn');
+  $('d2Result').textContent='-';
+  $('d2State').textContent='-';
+  $('d2Epoch').textContent='-';
+  $('d2LocalTime').textContent='-';
+  $('d2Timezone').textContent='-';
+  $('d2Flags').textContent='-';
+  $('d2Uptime').textContent='-';
+}
+
 function toggleAutoSync(){
   if($('autoSync').checked){
     startAutoSync();
@@ -481,10 +535,83 @@ async function request(packet,predicate,{timeout=2000,quiet=false}={}){
   return promise;
 }
 
+function putU32LE(packet,offset,value){
+  packet[offset]=value&0xFF;
+  packet[offset+1]=(value>>>8)&0xFF;
+  packet[offset+2]=(value>>>16)&0xFF;
+  packet[offset+3]=(value>>>24)&0xFF;
+}
+
+function putI16LE(packet,offset,value){
+  const encoded=value&0xFFFF;
+  packet[offset]=encoded&0xFF;
+  packet[offset+1]=(encoded>>>8)&0xFF;
+}
+
+function buildD2SetTimePacket(date=new Date()){
+  const packet=new Uint8Array(9);
+  packet[0]=0xD2;
+  packet[1]=0x00;
+  putU32LE(packet,2,Math.floor(date.getTime()/1000));
+  putI16LE(packet,6,-date.getTimezoneOffset());
+  packet[8]=0x02;
+  return packet;
+}
+
+function buildD2GetStatusPacket(){
+  return Uint8Array.of(0xD2,0x01);
+}
+
+function parseD2Status(bytes){
+  if(bytes.length!==15||bytes[0]!==0xD2||bytes[1]!==0x81){
+    throw Error(`Unknown D2 response: ${hex(bytes)}`);
+  }
+  const epoch=u32(bytes[4],bytes[5],bytes[6],bytes[7]);
+  const timezone=i16(bytes[8],bytes[9]);
+  return{
+    result:bytes[2],
+    state:bytes[3],
+    epoch,
+    timezone,
+    flags:bytes[10],
+    uptime:u32(bytes[11],bytes[12],bytes[13],bytes[14])
+  };
+}
+
+function renderDeviceLocalTime(epoch,timezone){
+  if(epoch===0)return '-';
+  const date=new Date((epoch+(timezone*60))*1000);
+  const pad=value=>String(value).padStart(2,'0');
+  return `${date.getUTCFullYear()}-${pad(date.getUTCMonth()+1)}-${pad(date.getUTCDate())} ${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())}`;
+}
+
+function renderD2Status(status){
+  $('d2Result').textContent=`${status.result.toString(16).padStart(2,'0').toUpperCase()} ${d2ResultName(status.result)}`;
+  $('d2State').textContent=`${status.state.toString(16).padStart(2,'0').toUpperCase()} ${d2StateName(status.state)}`;
+  $('d2Epoch').textContent=String(status.epoch);
+  $('d2LocalTime').textContent=renderDeviceLocalTime(status.epoch,status.timezone);
+  $('d2Timezone').textContent=String(status.timezone);
+  $('d2Flags').textContent=`0x${status.flags.toString(16).padStart(2,'0').toUpperCase()}`;
+  $('d2Uptime').textContent=String(status.uptime);
+  setD2Status(status.result===0?'STATUS OK':'STATUS ERROR',status.result===0?'ok':'bad');
+}
+
+function handleD2Notify(bytes){
+  if(bytes[0]!==0xD2)return;
+  try{
+    const status=parseD2Status(bytes);
+    renderD2Status(status);
+    log(`D2 status result=${d2ResultName(status.result)} state=${d2StateName(status.state)} epoch=${status.epoch} tz=${status.timezone} uptime=${status.uptime}`,'D2');
+  }catch(error){
+    log(error.message,'D2');
+  }
+}
+
 function onNotify(event){
   const view=event.target.value;
   const bytes=new Uint8Array(view.buffer.slice(view.byteOffset,view.byteOffset+view.byteLength));
   if(!pending?.quiet)log(`RX: ${hex(bytes)}`);
+  handleD2Notify(bytes);
   if(pending&&pending.predicate(bytes)){
     const item=pending;
     pending=null;
@@ -506,6 +633,7 @@ async function connect(){
     e6Running=false;
     $('ble').textContent='Disconnected';
     stopAutoSync('Auto sync đang tắt');
+    resetD2UiDisconnected();
     log('Disconnected');
   });
   server=await device.gatt.connect();
@@ -515,6 +643,7 @@ async function connect(){
   await notifyChar.startNotifications();
   notifyChar.addEventListener('characteristicvaluechanged',onNotify);
   $('ble').textContent=`Connected: ${device.name||'device'}`;
+  setD2Status('READY','ok');
   controls();
   log(`Connected: ${device.name||'unnamed'}`,'PASS');
 }
@@ -527,6 +656,43 @@ async function openE4(){
   if(response[2]!==0)throw Error(`E4 open failed: ${hex(response)}`);
   token=response[3];
   log(`E4 open token=${token}, timeout=${response[4]}s`,'PASS');
+}
+
+async function runD2Flow(action){
+  if(d2Running||busy||e6Running||oneTapRunning)throw Error('Đang có flow BLE khác chạy.');
+  if(!server?.connected)throw Error('BLE chưa kết nối. Hãy Connect EINK/HINK trước.');
+  d2Running=true;
+  controls();
+  try{
+    setD2Status('RUNNING','warn');
+    await action();
+  }catch(error){
+    setD2Status(`ERROR: ${error.message}`,'bad');
+    log(`D2 error: ${error.message}`,'ERROR');
+    alert(error.message);
+  }finally{
+    d2Running=false;
+    controls();
+  }
+}
+
+async function d2SetCurrentTime(){
+  const packet=buildD2SetTimePacket(new Date());
+  const response=await request(
+    packet,
+    a=>a[0]===0xD2&&a[1]===0x81,
+    {timeout:2500}
+  );
+  parseD2Status(response);
+}
+
+async function d2GetTimeStatus(){
+  const response=await request(
+    buildD2GetStatusPacket(),
+    a=>a[0]===0xD2&&a[1]===0x81,
+    {timeout:2500}
+  );
+  parseD2Status(response);
 }
 
 async function keepaliveE4(quiet=true){
@@ -813,13 +979,16 @@ $('disconnect').onclick=()=>device?.gatt?.disconnect();
 $('send').onclick=()=>safe(sendFramebuffer);
 $('refresh').onclick=()=>safe(refreshPanel);
 $('syncClock').onclick=()=>safe(syncClockToPanel);
+$('d2SetTime').onclick=()=>runD2Flow(d2SetCurrentTime);
+$('d2GetStatus').onclick=()=>runD2Flow(d2GetTimeStatus);
 $('autoSync').onchange=toggleAutoSync;
 $('clearLog').onclick=()=>{$('log').value=''};
 
 clearWhite();
 drawCurrentClock();
+resetD2UiDisconnected();
 controls();
-log('TASK D1C ready. Auto sync is off by default and only runs after the minute changes.');
+log('TASK D2C ready. D2 controls sync device RAM time only; panel refresh remains manual E5/E6.');
 </script>
 </body>
 </html>
