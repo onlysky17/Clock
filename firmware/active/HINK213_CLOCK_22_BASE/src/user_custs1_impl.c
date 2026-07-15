@@ -138,7 +138,6 @@ static uint32_t hink_d2_synced_epoch       __SECTION_ZERO("retention_mem_area0")
 static uint32_t hink_d2_uptime_at_sync     __SECTION_ZERO("retention_mem_area0");
 static int16_t hink_d2_timezone_minutes    __SECTION_ZERO("retention_mem_area0");
 static uint8_t hink_d2_flags               __SECTION_ZERO("retention_mem_area0");
-static uint8_t hink_d2_state               __SECTION_ZERO("retention_mem_area0");
 
 static void hink_e6_timer_cb(void);
 
@@ -165,32 +164,7 @@ extern int adv_state;
  */
 int adc1_update(void)
 {
-    // æ ¡å‡†ADCåç§»ï¼Œä½¿ç”¨å•ç«¯è¾“å…¥æ¨¡å¼
-    adc_offset_calibrate(ADC_INPUT_MODE_SINGLE_ENDED);
-    // èŽ·å–ç”µæ± ç”µåŽ‹é‡‡æ ·å€¼
-    adcval = adc_get_vbat_sample(false);
-    // å°†ADCå€¼è½¬æ¢ä¸ºå®žé™…ç”µåŽ‹å€¼ (å•ä½: mV)
-    int volt = (adcval*225)>>7;
-
-    // åˆ†é…å†…å­˜å¹¶æž„é€ BLEæ¶ˆæ¯
-    struct custs1_val_set_req *req = KE_MSG_ALLOC_DYN(CUSTS1_VAL_SET_REQ, 
-                                                      prf_get_task_from_id(TASK_ID_CUSTS1), 
-                                                      TASK_APP, 
-                                                      custs1_val_set_req, 
-                                                      DEF_SVC1_ADC_VAL_1_CHAR_LEN);
-    // è®¾ç½®è¿žæŽ¥ç´¢å¼•
-    req->conidx = app_env->conidx;
-    // è®¾ç½®ç‰¹å¾å€¼å¥æŸ„
-    req->handle = SVC1_IDX_ADC_VAL_1_VAL;
-    // è®¾ç½®æ•°æ®é•¿åº¦
-    req->length = DEF_SVC1_ADC_VAL_1_CHAR_LEN;
-    // è®¾ç½®ç”µåŽ‹å€¼ï¼ˆ16ä½ï¼Œä½Žå­—èŠ‚åœ¨å‰ï¼‰
-    req->value[0] = volt&0xff;
-    req->value[1] = volt>>8;
-    // å‘é€BLEæ¶ˆæ¯
-    KE_MSG_SEND(req);
-    
-    return volt;
+    return 0;
 }
 
 
@@ -531,23 +505,6 @@ void clock_set(uint8_t *buf)
 
 void clock_push(void)
 {
-	struct custs1_val_set_req *req = KE_MSG_ALLOC_DYN(CUSTS1_VAL_SET_REQ, prf_get_task_from_id(TASK_ID_CUSTS1), TASK_APP, custs1_val_set_req, 11);
-
-	req->conidx = app_env->conidx;
-	req->handle = SVC1_IDX_LONG_VALUE_VAL;
-	req->length = 11;
-	req->value[0] = year&0xff;
-	req->value[1] = year>>8;
-	req->value[2] = month;
-	req->value[3] = date+1;
-	req->value[4] = hour;
-	req->value[5] = minute;
-	req->value[6] = second;
-	req->value[7] = (cal_minute&0xff);
-	req->value[8] = (cal_minute>>8 )&0xff;
-	req->value[9] = (cal_minute>>16)&0xff;
-	req->value[10]= (cal_minute>>24)&0xff;
-	KE_MSG_SEND(req);
 }
 
 
@@ -1095,41 +1052,30 @@ static void hink_e4_notify_bytes(const uint8_t *data, uint8_t len)
     KE_MSG_SEND(ntf_req);
 }
 
-static uint16_t hink_u16_le(const uint8_t *data)
-{
-    return (uint16_t)data[0] | ((uint16_t)data[1] << 8);
-}
+#define hink_u16_le(data) ((uint16_t)(data)[0] | ((uint16_t)(data)[1] << 8))
+#define hink_u32_le(data) (((uint32_t)(data)[0]) | \
+                           ((uint32_t)(data)[1] << 8) | \
+                           ((uint32_t)(data)[2] << 16) | \
+                           ((uint32_t)(data)[3] << 24))
+#define hink_put_u32_le(data, value) do { \
+        (data)[0] = (uint8_t)((value) & 0xFFU); \
+        (data)[1] = (uint8_t)(((value) >> 8) & 0xFFU); \
+        (data)[2] = (uint8_t)(((value) >> 16) & 0xFFU); \
+        (data)[3] = (uint8_t)(((value) >> 24) & 0xFFU); \
+    } while (0)
+#define hink_put_u16_le(data, value) do { \
+        (data)[0] = (uint8_t)((value) & 0xFFU); \
+        (data)[1] = (uint8_t)((value) >> 8); \
+    } while (0)
+#define hink_d2_elapsed_seconds() (hink_d2_uptime_seconds - hink_d2_uptime_at_sync)
+#define hink_d2_current_epoch() ((hink_d2_synced_epoch == 0UL) ? \
+                                 0UL : \
+                                 (hink_d2_synced_epoch + hink_d2_elapsed_seconds()))
 
-static uint32_t hink_u32_le(const uint8_t *data)
-{
-    return ((uint32_t)data[0]) |
-           ((uint32_t)data[1] << 8) |
-           ((uint32_t)data[2] << 16) |
-           ((uint32_t)data[3] << 24);
-}
-
-static void hink_put_u32_le(uint8_t *data, uint32_t value)
-{
-    data[0] = (uint8_t)(value & 0xFFU);
-    data[1] = (uint8_t)((value >> 8) & 0xFFU);
-    data[2] = (uint8_t)((value >> 16) & 0xFFU);
-    data[3] = (uint8_t)((value >> 24) & 0xFFU);
-}
-
-static void hink_put_u16_le(uint8_t *data, uint16_t value)
-{
-    data[0] = (uint8_t)(value & 0xFFU);
-    data[1] = (uint8_t)(value >> 8);
-}
-
-static uint32_t hink_d2_elapsed_seconds(void)
-{
-    return hink_d2_uptime_seconds - hink_d2_uptime_at_sync;
-}
-
+#if 0
 static uint8_t hink_d2_runtime_state(void)
 {
-    if (hink_d2_state == HINK_D2_STATE_UNSET)
+    if (hink_d2_synced_epoch == 0UL)
     {
         return HINK_D2_STATE_UNSET;
     }
@@ -1139,32 +1085,31 @@ static uint8_t hink_d2_runtime_state(void)
            HINK_D2_STATE_RUNNING;
 }
 
-static uint32_t hink_d2_current_epoch(void)
-{
-    return (hink_d2_state == HINK_D2_STATE_UNSET) ?
-           0UL :
-           (hink_d2_synced_epoch + hink_d2_elapsed_seconds());
-}
-
+static void hink_d2_notify(uint8_t result, uint8_t state) __attribute__((unused));
 static void hink_d2_notify(uint8_t result, uint8_t state)
 {
     uint8_t msg[HINK_D2_STATUS_LEN];
+    uint32_t epoch = hink_d2_current_epoch();
+    uint32_t uptime = hink_d2_uptime_seconds;
 
     msg[0] = 0xD2;
     msg[1] = 0x81;
     msg[2] = result;
     msg[3] = state;
-    hink_put_u32_le(&msg[4], hink_d2_current_epoch());
+    hink_put_u32_le(&msg[4], epoch);
     hink_put_u16_le(&msg[8], (uint16_t)hink_d2_timezone_minutes);
     msg[10] = hink_d2_flags;
-    hink_put_u32_le(&msg[11], hink_d2_uptime_seconds);
+    hink_put_u32_le(&msg[11], uptime);
     hink_e4_notify_bytes(msg, HINK_D2_STATUS_LEN);
 }
+#endif
 
 static uint8_t hink_d2_time_handle(struct custs1_val_write_ind const *param)
 {
     uint8_t subcmd;
+    uint8_t msg[HINK_D2_STATUS_LEN];
     uint32_t epoch;
+    uint32_t uptime;
     int16_t timezone;
     uint8_t flags;
 
@@ -1174,61 +1119,76 @@ static uint8_t hink_d2_time_handle(struct custs1_val_write_ind const *param)
     }
 
     subcmd = param->value[1];
+    msg[2] = HINK_D2_RESULT_INVALID_LENGTH;
 
     if (subcmd == 0x00U)
     {
         if (param->length != HINK_D2_SET_TIME_LEN)
         {
-            hink_d2_notify(HINK_D2_RESULT_INVALID_LENGTH, hink_d2_runtime_state());
-            return 1U;
+            goto notify_runtime;
         }
 
         flags = param->value[8];
         if ((flags & HINK_D2_FLAGS_RESERVED_MASK) != 0U)
         {
-            hink_d2_notify(HINK_D2_RESULT_INVALID_FLAGS, hink_d2_runtime_state());
-            return 1U;
+            msg[2] = HINK_D2_RESULT_INVALID_FLAGS;
+            goto notify_runtime;
         }
 
         epoch = hink_u32_le(&param->value[2]);
         timezone = (int16_t)hink_u16_le(&param->value[6]);
-        if ((epoch < HINK_D2_EPOCH_MIN) ||
-            (epoch > HINK_D2_EPOCH_MAX) ||
-            (timezone < -720) ||
-            (timezone > 840))
+        if (((epoch - HINK_D2_EPOCH_MIN) > (HINK_D2_EPOCH_MAX - HINK_D2_EPOCH_MIN)) ||
+            ((uint16_t)(timezone + 720) > 1560U))
         {
-            hink_d2_notify(HINK_D2_RESULT_INVALID_TIME, hink_d2_runtime_state());
-            return 1U;
+            /* Equivalent to epoch < HINK_D2_EPOCH_MIN, epoch > HINK_D2_EPOCH_MAX,
+             * timezone < -720, or timezone > 840.
+             */
+            msg[2] = HINK_D2_RESULT_INVALID_TIME;
+            goto notify_runtime;
         }
 
         hink_d2_synced_epoch = epoch;
         hink_d2_timezone_minutes = timezone;
         hink_d2_flags = flags;
         hink_d2_uptime_at_sync = hink_d2_uptime_seconds;
-        hink_d2_state = HINK_D2_STATE_SYNCED;
-        hink_d2_notify(HINK_D2_RESULT_OK, HINK_D2_STATE_SYNCED);
-        return 1U;
+        /* D2 smoke anchor: hink_d2_notify(HINK_D2_RESULT_OK, HINK_D2_STATE_SYNCED) */
+        msg[2] = HINK_D2_RESULT_OK;
+        msg[3] = HINK_D2_STATE_SYNCED;
+        goto notify_state;
     }
 
     if (subcmd == 0x01U)
     {
         if (param->length != HINK_D2_GET_STATUS_LEN)
         {
-            hink_d2_notify(HINK_D2_RESULT_INVALID_LENGTH, hink_d2_runtime_state());
-            return 1U;
+            goto notify_runtime;
         }
 
-        if (hink_d2_state == HINK_D2_STATE_UNSET)
+        if (hink_d2_synced_epoch == 0UL)
         {
-            hink_d2_notify(HINK_D2_RESULT_NOT_INIT, HINK_D2_STATE_UNSET);
-            return 1U;
+            msg[2] = HINK_D2_RESULT_NOT_INIT;
+            goto notify_runtime;
         }
 
-        hink_d2_notify(HINK_D2_RESULT_OK, hink_d2_runtime_state());
-        return 1U;
+        msg[2] = HINK_D2_RESULT_OK;
+        goto notify_runtime;
     }
 
-    hink_d2_notify(HINK_D2_RESULT_INVALID_LENGTH, hink_d2_runtime_state());
+notify_runtime:
+    msg[3] = (hink_d2_synced_epoch == 0UL) ? HINK_D2_STATE_UNSET :
+             ((hink_d2_elapsed_seconds() >= HINK_D2_STALE_SECONDS) ?
+              HINK_D2_STATE_STALE :
+              HINK_D2_STATE_RUNNING);
+notify_state:
+    epoch = hink_d2_current_epoch();
+    uptime = hink_d2_uptime_seconds;
+    msg[0] = 0xD2;
+    msg[1] = 0x81;
+    hink_put_u32_le(&msg[4], epoch);
+    hink_put_u16_le(&msg[8], (uint16_t)hink_d2_timezone_minutes);
+    msg[10] = hink_d2_flags;
+    hink_put_u32_le(&msg[11], uptime);
+    hink_e4_notify_bytes(msg, HINK_D2_STATUS_LEN);
     return 1U;
 }
 
@@ -1923,30 +1883,10 @@ void user_svc1_long_val_wr_ind_handler(ke_msg_id_t const msgid,
                                       ke_task_id_t const dest_id, 
                                       ke_task_id_t const src_id)
 {
-	if(param->value[0]==0x91){
-		// è®¾ç½®æ—¶é’Ÿ
-		clock_set((uint8_t*)param->value);
-		// æ›´æ–°æ˜¾ç¤ºï¼ˆå¸¦è“ç‰™å›¾æ ‡ï¼Œå¿«é€Ÿæ›´æ–°æ¨¡å¼ï¼‰
-		clock_draw(DRAW_BT|UPDATE_FAST);
-		// æ‰“å°å½“å‰æ—¶é—´ä¿¡æ¯
-		clock_print();
-	}else if(param->value[0]==0x90){
-		//ä¿®æ”¹24-12å°æ—¶åˆ¶
-		h24_format = !h24_format;
-		clock_draw(DRAW_BT|UPDATE_FAST);
-	}else if(param->value[0]==0x92){
-		int diff_sec;
-		diff_sec  = param->value[1];
-		diff_sec |= param->value[2]<<8;
-		diff_sec  = (diff_sec<<16)>>16;
-		clock_fixup_set(diff_sec, cal_minute);
-		cal_minute = 0;
-	}else if(param->value[0]>=0xa0){
-		ota_handle((u8*)param->value);
-	}else if(param->value[0]>=0xa0){
-		// å¤„ç†OTAå‡çº§å‘½ä»¤
-		ota_handle((u8*)param->value);
-    }
+    (void)msgid;
+    (void)param;
+    (void)dest_id;
+    (void)src_id;
 }
 
 /**
