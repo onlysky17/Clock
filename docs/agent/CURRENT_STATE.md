@@ -114,3 +114,27 @@ Runtime note:
 
 Next milestone:
 - TASK D3A — device auto-minute clock policy/design.
+
+## D3A auto-minute policy design
+
+D3A is design-only and does not change firmware or web runtime.
+
+Policy now defined:
+- Time source remains the D2 RAM-only state.
+- Current epoch is derived as synced epoch plus elapsed uptime.
+- BLE connection is not required after SET_TIME.
+- Reset/cold boot returns time to UNSET until SET_TIME.
+- STALE after 24 hours still continues to run and may render.
+- Minute key formula: `floor((current_epoch_utc + timezone_offset_minutes * 60) / 60)`.
+- No duplicate same-minute render.
+- Successful SET_TIME may render once immediately, then waits for the next minute.
+- DAILY_5_MIN is the default physical-refresh cadence.
+- TEST_1_MIN is reserved for physical QA and must not be the cold-boot default.
+- Day rollover forces a refresh.
+- Busy E5/E6/D2D states coalesce to the latest pending minute only.
+- Disconnect BLE does not turn off auto clock.
+- D2 02 manual render remains valid and updates last-rendered minute state.
+- D3B implementation must fit within the approximate 364-byte raw headroom.
+
+Next implementation milestone:
+- TASK D3B — auto-minute scheduler implementation.

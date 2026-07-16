@@ -68,5 +68,21 @@ Validation still required outside Codex:
 - Run one Keil rebuild and confirm raw size still fits the packer limit.
 - Test through canonical URL after flashing/loading the D2D build.
 
+Current design milestone:
+- D3A — Device auto-minute clock policy/design is complete.
+
+D3A policy summary:
+- Use D2 RAM-only time state.
+- Minute key formula: `floor((current_epoch_utc + timezone_offset_minutes * 60) / 60)`.
+- Do not render twice for the same minute.
+- DAILY_5_MIN is the default physical refresh cadence.
+- TEST_1_MIN is reserved for QA only.
+- Day rollover forces refresh.
+- Busy E5/E6/D2D states keep only the latest pending minute.
+- Cold boot remains UNSET until SET_TIME.
+- BLE disconnect does not turn off auto clock.
+- D2 02 manual render remains available and updates last-rendered minute state.
+- D3B must preserve the approximate 364-byte raw headroom and audit map before coding.
+
 Next milestone:
-- D3A — Device auto-minute clock policy/design.
+- D3B — Auto-minute scheduler implementation.
