@@ -50,6 +50,7 @@
 int app_connection_idx                          __SECTION_ZERO("retention_mem_area0"); // è¿žæŽ¥ç´¢å¼•ï¼Œä½¿ç”¨ retention å†…å­˜åŒºåŸŸä¿å­˜
 timer_hnd app_clock_timer_used                  __SECTION_ZERO("retention_mem_area0"); // æ—¶é’Ÿå®šæ—¶å™¨å¥æŸ„ï¼Œretentionå†…å­˜ä¿å­˜
 timer_hnd app_param_update_request_timer_used   __SECTION_ZERO("retention_mem_area0"); // å‚æ•°æ›´æ–°è¯·æ±‚å®šæ—¶å™¨å¥æŸ„ï¼Œretentionå†…å­˜ä¿å­˜
+static timer_hnd hink_d2_adv_restart_timer_hnd  __SECTION_ZERO("retention_mem_area0");
 
 int adv_state = 0;                          // å¹¿æ’­çŠ¶æ€ï¼š0-æœªå¹¿æ’­ï¼Œ1-æ­£åœ¨å¹¿æ’­
 static int otp_btaddr[2];                      // ä»ŽOTPè¯»å–çš„è“ç‰™åœ°å€
@@ -67,6 +68,7 @@ const volatile u32 epd_version[3] = {0xF9A51379, ~0xF9A51379, EPD_VERSION};
 
 extern int year,month; // å½“å‰æ—¶é—´å˜é‡
 extern int second; // å½“å‰ç§’æ•°ï¼Œç”¨äºŽè®¡ç®—åˆ°æ•´åˆ†é’Ÿçš„å‰©ä½™æ—¶é—´
+extern uint8_t hink_d2_dedicated_clock_active(void);
 
 /*
  * å‡½æ•°å®šä¹‰
@@ -179,6 +181,7 @@ void user_app_init(void)
 	printk("\n\nuser_app_init! %s %08x\n", __TIME__, epd_version[2]);
     app_param_update_request_timer_used = EASY_TIMER_INVALID_TIMER;  // åˆå§‹åŒ–å‚æ•°æ›´æ–°å®šæ—¶å™¨
 	app_clock_timer_used = EASY_TIMER_INVALID_TIMER;                 // åˆå§‹åŒ–æ—¶é’Ÿå®šæ—¶å™¨
+    hink_d2_adv_restart_timer_hnd = EASY_TIMER_INVALID_TIMER;
 
 	clock_interval = 60; // æ—¶é’Ÿæ›´æ–°é—´éš”è®¾ç½®ä¸º60ç§’
 	clock_fixup_value = 0; // åˆå§‹åŒ–æ—¶é’Ÿä¿®æ­£å€¼
@@ -334,6 +337,15 @@ void app_clock_timer_restart(void)
 	app_clock_timer_used = app_easy_timer(remaining_seconds*100, app_clock_timer_cb);
 }
 
+void app_clock_timer_stop(void)
+{
+    if (app_clock_timer_used != EASY_TIMER_INVALID_TIMER)
+    {
+        app_easy_timer_cancel(app_clock_timer_used);
+        app_clock_timer_used = EASY_TIMER_INVALID_TIMER;
+    }
+}
+
 
 /**
  ****************************************************************************************
@@ -393,6 +405,15 @@ void user_app_adv_start(void)
 	// å¯åŠ¨å¸¦è¶…æ—¶çš„æ— å‘å¹¿æ’­
 	app_easy_gap_undirected_advertise_with_timeout_start(user_default_hnd_conf.advertise_period, NULL);
 	printk("\nuser_app_adv_start! %s\n", adv_name+2);
+}
+
+static void hink_d2_adv_restart_timer_cb(void)
+{
+    hink_d2_adv_restart_timer_hnd = EASY_TIMER_INVALID_TIMER;
+    if ((app_connection_idx == -1) && (adv_state == 0))
+    {
+        user_app_adv_start();
+    }
 }
 
 
@@ -484,6 +505,19 @@ void user_app_disconnect(struct gapc_disconnect_ind const *param)
 
 	app_connection_idx = -1; // é‡ç½®è¿žæŽ¥ç´¢å¼•ä¸ºæ— æ•ˆå€¼
 	adv_state = 0; // æ ‡è®°ä¸ºæœªå¹¿æ’­
+
+    if (hink_d2_dedicated_clock_active())
+    {
+        if (hink_d2_adv_restart_timer_hnd == EASY_TIMER_INVALID_TIMER)
+        {
+            timer_hnd hnd = app_easy_timer(1, hink_d2_adv_restart_timer_cb);
+            if (hnd != EASY_TIMER_INVALID_TIMER)
+            {
+                hink_d2_adv_restart_timer_hnd = hnd;
+            }
+        }
+        return;
+    }
 
 	// éžè¿œç¨‹ç”¨æˆ·ä¸»åŠ¨æ–­å¼€æ—¶ï¼Œé‡å¯å¹¿æ’­ï¼›å¦åˆ™ä»…åˆ·æ–°å±å¹•
 	if(param->reason!=CO_ERROR_REMOTE_USER_TERM_CON){
