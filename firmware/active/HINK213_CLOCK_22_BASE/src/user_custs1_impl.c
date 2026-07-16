@@ -181,16 +181,26 @@ static timer_hnd epd_wait_hnd;
 static uint32_t hink_auto_last_rendered_minute __SECTION_ZERO("retention_mem_area0");
 static uint32_t hink_auto_pending_minute       __SECTION_ZERO("retention_mem_area0");
 static uint8_t hink_auto_flags                 __SECTION_ZERO("retention_mem_area0");
+static timer_hnd hink_d2_minute_timer_hnd      __SECTION_ZERO("retention_mem_area0");
+static timer_hnd hink_d2_start_timer_hnd       __SECTION_ZERO("retention_mem_area0");
+static uint8_t hink_d2_first_interval_seconds  __SECTION_ZERO("retention_mem_area0");
+static uint8_t hink_d2_timer_flags             __SECTION_ZERO("retention_mem_area0");
+#define HINK_D2_TIMER_ACTIVE 0x01U
+#define HINK_D2_TIMER_FIRST  0x02U
 
 static void hink_e6_timer_cb(void);
 static void hink_d2_render_timer_cb(void);
 static void hink_d2_render_notify(uint8_t result, uint8_t state);
 static uint8_t hink_d2_render_handle(struct custs1_val_write_ind const *param);
 static uint32_t hink_auto_local_minute_key(void);
+static void hink_auto_note_minute(uint32_t auto_minute);
+static void hink_d2_minute_start_cb(void);
+static void hink_d2_minute_timer_cb(void);
 
 static void hink_e4_arm_timer(void);
 
 extern int adv_state;
+extern void app_clock_timer_stop(void);
 /*
  * FUNCTION DEFINITIONS
  ****************************************************************************************
@@ -651,25 +661,16 @@ int clock_update(int inc)
 
     if (inc > 0)
     {
-        hink_d2_uptime_seconds += (uint32_t)inc;
-        if ((hink_d2_synced_epoch != 0UL) &&
-            (hink_auto_flags & HINK_AUTO_FLAG_ENABLED))
+        if ((hink_d2_timer_flags & HINK_D2_TIMER_ACTIVE) == 0U)
         {
-            auto_minute = hink_auto_local_minute_key();
-            if ((auto_minute != hink_auto_last_rendered_minute) &&
-                (((hink_auto_flags & HINK_AUTO_FLAG_PENDING) == 0U) ||
-                 (auto_minute != hink_auto_pending_minute)))
+            hink_d2_uptime_seconds += (uint32_t)inc;
+            if ((hink_d2_synced_epoch != 0UL) &&
+                (hink_auto_flags & HINK_AUTO_FLAG_ENABLED))
             {
-                if ((hink_auto_flags & HINK_AUTO_FLAG_TEST) ||
-                    ((auto_minute % 5UL) == 0UL) ||
-                    ((hink_auto_last_rendered_minute != HINK_AUTO_SENTINEL) &&
-                     ((auto_minute / 1440UL) != (hink_auto_last_rendered_minute / 1440UL))))
-                {
-                    hink_auto_pending_minute = auto_minute;
-                    hink_auto_flags |= HINK_AUTO_FLAG_PENDING;
-                }
+                auto_minute = hink_auto_local_minute_key();
+                hink_auto_note_minute(auto_minute);
+                HINK_AUTO_TRY_SCHEDULE();
             }
-            HINK_AUTO_TRY_SCHEDULE();
         }
     }
 
@@ -1203,7 +1204,7 @@ void clock_draw(int flags)
 	draw_text(lt->x[0], lt->y[0], tbuf, BLACK);
 
 	// æ˜¾ç¤ºå†œåŽ†æ—¥æœŸ(ä¸æ˜¾ç¤ºå¹´)
-	sprintf(tbuf, "AM %02d/%02d", l_date + 1, (l_month & 0x7f) + 1);
+    sprintf(tbuf, "AL %02d/%02d", l_date + 1, (l_month & 0x7f) + 1);
 	draw_text(lt->x[4], lt->y[4], tbuf, BLACK);
 	if(flags&DRAW_BT){
 		draw_text(lt->x[6], lt->y[6], bt_id, BLACK);
@@ -1310,6 +1311,120 @@ static uint32_t hink_auto_local_minute_key(void)
     return local_seconds / 60UL;
 }
 
+static void hink_auto_note_minute(uint32_t auto_minute)
+{
+    if ((auto_minute != hink_auto_last_rendered_minute) &&
+        (((hink_auto_flags & HINK_AUTO_FLAG_PENDING) == 0U) ||
+         (auto_minute != hink_auto_pending_minute)))
+    {
+        if ((hink_auto_flags & HINK_AUTO_FLAG_TEST) ||
+            ((auto_minute % 5UL) == 0UL) ||
+            ((hink_auto_last_rendered_minute != HINK_AUTO_SENTINEL) &&
+             ((auto_minute / 1440UL) != (hink_auto_last_rendered_minute / 1440UL))))
+        {
+            hink_auto_pending_minute = auto_minute;
+            hink_auto_flags |= HINK_AUTO_FLAG_PENDING;
+        }
+    }
+}
+
+static void hink_d2_minute_cancel(void)
+{
+    if (hink_d2_minute_timer_hnd != EASY_TIMER_INVALID_TIMER)
+    {
+        app_easy_timer_cancel(hink_d2_minute_timer_hnd);
+        hink_d2_minute_timer_hnd = EASY_TIMER_INVALID_TIMER;
+    }
+    if (hink_d2_start_timer_hnd != EASY_TIMER_INVALID_TIMER)
+    {
+        app_easy_timer_cancel(hink_d2_start_timer_hnd);
+        hink_d2_start_timer_hnd = EASY_TIMER_INVALID_TIMER;
+    }
+    hink_d2_timer_flags = 0U;
+}
+
+static uint8_t hink_d2_arm_minute_timer(uint8_t seconds)
+{
+    timer_hnd hnd = app_easy_timer((uint32_t)seconds * 100UL, hink_d2_minute_timer_cb);
+    if (hnd == EASY_TIMER_INVALID_TIMER)
+    {
+        hink_d2_timer_flags = 0U;
+        return 0U;
+    }
+    hink_d2_minute_timer_hnd = hnd;
+    return 1U;
+}
+
+uint8_t hink_d2_dedicated_clock_active(void)
+{
+    return (uint8_t)((hink_d2_synced_epoch != 0UL) &&
+                     ((hink_d2_timer_flags & HINK_D2_TIMER_ACTIVE) != 0U));
+}
+
+static void hink_d2_minute_start_cb(void)
+{
+    uint32_t local_seconds;
+    uint8_t second_now;
+
+    hink_d2_start_timer_hnd = EASY_TIMER_INVALID_TIMER;
+    if (hink_d2_synced_epoch == 0UL)
+    {
+        hink_d2_timer_flags = 0U;
+        return;
+    }
+
+    app_clock_timer_stop();
+
+    local_seconds = hink_d2_current_epoch();
+    if (hink_d2_timezone_minutes >= 0)
+    {
+        local_seconds += (uint32_t)hink_d2_timezone_minutes * 60UL;
+    }
+    else
+    {
+        local_seconds -= (uint32_t)(-hink_d2_timezone_minutes) * 60UL;
+    }
+
+    second_now = (uint8_t)(local_seconds % 60UL);
+    hink_d2_first_interval_seconds = (second_now == 0U) ? 60U : (uint8_t)(60U - second_now);
+    hink_d2_timer_flags = HINK_D2_TIMER_ACTIVE | HINK_D2_TIMER_FIRST;
+    hink_d2_arm_minute_timer(hink_d2_first_interval_seconds);
+}
+
+static void hink_d2_minute_timer_cb(void)
+{
+    uint8_t elapsed;
+    uint32_t auto_minute;
+
+    hink_d2_minute_timer_hnd = EASY_TIMER_INVALID_TIMER;
+    if ((hink_d2_synced_epoch == 0UL) ||
+        ((hink_d2_timer_flags & HINK_D2_TIMER_ACTIVE) == 0U))
+    {
+        hink_d2_timer_flags = 0U;
+        return;
+    }
+
+    if (hink_d2_timer_flags & HINK_D2_TIMER_FIRST)
+    {
+        elapsed = hink_d2_first_interval_seconds;
+        hink_d2_timer_flags &= (uint8_t)~HINK_D2_TIMER_FIRST;
+    }
+    else
+    {
+        elapsed = 60U;
+    }
+
+    hink_d2_uptime_seconds += (uint32_t)elapsed;
+    auto_minute = hink_auto_local_minute_key();
+    if (hink_auto_flags & HINK_AUTO_FLAG_ENABLED)
+    {
+        hink_auto_note_minute(auto_minute);
+    }
+
+    hink_d2_arm_minute_timer(60U);
+    HINK_AUTO_TRY_SCHEDULE();
+}
+
 #if 0
 static uint8_t hink_d2_runtime_state(void)
 {
@@ -1350,6 +1465,7 @@ static uint8_t hink_d2_time_handle(struct custs1_val_write_ind const *param)
     uint32_t uptime;
     int16_t timezone;
     uint8_t flags;
+    timer_hnd hnd;
 
     if ((param->length < 2U) || (param->value[0] != 0xD2))
     {
@@ -1389,12 +1505,18 @@ static uint8_t hink_d2_time_handle(struct custs1_val_write_ind const *param)
         hink_d2_timezone_minutes = timezone;
         hink_d2_flags = flags;
         hink_d2_uptime_at_sync = hink_d2_uptime_seconds;
+        hink_d2_minute_cancel();
         hink_auto_last_rendered_minute = HINK_AUTO_SENTINEL;
         hink_auto_pending_minute = hink_auto_local_minute_key();
         hink_auto_flags = HINK_AUTO_FLAG_ENABLED | HINK_AUTO_FLAG_PENDING;
 #if HINK_AUTO_TEST_1_MIN
         hink_auto_flags |= HINK_AUTO_FLAG_TEST;
 #endif
+        hnd = app_easy_timer(1, hink_d2_minute_start_cb);
+        if (hnd != EASY_TIMER_INVALID_TIMER)
+        {
+            hink_d2_start_timer_hnd = hnd;
+        }
         HINK_AUTO_TRY_SCHEDULE();
         /* D2 smoke anchor: hink_d2_notify(HINK_D2_RESULT_OK, HINK_D2_STATE_SYNCED) */
         msg[2] = HINK_D2_RESULT_OK;
@@ -1524,11 +1646,11 @@ static void hink_d2_render_timer_cb(void)
     draw_text(layouts[current_layout].x[0], layouts[current_layout].y[0], tbuf, BLACK);
     if (hink_d3c_lunar_from_solar(sy, sm, sd, &lm, &ld))
     {
-        sprintf(tbuf, "AM %02d/%02d", ld, lm);
+        sprintf(tbuf, "AL %02d/%02d", ld, lm);
     }
     else
     {
-        sprintf(tbuf, "AM --/--");
+        sprintf(tbuf, "AL --/--");
     }
     draw_text(layouts[current_layout].x[4], layouts[current_layout].y[4], tbuf, BLACK);
 
