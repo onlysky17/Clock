@@ -142,6 +142,12 @@ static timer_hnd hink_e6_timer_hnd       __SECTION_ZERO("retention_mem_area0");
 #define HINK_D2_RENDER_COMPLETE  0x03U
 #define HINK_D2_RENDER_ERROR     0x04U
 
+#define HINK_D3C_UNIX_DAY_2024_01_01 19723UL
+#define HINK_D3C_LUNAR_ANCHOR_DAY     40L
+#define HINK_D3C_LUNAR_MIN_YEAR       2024U
+#define HINK_D3C_LUNAR_MAX_YEAR       2051U
+#define HINK_D3C_LUNAR_ANCHOR_YEAR    4U
+
 static uint32_t hink_d2_uptime_seconds     __SECTION_ZERO("retention_mem_area0");
 static uint32_t hink_d2_synced_epoch       __SECTION_ZERO("retention_mem_area0");
 static uint32_t hink_d2_uptime_at_sync     __SECTION_ZERO("retention_mem_area0");
@@ -182,7 +188,6 @@ static void hink_d2_render_notify(uint8_t result, uint8_t state);
 static uint8_t hink_d2_render_handle(struct custs1_val_write_ind const *param);
 static uint32_t hink_auto_local_minute_key(void);
 
-static void get_holiday(void);
 static void hink_e4_arm_timer(void);
 
 extern int adv_state;
@@ -242,22 +247,6 @@ static const uint32_t lunar_year_info2 = 0x48010000;
  * 13-18æœˆï¼šå°æš‘ã€å¤§æš‘ã€ç«‹ç§‹ã€å¤„æš‘ã€ç™½éœ²ã€ç§‹åˆ†
  * 19-24æœˆï¼šå¯’éœ²ã€éœœé™ã€ç«‹å†¬ã€å°é›ªã€å¤§é›ªã€å†¬è‡³
  */
-static int jieqi_info[] =
-{
-    0,        1272283,  2547462,  3828568,  5117483,  6416376,  // å°å¯’åˆ°æ˜¥åˆ†
-    7726093,  9047327,  10379235, 11721860, 13072410, 14428379, // æ¸…æ˜Žåˆ°å¤è‡³
-    15787551, 17145937, 18501082, 19850188, 21190911, 22520708, // å°æš‘åˆ°ç§‹åˆ†
-    23839844, 25146961, 26443845, 27730671, 29010666, 30284551, // å¯’éœ²åˆ°å†¬è‡³
-};
-
-/**
- * 2020å¹´"å°å¯’"èŠ‚æ°”çš„åŸºå‡†æ—¶é—´
- * ç›¸å¯¹äºŽ2020å¹´1æœˆ1æ—¥çš„ç§’æ•°
- * ç”¨äºŽè®¡ç®—å…¶ä»–å¹´ä»½çš„èŠ‚æ°”æ—¶é—´
- */
-#define xiaohan_2020  451804
-
-
 /**
  * å…¨å±€æ—¶é—´å˜é‡å®šä¹‰
  * å…¬åŽ†æ—¥æœŸç›¸å…³å˜é‡ï¼š
@@ -417,38 +406,205 @@ void ldate_inc(void)
 	}
 }
 
+static uint8_t hink_d3c_solar_leap(uint16_t y)
+{
+    return ((y % 4U) == 0U && (((y % 100U) != 0U) || ((y % 400U) == 0U))) ? 1U : 0U;
+}
 
+static uint8_t hink_d3c_solar_mdays(uint16_t y, uint8_t m)
+{
+    static const uint8_t mdays[12] = {31U,28U,31U,30U,31U,30U,31U,31U,30U,31U,30U,31U};
+    return (m == 1U) ? (uint8_t)(mdays[m] + hink_d3c_solar_leap(y)) : mdays[m];
+}
+
+static void hink_d3c_solar_from_day(uint32_t local_day,
+                                    uint16_t *out_year,
+                                    uint8_t *out_month,
+                                    uint8_t *out_day,
+                                    uint8_t *out_wday)
+{
+    uint16_t y = 2024U;
+    uint8_t m = 0U;
+    uint32_t d;
+    uint16_t yd;
+
+    if (local_day < HINK_D3C_UNIX_DAY_2024_01_01)
+    {
+        y = 2023U;
+        d = (uint32_t)(365U - (HINK_D3C_UNIX_DAY_2024_01_01 - local_day));
+    }
+    else
+    {
+        d = local_day - HINK_D3C_UNIX_DAY_2024_01_01;
+        while (1)
+        {
+            yd = (uint16_t)(365U + hink_d3c_solar_leap(y));
+            if (d < yd)
+            {
+                break;
+            }
+            d -= yd;
+            y++;
+        }
+    }
+
+    while (d >= hink_d3c_solar_mdays(y, m))
+    {
+        d -= hink_d3c_solar_mdays(y, m);
+        m++;
+    }
+
+    *out_year = y;
+    *out_month = m;
+    *out_day = (uint8_t)(d + 1U);
+    *out_wday = (uint8_t)((local_day + 4UL) % 7UL);
+}
+
+static uint8_t hink_d3c_lunar_mdays(uint8_t yidx, uint8_t mon, uint8_t leap)
+{
+    uint32_t yinfo = lunar_year_info[yidx];
+    uint8_t days = 29U;
+
+    if (lunar_year_info2 & (1UL << yidx))
+    {
+        yinfo |= 0x10000UL;
+    }
+    if (leap)
+    {
+        if (yinfo & 0x10000UL)
+        {
+            days++;
+        }
+    }
+    else if (yinfo & (0x8000UL >> mon))
+    {
+        days++;
+    }
+    return days;
+}
+
+static void hink_d3c_lunar_next(uint8_t *yidx, uint8_t *mon, uint8_t *day, uint8_t *leap)
+{
+    uint32_t yinfo;
+
+    (*day)++;
+    if (*day <= hink_d3c_lunar_mdays(*yidx, *mon, *leap))
+    {
+        return;
+    }
+
+    *day = 1U;
+    yinfo = lunar_year_info[*yidx];
+    if (lunar_year_info2 & (1UL << *yidx))
+    {
+        yinfo |= 0x10000UL;
+    }
+    if ((*leap == 0U) && ((*mon + 1U) == (uint8_t)(yinfo & 0x0FUL)))
+    {
+        *leap = 1U;
+    }
+    else
+    {
+        *leap = 0U;
+        (*mon)++;
+        if (*mon >= 12U)
+        {
+            *mon = 0U;
+            (*yidx)++;
+        }
+    }
+}
+
+static void hink_d3c_lunar_prev(uint8_t *yidx, uint8_t *mon, uint8_t *day, uint8_t *leap)
+{
+    uint32_t yinfo;
+
+    if (*day > 1U)
+    {
+        (*day)--;
+        return;
+    }
+
+    if (*leap)
+    {
+        *leap = 0U;
+    }
+    else
+    {
+        if (*mon == 0U)
+        {
+            (*yidx)--;
+            *mon = 11U;
+        }
+        else
+        {
+            (*mon)--;
+        }
+        yinfo = lunar_year_info[*yidx];
+        if ((yinfo & 0x0FUL) == (*mon + 1U))
+        {
+            *leap = 1U;
+        }
+    }
+    *day = hink_d3c_lunar_mdays(*yidx, *mon, *leap);
+}
+
+static uint8_t hink_d3c_lunar_from_solar(uint16_t y,
+                                         uint8_t m,
+                                         uint8_t d,
+                                         uint8_t *out_month,
+                                         uint8_t *out_day)
+{
+    uint8_t yidx = HINK_D3C_LUNAR_ANCHOR_YEAR;
+    uint8_t mon = 0U;
+    uint8_t day = 1U;
+    uint8_t leap = 0U;
+    int32_t delta = -HINK_D3C_LUNAR_ANCHOR_DAY;
+    uint16_t yy;
+    uint8_t mm;
+
+    if ((y < HINK_D3C_LUNAR_MIN_YEAR) || (y > HINK_D3C_LUNAR_MAX_YEAR))
+    {
+        return 0U;
+    }
+
+    for (yy = HINK_D3C_LUNAR_MIN_YEAR; yy < y; yy++)
+    {
+        delta += 365 + hink_d3c_solar_leap(yy);
+    }
+    for (mm = 0U; mm < m; mm++)
+    {
+        delta += hink_d3c_solar_mdays(y, mm);
+    }
+    delta += (int32_t)d - 1L;
+
+    while (delta > 0)
+    {
+        hink_d3c_lunar_next(&yidx, &mon, &day, &leap);
+        delta--;
+    }
+    while (delta < 0)
+    {
+        hink_d3c_lunar_prev(&yidx, &mon, &day, &leap);
+        delta++;
+    }
+
+    *out_month = (uint8_t)(mon + 1U);
+    *out_day = day;
+    return 1U;
+}
+
+
+#if 0
 // ç»™å‡ºå¹´æœˆæ—¥ï¼Œè¿”å›žæ˜¯å¦æ˜¯èŠ‚æ°”æ—¥
 int jieqi(int year, int month, int date)
 {
-	uint8_t d2m[12] = {31,28,31,30,31,30,31,31,30,31,30,31};
-	int is_leap = (year%4)? 0 : (year%100)? 1: (year%400)? 0: 1;
-	d2m[1] += is_leap;
-
-	// è®¡ç®—å½“å‰æ—¥æœŸæ˜¯æœ¬å¹´ç¬¬å‡ å¤©
-	int i, d=0;
-	for(i=0; i<month; i++){
-		d += d2m[i];
-	}
-	d += date;
-
-	// è®¡ç®—é—°å¹´çš„å¤©æ•°ã€‚å› ä¸ºåªè€ƒè™‘2020-2052å¹´ï¼Œè¿™é‡Œåšäº†ç®€åŒ–ã€‚
-	int Y = year-2020;
-	int L = (Y)? (Y-1)/4+1 : 0;
-	// è®¡ç®—å½“å¹´å°å¯’çš„ç§’æ•°
-	int xiaohan_sec = xiaohan_2020 + 20950*Y - L*86400;
-	//    20926æ˜¯ä¸€ä¸ªå›žå½’å¹´(365.2422)ä¸è¶³ä¸€å¤©çš„ç§’æ•°(.2422*86400).
-	//    ç›´æŽ¥ç”¨æœ‰æ˜Žæ˜¾çš„è¯¯å·®ã€‚è¿™é‡Œç¨å¾®å¢žå¤§äº†ä¸€ç‚¹(20926+24)ã€‚
-
-	for(i=0; i<24; i++){
-		int sec = xiaohan_sec + jieqi_info[i];
-		int day = sec/86400;
-		if(day==d)
-			return i;
-	}
-
+	(void)year;
+	(void)month;
+	(void)date;
 	return -1;
 }
+#endif
 
 
 /****************************************************************************************/
@@ -538,7 +694,6 @@ int clock_update(int inc)
 			hour = 0;
 			date_inc();
 			ldate_inc();
-			get_holiday();
 			retv = 4;
 		}
 	}
@@ -559,8 +714,6 @@ void clock_set(uint8_t *buf)
 	l_month= buf[10];
 	l_date = buf[11]-1;
 
-	get_holiday();
-
 	cal_minute = 0;
 
 	app_clock_timer_restart();
@@ -579,18 +732,11 @@ void clock_print(void)
 
 /****************************************************************************************/
 
-static char *jieqi_name[] = {
-	"å°å¯’", "å¤§å¯’", "ç«‹æ˜¥", "é›¨æ°´", "æƒŠè›°", "æ˜¥åˆ†",
-	"æ¸…æ˜Ž", "è°·é›¨", "ç«‹å¤", "å°æ»¡", "èŠ’ç§", "å¤è‡³",
-	"å°æš‘", "å¤§æš‘", "ç«‹ç§‹", "å¤„æš‘", "ç™½éœ²", "ç§‹åˆ†",
-	"å¯’éœ²", "éœœé™", "ç«‹å†¬", "å°é›ª", "å¤§é›ª", "å†¬è‡³",
-};
 static char *wday_str[] = {"æ—¥", "ä¸€", "äºŒ", "ä¸‰", "å››", "äº”", "å…­"};
-static char *lday_str_lo[] = {"ä¸€", "äºŒ", "ä¸‰", "å››", "äº”", "å…­", "ä¸ƒ", "å…«", "ä¹", "å", "å†¬", "è…Š", "æ­£"};
-static char *lday_str_hi[] = {"åˆ", "å", "å»¿", "äºŒ", "ä¸‰"};
 
 static int epd_wait_state;
 
+#if 0
 typedef struct {
     char *name;
     uint8_t mon;
@@ -742,6 +888,7 @@ void get_holiday(void)
 
 	return;
 }
+#endif
 
 
 /****************************************************************************************/
@@ -1056,16 +1203,10 @@ void clock_draw(int flags)
 	draw_text(lt->x[0], lt->y[0], tbuf, BLACK);
 
 	// æ˜¾ç¤ºå†œåŽ†æ—¥æœŸ(ä¸æ˜¾ç¤ºå¹´)
-	ldate_str(tbuf);
+	sprintf(tbuf, "AM %02d/%02d", l_date + 1, (l_month & 0x7f) + 1);
 	draw_text(lt->x[4], lt->y[4], tbuf, BLACK);
-	// æ˜¾ç¤ºèŠ‚æ°”
-	if(jieqi_str)
-		draw_text(lt->x[5], lt->y[5], jieqi_str, BLACK);
-	// æ˜¾ç¤ºèŠ‚å‡æ—¥
 	if(flags&DRAW_BT){
 		draw_text(lt->x[6], lt->y[6], bt_id, BLACK);
-	}else if(holiday_str){
-		draw_text(lt->x[6], lt->y[6], holiday_str, BLACK);
 	}
 
 	// å¢¨æ°´å±æ›´æ–°æ˜¾ç¤º
@@ -1314,7 +1455,15 @@ static void hink_d2_render_notify(uint8_t result, uint8_t state)
 static void hink_d2_render_timer_cb(void)
 {
     uint32_t epoch;
-    char tbuf[6];
+    uint32_t local_day;
+    uint32_t day_second;
+    uint16_t sy;
+    uint8_t sm;
+    uint8_t sd;
+    uint8_t sw;
+    uint8_t lm;
+    uint8_t ld;
+    char tbuf[10];
     uint8_t h = 0U;
     uint8_t m = 0U;
 
@@ -1332,23 +1481,26 @@ static void hink_d2_render_timer_cb(void)
     {
         epoch -= (uint32_t)(-hink_d2_timezone_minutes) * 60UL;
     }
-    while (epoch >= 86400UL)
+    local_day = epoch / 86400UL;
+    day_second = epoch - (local_day * 86400UL);
+    hink_d3c_solar_from_day(local_day, &sy, &sm, &sd, &sw);
+    while (day_second >= 3600UL)
     {
-        epoch -= 86400UL;
-    }
-    while (epoch >= 3600UL)
-    {
-        epoch -= 3600UL;
+        day_second -= 3600UL;
         h++;
     }
-    while (epoch >= 60UL)
+    while (day_second >= 60UL)
     {
-        epoch -= 60UL;
+        day_second -= 60UL;
         m++;
     }
     hour = h;
     minute = m;
-    second = (int)epoch;
+    second = (int)day_second;
+    year = sy;
+    month = sm;
+    date = (int)sd - 1;
+    wday = sw;
 
     hink_d2_render_state = HINK_D2_RENDER_RENDERING;
     hink_d2_render_notify(HINK_D2_RESULT_OK, HINK_D2_RENDER_RENDERING);
@@ -1357,6 +1509,28 @@ static void hink_d2_render_timer_cb(void)
     sprintf(tbuf, "%02d:%02d", h, m);
     select_font(layouts[current_layout].font_dseg);
     draw_text(layouts[current_layout].x[3], layouts[current_layout].y[3], tbuf, BLACK);
+    select_font(layouts[current_layout].font_char);
+    switch (sw)
+    {
+        case 1U: tbuf[0] = 'T'; tbuf[1] = '2'; break;
+        case 2U: tbuf[0] = 'T'; tbuf[1] = '3'; break;
+        case 3U: tbuf[0] = 'T'; tbuf[1] = '4'; break;
+        case 4U: tbuf[0] = 'T'; tbuf[1] = '5'; break;
+        case 5U: tbuf[0] = 'T'; tbuf[1] = '6'; break;
+        case 6U: tbuf[0] = 'T'; tbuf[1] = '7'; break;
+        default: tbuf[0] = 'C'; tbuf[1] = 'N'; break;
+    }
+    sprintf(&tbuf[2], " %02d/%02d", sd, sm + 1U);
+    draw_text(layouts[current_layout].x[0], layouts[current_layout].y[0], tbuf, BLACK);
+    if (hink_d3c_lunar_from_solar(sy, sm, sd, &lm, &ld))
+    {
+        sprintf(tbuf, "AM %02d/%02d", ld, lm);
+    }
+    else
+    {
+        sprintf(tbuf, "AM --/--");
+    }
+    draw_text(layouts[current_layout].x[4], layouts[current_layout].y[4], tbuf, BLACK);
 
     epd_hw_open();
     epd_update_mode(UPDATE_FULL);
