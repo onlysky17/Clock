@@ -171,8 +171,10 @@ static timer_hnd epd_wait_hnd;
                           (epd_wait_hnd == EASY_TIMER_INVALID_TIMER))
 #define HINK_AUTO_TRY_SCHEDULE() do { \
         if ((hink_auto_flags & HINK_AUTO_FLAG_PENDING) && HINK_AUTO_IDLE()) { \
+            hink_auto_rendering_minute = hink_auto_pending_minute; \
             hink_d2_render_state = HINK_D2_RENDER_ACCEPTED; \
             if (app_easy_timer(5, hink_d2_render_timer_cb) == EASY_TIMER_INVALID_TIMER) { \
+                hink_auto_rendering_minute = HINK_AUTO_SENTINEL; \
                 hink_d2_render_state = HINK_D2_RENDER_ERROR; \
             } \
         } \
@@ -180,6 +182,7 @@ static timer_hnd epd_wait_hnd;
 
 static uint32_t hink_auto_last_rendered_minute __SECTION_ZERO("retention_mem_area0");
 static uint32_t hink_auto_pending_minute       __SECTION_ZERO("retention_mem_area0");
+static uint32_t hink_auto_rendering_minute     __SECTION_ZERO("retention_mem_area0");
 static uint8_t hink_auto_flags                 __SECTION_ZERO("retention_mem_area0");
 static timer_hnd hink_d2_minute_timer_hnd      __SECTION_ZERO("retention_mem_area0");
 static timer_hnd hink_d2_start_timer_hnd       __SECTION_ZERO("retention_mem_area0");
@@ -1047,7 +1050,10 @@ static void epd_wait_timer(void)
             hink_e6_state = HINK_E6_STATE_COMPLETE;
         }
         if (hink_d2_render_state == HINK_D2_RENDER_RENDERING) {
-            auto_minute = hink_auto_local_minute_key();
+            auto_minute = hink_auto_rendering_minute;
+            if (auto_minute == HINK_AUTO_SENTINEL) {
+                auto_minute = hink_auto_local_minute_key();
+            }
             hink_d2_render_state = HINK_D2_RENDER_COMPLETE;
             hink_auto_last_rendered_minute = auto_minute;
             if ((hink_auto_flags & HINK_AUTO_FLAG_PENDING) &&
@@ -1055,6 +1061,7 @@ static void epd_wait_timer(void)
             {
                 hink_auto_flags &= (uint8_t)~HINK_AUTO_FLAG_PENDING;
             }
+            hink_auto_rendering_minute = HINK_AUTO_SENTINEL;
             hink_d2_render_notify(HINK_D2_RESULT_OK, HINK_D2_RENDER_COMPLETE);
             HINK_AUTO_TRY_SCHEDULE();
         }
@@ -1508,6 +1515,7 @@ static uint8_t hink_d2_time_handle(struct custs1_val_write_ind const *param)
         hink_d2_minute_cancel();
         hink_auto_last_rendered_minute = HINK_AUTO_SENTINEL;
         hink_auto_pending_minute = hink_auto_local_minute_key();
+        hink_auto_rendering_minute = HINK_AUTO_SENTINEL;
         hink_auto_flags = HINK_AUTO_FLAG_ENABLED | HINK_AUTO_FLAG_PENDING;
 #if HINK_AUTO_TEST_1_MIN
         hink_auto_flags |= HINK_AUTO_FLAG_TEST;
@@ -1665,6 +1673,7 @@ static void hink_d2_render_timer_cb(void)
     if (epd_wait_hnd == EASY_TIMER_INVALID_TIMER)
     {
         hink_d2_render_state = HINK_D2_RENDER_ERROR;
+        hink_auto_rendering_minute = HINK_AUTO_SENTINEL;
         hink_d2_render_notify(HINK_D2_RESULT_INTERNAL, HINK_D2_RENDER_ERROR);
         epd_cmd1(0x10, 0x01);
         epd_power(0);
@@ -1701,10 +1710,12 @@ static uint8_t hink_d2_render_handle(struct custs1_val_write_ind const *param)
     }
 
     hink_d2_render_state = HINK_D2_RENDER_ACCEPTED;
+    hink_auto_rendering_minute = HINK_AUTO_SENTINEL;
     hnd = app_easy_timer(5, hink_d2_render_timer_cb);
     if (hnd == EASY_TIMER_INVALID_TIMER)
     {
         hink_d2_render_state = HINK_D2_RENDER_ERROR;
+        hink_auto_rendering_minute = HINK_AUTO_SENTINEL;
         hink_d2_render_notify(HINK_D2_RESULT_INTERNAL, HINK_D2_RENDER_ERROR);
     }
     else
