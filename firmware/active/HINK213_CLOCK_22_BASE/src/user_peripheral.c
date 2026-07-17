@@ -418,6 +418,18 @@ static void hink_d2_adv_restart_timer_cb(void)
     }
 }
 
+static void hink_d2_schedule_adv_restart(void)
+{
+    if (hink_d2_adv_restart_timer_hnd == EASY_TIMER_INVALID_TIMER)
+    {
+        timer_hnd hnd = app_easy_timer(1, hink_d2_adv_restart_timer_cb);
+        if (hnd != EASY_TIMER_INVALID_TIMER)
+        {
+            hink_d2_adv_restart_timer_hnd = hnd;
+        }
+    }
+}
+
 
 /**
  ****************************************************************************************
@@ -473,6 +485,11 @@ void user_app_adv_undirect_complete(uint8_t status)
 	// çŠ¶æ€éž0è¡¨ç¤ºå¼‚å¸¸ç»“æŸï¼Œæ›´æ–°å¹¿æ’­çŠ¶æ€å¹¶åˆ·æ–°å±å¹•
 	if(status!=0){
 		adv_state = 0;
+        if ((app_connection_idx == -1) && hink_d2_dedicated_clock_active())
+        {
+            hink_d2_schedule_adv_restart();
+            return;
+        }
 		//æœªè¿›è¡Œåˆå§‹åŒ–,åˆ™å§‹ç»ˆå±•ç¤ºäºŒç»´ç 
     if(year==2025 && month<=5){
         // åœ¨2024å¹´2æœˆæ‰§è¡Œç‰¹å®šæ“ä½œï¼ˆå ä½ç¬¦ï¼‰
@@ -510,14 +527,7 @@ void user_app_disconnect(struct gapc_disconnect_ind const *param)
 
     if (hink_d2_dedicated_clock_active())
     {
-        if (hink_d2_adv_restart_timer_hnd == EASY_TIMER_INVALID_TIMER)
-        {
-            timer_hnd hnd = app_easy_timer(1, hink_d2_adv_restart_timer_cb);
-            if (hnd != EASY_TIMER_INVALID_TIMER)
-            {
-                hink_d2_adv_restart_timer_hnd = hnd;
-            }
-        }
+        hink_d2_schedule_adv_restart();
         return;
     }
 
