@@ -122,6 +122,7 @@ static timer_hnd hink_e6_timer_hnd       __SECTION_ZERO("retention_mem_area0");
 #define HINK_D2_EPOCH_MAX           4102444799UL
 #define HINK_D2_STALE_SECONDS       86400UL
 #define HINK_D2_FLAGS_RESERVED_MASK 0xFCU
+#define HINK_D2_FLAG_STALE_PRESENT  0x80U
 
 #define HINK_D2_RESULT_OK             0x00U
 #define HINK_D2_RESULT_INVALID_LENGTH 0x01U
@@ -155,6 +156,19 @@ static int16_t hink_d2_timezone_minutes    __SECTION_ZERO("retention_mem_area0")
 static uint8_t hink_d2_flags               __SECTION_ZERO("retention_mem_area0");
 static uint8_t hink_d2_render_state        __SECTION_ZERO("retention_mem_area0");
 static timer_hnd epd_wait_hnd;
+
+#define HINK_D3D_STORE_SECTOR 0x3B000UL
+#define HINK_D3D_STORE_SLOT_A 0x3B000UL
+#define HINK_D3D_STORE_SLOT_B 0x3B020UL
+#define HINK_D3D_STORE_SIZE   32U
+#define HINK_D3D_STORE_MAGIC  0x54443344UL
+#define HINK_D3D_STORE_VER    1U
+#define HINK_D3D_CRC_OFFSET   30U
+
+static uint32_t hink_d3d_stale_epoch       __SECTION_ZERO("retention_mem_area0");
+static int16_t hink_d3d_stale_timezone     __SECTION_ZERO("retention_mem_area0");
+static uint8_t hink_d3d_stale_flags        __SECTION_ZERO("retention_mem_area0");
+static uint8_t hink_d3d_stale_valid        __SECTION_ZERO("retention_mem_area0");
 
 #ifndef HINK_AUTO_TEST_1_MIN
 #define HINK_AUTO_TEST_1_MIN 0
@@ -199,11 +213,16 @@ static uint32_t hink_auto_local_minute_key(void);
 static void hink_auto_note_minute(uint32_t auto_minute);
 static void hink_d2_minute_start_cb(void);
 static void hink_d2_minute_timer_cb(void);
+static void hink_d3d_store_last_known_time(uint32_t epoch, int16_t timezone, uint8_t flags);
+void hink_d3d_boot_load_last_known_time(void);
 
 static void hink_e4_arm_timer(void);
 
 extern int adv_state;
 extern void app_clock_timer_stop(void);
+extern int sf_erase(int addr, int size, int wait);
+extern int fspi_exit(void);
+extern int sf_wait(void);
 /*
  * FUNCTION DEFINITIONS
  ****************************************************************************************
@@ -1512,6 +1531,8 @@ static uint8_t hink_d2_time_handle(struct custs1_val_write_ind const *param)
         hink_d2_timezone_minutes = timezone;
         hink_d2_flags = flags;
         hink_d2_uptime_at_sync = hink_d2_uptime_seconds;
+        hink_d3d_stale_valid = 0U;
+        hink_d3d_store_last_known_time(epoch, timezone, flags);
         hink_d2_minute_cancel();
         hink_auto_last_rendered_minute = HINK_AUTO_SENTINEL;
         hink_auto_pending_minute = hink_auto_local_minute_key();
@@ -1560,13 +1581,25 @@ notify_runtime:
               HINK_D2_STATE_STALE :
               HINK_D2_STATE_RUNNING);
 notify_state:
-    epoch = hink_d2_current_epoch();
-    uptime = hink_d2_uptime_seconds;
+    if ((hink_d2_synced_epoch == 0UL) && hink_d3d_stale_valid)
+    {
+        epoch = hink_d3d_stale_epoch;
+        timezone = hink_d3d_stale_timezone;
+        flags = hink_d3d_stale_flags | HINK_D2_FLAG_STALE_PRESENT;
+        uptime = 0UL;
+    }
+    else
+    {
+        epoch = hink_d2_current_epoch();
+        timezone = hink_d2_timezone_minutes;
+        flags = hink_d2_flags;
+        uptime = hink_d2_uptime_seconds;
+    }
     msg[0] = 0xD2;
     msg[1] = 0x81;
     hink_put_u32_le(&msg[4], epoch);
-    hink_put_u16_le(&msg[8], (uint16_t)hink_d2_timezone_minutes);
-    msg[10] = hink_d2_flags;
+    hink_put_u16_le(&msg[8], (uint16_t)timezone);
+    msg[10] = flags;
     hink_put_u32_le(&msg[11], uptime);
     hink_e4_notify_bytes(msg, HINK_D2_STATUS_LEN);
     return 1U;
@@ -1748,6 +1781,181 @@ static uint16_t hink_e5_crc16_ccitt_update(uint16_t crc, const uint8_t *data, ui
     }
 
     return crc;
+}
+
+static uint8_t hink_d3d_slot_blank(const uint8_t *rec)
+{
+    uint8_t i;
+
+    for (i = 0; i < HINK_D3D_STORE_SIZE; i++)
+    {
+        if (rec[i] != 0xFFU)
+        {
+            return 0U;
+        }
+    }
+    return 1U;
+}
+
+static uint8_t hink_d3d_record_valid(const uint8_t *rec,
+                                     uint32_t *seq,
+                                     uint32_t *epoch,
+                                     int16_t *timezone,
+                                     uint8_t *flags)
+{
+    uint16_t crc;
+
+    if ((hink_u32_le(&rec[0]) != HINK_D3D_STORE_MAGIC) ||
+        (rec[4] != HINK_D3D_STORE_VER))
+    {
+        return 0U;
+    }
+
+    *epoch = hink_u32_le(&rec[12]);
+    *timezone = (int16_t)hink_u16_le(&rec[6]);
+    *flags = rec[5] & (uint8_t)~HINK_D2_FLAG_STALE_PRESENT;
+    if (((*epoch - HINK_D2_EPOCH_MIN) > (HINK_D2_EPOCH_MAX - HINK_D2_EPOCH_MIN)) ||
+        ((uint16_t)(*timezone + 720) > 1560U) ||
+        ((*flags & HINK_D2_FLAGS_RESERVED_MASK) != 0U))
+    {
+        return 0U;
+    }
+
+    crc = hink_e5_crc16_ccitt_update(0xFFFFU, rec, HINK_D3D_CRC_OFFSET);
+    if (crc != hink_u16_le(&rec[HINK_D3D_CRC_OFFSET]))
+    {
+        return 0U;
+    }
+
+    *seq = hink_u32_le(&rec[8]);
+    return 1U;
+}
+
+static void hink_d3d_build_record(uint8_t *rec,
+                                  uint32_t seq,
+                                  uint32_t epoch,
+                                  int16_t timezone,
+                                  uint8_t flags)
+{
+    uint8_t i;
+    uint16_t crc;
+
+    for (i = 0; i < HINK_D3D_STORE_SIZE; i++)
+    {
+        rec[i] = 0xFFU;
+    }
+    hink_put_u32_le(&rec[0], HINK_D3D_STORE_MAGIC);
+    rec[4] = HINK_D3D_STORE_VER;
+    rec[5] = flags & (uint8_t)~HINK_D2_FLAG_STALE_PRESENT;
+    hink_put_u16_le(&rec[6], (uint16_t)timezone);
+    hink_put_u32_le(&rec[8], seq);
+    hink_put_u32_le(&rec[12], epoch);
+    crc = hink_e5_crc16_ccitt_update(0xFFFFU, rec, HINK_D3D_CRC_OFFSET);
+    hink_put_u16_le(&rec[HINK_D3D_CRC_OFFSET], crc);
+}
+
+void hink_d3d_boot_load_last_known_time(void)
+{
+    uint8_t a[HINK_D3D_STORE_SIZE];
+    uint8_t b[HINK_D3D_STORE_SIZE];
+    uint32_t seq_a;
+    uint32_t seq_b;
+    uint32_t epoch_a;
+    uint32_t epoch_b;
+    int16_t tz_a;
+    int16_t tz_b;
+    uint8_t flags_a;
+    uint8_t flags_b;
+    uint8_t valid_a;
+    uint8_t valid_b;
+
+    hink_d3d_stale_valid = 0U;
+    fspi_init();
+    sf_read(HINK_D3D_STORE_SLOT_A, HINK_D3D_STORE_SIZE, a);
+    sf_read(HINK_D3D_STORE_SLOT_B, HINK_D3D_STORE_SIZE, b);
+    fspi_exit();
+
+    valid_a = hink_d3d_record_valid(a, &seq_a, &epoch_a, &tz_a, &flags_a);
+    valid_b = hink_d3d_record_valid(b, &seq_b, &epoch_b, &tz_b, &flags_b);
+    if (valid_a && (!valid_b || (seq_a >= seq_b)))
+    {
+        hink_d3d_stale_epoch = epoch_a;
+        hink_d3d_stale_timezone = tz_a;
+        hink_d3d_stale_flags = flags_a;
+        hink_d3d_stale_valid = 1U;
+    }
+    else if (valid_b)
+    {
+        hink_d3d_stale_epoch = epoch_b;
+        hink_d3d_stale_timezone = tz_b;
+        hink_d3d_stale_flags = flags_b;
+        hink_d3d_stale_valid = 1U;
+    }
+}
+
+static void hink_d3d_store_last_known_time(uint32_t epoch, int16_t timezone, uint8_t flags)
+{
+    uint8_t a[HINK_D3D_STORE_SIZE];
+    uint8_t b[HINK_D3D_STORE_SIZE];
+    uint8_t verify[HINK_D3D_STORE_SIZE];
+    uint8_t rec[HINK_D3D_STORE_SIZE];
+    uint32_t seq_a;
+    uint32_t seq_b;
+    uint32_t old_epoch;
+    int16_t old_tz;
+    uint8_t old_flags;
+    uint8_t valid_a;
+    uint8_t valid_b;
+    uint8_t target_a;
+    uint32_t next_seq = 1UL;
+
+    fspi_init();
+    sf_read(HINK_D3D_STORE_SLOT_A, HINK_D3D_STORE_SIZE, a);
+    sf_read(HINK_D3D_STORE_SLOT_B, HINK_D3D_STORE_SIZE, b);
+    valid_a = hink_d3d_record_valid(a, &seq_a, &old_epoch, &old_tz, &old_flags);
+    valid_b = hink_d3d_record_valid(b, &seq_b, &old_epoch, &old_tz, &old_flags);
+
+    if (valid_a || valid_b)
+    {
+        next_seq = ((valid_a && (!valid_b || (seq_a >= seq_b))) ? seq_a : seq_b) + 1UL;
+    }
+
+    if (valid_a && valid_b)
+    {
+        sf_erase(HINK_D3D_STORE_SECTOR, 0x1000, 1);
+        target_a = 1U;
+    }
+    else if (valid_a)
+    {
+        target_a = 0U;
+        if (!hink_d3d_slot_blank(b))
+        {
+            sf_erase(HINK_D3D_STORE_SECTOR, 0x1000, 1);
+            target_a = 1U;
+        }
+    }
+    else
+    {
+        target_a = 1U;
+        if (!hink_d3d_slot_blank(a))
+        {
+            sf_erase(HINK_D3D_STORE_SECTOR, 0x1000, 1);
+        }
+    }
+
+    hink_d3d_build_record(rec, next_seq, epoch, timezone, flags);
+    sf_page_write(target_a ? HINK_D3D_STORE_SLOT_A : HINK_D3D_STORE_SLOT_B,
+                  rec,
+                  HINK_D3D_STORE_SIZE);
+    sf_wait();
+    sf_read(target_a ? HINK_D3D_STORE_SLOT_A : HINK_D3D_STORE_SLOT_B,
+            HINK_D3D_STORE_SIZE,
+            verify);
+    fspi_exit();
+    if (hink_d3d_record_valid(verify, &seq_a, &old_epoch, &old_tz, &old_flags))
+    {
+        hink_d3d_stale_valid = 0U;
+    }
 }
 
 static void hink_e5_reset_state(void)
