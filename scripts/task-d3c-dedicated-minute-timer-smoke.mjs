@@ -59,7 +59,7 @@ const advRestartCb = functionBody(peripheral, 'hink_d2_adv_restart_timer_cb');
 const disconnectCb = functionBody(peripheral, 'user_app_disconnect');
 
 const branch = execSync('git branch --show-current', { cwd: root, encoding: 'utf8' }).trim();
-assert(branch === 'task-d/d3c-dedicated-minute-timer', `wrong branch: ${branch}`);
+assert(branch === 'task-d/d3c-minute-boundary-race', `wrong branch: ${branch}`);
 
 assert(/#define\s+HINK_D2_STATUS_LEN\s+15U/.test(active), 'D2 status length must remain canonical 15 bytes');
 assert(!/hink_diag_(tick|boundary|accept|callback)_count/.test(active), 'old diagnostic counters must not remain');
@@ -73,6 +73,9 @@ assert(/static\s+uint8_t\s+hink_d2_timer_flags\s+__SECTION_ZERO\("retention_mem_
 assert(/#define\s+HINK_D2_TIMER_ACTIVE\s+0x01U/.test(active), 'dedicated active flag missing');
 assert(/#define\s+HINK_D2_TIMER_FIRST\s+0x02U/.test(active), 'dedicated first tick flag missing');
 assert(/static\s+timer_hnd\s+hink_d2_adv_restart_timer_hnd\s+__SECTION_ZERO\("retention_mem_area0"\)/.test(peripheral), 'deferred D2 advertising timer handle missing');
+assert(/static\s+uint32_t\s+hink_auto_rendering_minute\s+__SECTION_ZERO\("retention_mem_area0"\)/.test(active), 'rendering minute snapshot must be a single uint32 RAM field');
+assert(/hink_auto_rendering_minute\s*=\s*hink_auto_pending_minute[\s\S]*hink_d2_render_state\s*=\s*HINK_D2_RENDER_ACCEPTED/.test(active), 'auto schedule must snapshot pending minute before ACCEPTED');
+assert(/app_easy_timer\s*\(\s*5\s*,\s*hink_d2_render_timer_cb\s*\)\s*==\s*EASY_TIMER_INVALID_TIMER[\s\S]*hink_auto_rendering_minute\s*=\s*HINK_AUTO_SENTINEL/.test(active), 'auto schedule error must clear rendering snapshot');
 
 assert(/extern\s+void\s+app_clock_timer_stop\s*\(\s*void\s*\);/.test(active), 'narrow legacy timer stop extern missing');
 assert(/uint8_t\s+hink_d2_dedicated_clock_active\s*\(\s*void\s*\)/.test(active), 'dedicated clock active helper missing');
@@ -92,6 +95,7 @@ assert(/hink_d2_minute_cancel\s*\(\s*\)/.test(setBlock), 'SET_TIME must cancel e
 assert(/hnd\s*=\s*app_easy_timer\s*\(\s*1\s*,\s*hink_d2_minute_start_cb\s*\)/.test(setBlock), 'SET_TIME must schedule only the deferred D2 start callback');
 assert(/if\s*\(\s*hnd\s*!=\s*EASY_TIMER_INVALID_TIMER\s*\)[\s\S]*hink_d2_start_timer_hnd\s*=\s*hnd/.test(setBlock), 'SET_TIME must validate deferred start timer handle');
 assert(/HINK_AUTO_TRY_SCHEDULE\s*\(\s*\)/.test(setBlock), 'initial D2D render schedule must remain');
+assert(/hink_auto_rendering_minute\s*=\s*HINK_AUTO_SENTINEL/.test(setBlock), 'SET_TIME must reset render snapshot before initial schedule');
 
 assert(/if\s*\(\s*hink_d2_minute_timer_hnd\s*!=\s*EASY_TIMER_INVALID_TIMER\s*\)[\s\S]*app_easy_timer_cancel\s*\(\s*hink_d2_minute_timer_hnd\s*\)/.test(cancelMinute), 'minute cancel must guard minute handle');
 assert(/if\s*\(\s*hink_d2_start_timer_hnd\s*!=\s*EASY_TIMER_INVALID_TIMER\s*\)[\s\S]*app_easy_timer_cancel\s*\(\s*hink_d2_start_timer_hnd\s*\)/.test(cancelMinute), 'minute cancel must guard deferred start handle');
@@ -111,6 +115,13 @@ assert(/hink_auto_note_minute\s*\(\s*auto_minute\s*\)/.test(minuteCb), 'dedicate
 assert(minuteCb.indexOf('hink_d2_arm_minute_timer(60U);') < minuteCb.indexOf('HINK_AUTO_TRY_SCHEDULE();'), 'dedicated callback must rearm before scheduling render');
 assert(/HINK_AUTO_TRY_SCHEDULE\s*\(\s*\)/.test(minuteCb), 'dedicated callback must use existing async scheduler');
 assert(!/clock_update\s*\(|clock_draw\s*\(|QR_draw\s*\(|user_app_adv_start\s*\(|epd_screen_update\s*\(|epd_update\s*\(|memset\s*\(\s*fb_rr|0xE5/.test(minuteCb), 'dedicated callback must not call legacy draw, advertising, E5, or EPD refresh directly');
+
+const epdWait = functionBody(active, 'epd_wait_timer');
+assert(/auto_minute\s*=\s*hink_auto_rendering_minute/.test(epdWait), 'D2D COMPLETE must use the accepted render snapshot');
+assert(/if\s*\(\s*auto_minute\s*==\s*HINK_AUTO_SENTINEL\s*\)[\s\S]*auto_minute\s*=\s*hink_auto_local_minute_key/.test(epdWait), 'manual D2D render must keep current-minute fallback');
+assert(/hink_auto_pending_minute\s*==\s*auto_minute[\s\S]*hink_auto_flags\s*&=\s*\(uint8_t\)~HINK_AUTO_FLAG_PENDING/.test(epdWait), 'COMPLETE must clear only the pending minute that was rendered');
+assert(/hink_auto_rendering_minute\s*=\s*HINK_AUTO_SENTINEL[\s\S]*hink_d2_render_notify\(HINK_D2_RESULT_OK,\s*HINK_D2_RENDER_COMPLETE\)/.test(epdWait), 'COMPLETE must clear render snapshot before notify/scheduling next pending');
+assert(/hink_d2_render_state\s*=\s*HINK_D2_RENDER_ERROR[\s\S]*hink_auto_rendering_minute\s*=\s*HINK_AUTO_SENTINEL/.test(renderTimer), 'D2D render error must clear render snapshot');
 
 assert(/hink_d2_adv_restart_timer_hnd\s*=\s*EASY_TIMER_INVALID_TIMER/.test(advRestartCb), 'deferred advertising callback must invalidate its own handle');
 assert(/app_connection_idx\s*==\s*-1/.test(advRestartCb), 'deferred advertising callback must verify the link is still disconnected');
@@ -144,6 +155,32 @@ assert(!/"AM /.test(active), 'lunar display label must be AL, not AM');
 assert(/hink_d2_render_timer_cb/.test(active) && /epd_wait_timer/.test(active), 'D2D render-only and E6 async wait path must remain');
 assert(!/malloc\s*\(|printk\s*\(\s*\".*D2|flash_write|fspi_write/.test(active), 'no malloc, D2 printk, or flash writes allowed');
 
+function simulateBoundaryRace(startMinute, boundaryMinute) {
+  const sentinel = 0xFFFFFFFF;
+  let lastRendered = sentinel;
+  let pending = startMinute;
+  let rendering = pending;
+  let pendingFlag = true;
+  const noteMinute = (minute) => {
+    if (minute !== lastRendered && (!pendingFlag || minute !== pending)) {
+      if ((minute % 5) === 0 || (lastRendered !== sentinel && Math.floor(minute / 1440) !== Math.floor(lastRendered / 1440))) {
+        pending = minute;
+        pendingFlag = true;
+      }
+    }
+  };
+  noteMinute(boundaryMinute);
+  lastRendered = rendering;
+  if (pendingFlag && pending === rendering) pendingFlag = false;
+  rendering = sentinel;
+  return { lastRendered, pending, pendingFlag };
+}
+
+let race = simulateBoundaryRace(53, 54);
+assert(race.lastRendered === 53 && race.pendingFlag === false, '53:57 -> 54 must clear stale initial pending without retrigger');
+race = simulateBoundaryRace(54, 55);
+assert(race.lastRendered === 54 && race.pendingFlag === true && race.pending === 55, '54:57 -> 55 must keep one valid 5-minute pending render');
+
 const changed = execSync('git status --short', { cwd: root, encoding: 'utf8' })
   .trim()
   .split(/\r?\n/)
@@ -152,11 +189,10 @@ const changed = execSync('git status --short', { cwd: root, encoding: 'utf8' })
   .sort();
 assert(JSON.stringify(changed) === JSON.stringify([
   'firmware/active/HINK213_CLOCK_22_BASE/src/user_custs1_impl.c',
-  'firmware/active/HINK213_CLOCK_22_BASE/src/user_peripheral.c',
   'scripts/task-d3c-dedicated-minute-timer-smoke.mjs',
 ]), `unexpected dirty files: ${changed.join(', ')}`);
 
-const forbidden = execSync('git diff --name-only -- web test.html firmware/active/HINK213_CLOCK_22_BASE/src/epd docs scripts/task-d3c-date-lunar-renderer-smoke.mjs', { cwd: root, encoding: 'utf8' }).trim();
+const forbidden = execSync('git diff --name-only -- web test.html firmware/active/HINK213_CLOCK_22_BASE/src/epd firmware/active/HINK213_CLOCK_22_BASE/src/user_peripheral.c docs scripts/task-d3c-date-lunar-renderer-smoke.mjs', { cwd: root, encoding: 'utf8' }).trim();
 assert(forbidden === '', `unexpected out-of-scope changes: ${forbidden}`);
 
 console.log('TASK D3C dedicated minute timer smoke PASS');
