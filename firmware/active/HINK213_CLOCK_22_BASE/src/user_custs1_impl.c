@@ -1050,10 +1050,30 @@ void select_layout(int xres, int yres)
 static void epd_wait_timer(void)
 {
     uint32_t auto_minute;
+    timer_hnd hnd;
 
     if(epd_busy()){
         // å±å¹•ä»åœ¨å¿™ï¼Œ40msåŽå†æ¬¡æ£€æŸ¥
-        epd_wait_hnd = app_easy_timer(40, epd_wait_timer);
+        hnd = app_easy_timer(40, epd_wait_timer);
+        if (hnd != EASY_TIMER_INVALID_TIMER) {
+            epd_wait_hnd = hnd;
+            return;
+        }
+
+        epd_wait_hnd = EASY_TIMER_INVALID_TIMER;
+        if (hink_e6_state == HINK_E6_STATE_REFRESHING) {
+            hink_e6_state = HINK_E6_STATE_ERROR;
+        }
+        if (hink_d2_render_state == HINK_D2_RENDER_RENDERING) {
+            hink_d2_render_state = HINK_D2_RENDER_ERROR;
+            hink_auto_flags &= (uint8_t)~HINK_AUTO_FLAG_PENDING;
+            hink_auto_rendering_minute = HINK_AUTO_SENTINEL;
+            hink_d2_render_notify(HINK_D2_RESULT_INTERNAL, HINK_D2_RENDER_ERROR);
+        }
+        epd_cmd1(0x10, 0x01);
+        epd_power(0);
+        epd_hw_close();
+        arch_set_sleep_mode(ARCH_EXT_SLEEP_ON);
     }else{
         // å±å¹•æ›´æ–°å®Œæˆ
         epd_wait_hnd = EASY_TIMER_INVALID_TIMER;
