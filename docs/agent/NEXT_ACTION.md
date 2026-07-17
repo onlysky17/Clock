@@ -84,5 +84,36 @@ D3A policy summary:
 - D2 02 manual render remains available and updates last-rendered minute state.
 - D3B must preserve the approximate 364-byte raw headroom and audit map before coding.
 
-Next milestone:
-- D3B — Auto-minute scheduler implementation.
+## D3C final closeout
+
+D3C is now the current final clock milestone.
+
+Verified:
+- Dedicated minute timer PASS.
+- Safe disconnect/re-advertise PASS.
+- Minute-boundary pending race fixed.
+- `AL` lunar label PASS.
+- SPI Burn/Verify PASS.
+- Cold boot PASS.
+- Two disconnected five-minute refresh boundaries PASS.
+- BLE reconnect PASS.
+- No duplicate refresh.
+- No second black refresh.
+
+Current final firmware image remains local only:
+D:\EINK\Clock\_incoming\TASK_D3C_FINAL_PACKED_256KB.bin
+
+D3C final image facts:
+- Packed size: 262144 bytes.
+- Packed SHA256: `648123BE0CC83291D9CD0DC6E5B8D3B2AD68373698954BA7F6C189C1260F44F1`.
+- Raw BIN: 64128 bytes.
+- Raw SHA256: `3A360340C943F1EAD0E9EA5AC14EF584767EF57B2AC6229A221F5CA84BCC6EBC`.
+- Code=40760, RO=21624, RW=608, ZI=22920.
+- Raw headroom: 1400 bytes.
+
+Important runtime note:
+- Time is still RAM-only.
+- After power cycle/cold boot, connect and send SET_TIME once before relying on the device-side auto clock.
+
+Next recommended milestone:
+- TASK D4A — decide whether to persist time/clock settings or keep RAM-only behavior.

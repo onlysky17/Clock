@@ -95,3 +95,31 @@ Operational notes:
 - After cold boot, run: Connect -> Gửi giờ xuống thiết bị -> Vẽ giờ từ thiết bị lên màn.
 - QR and low-battery legacy visual redraw paths are disabled as an accepted firmware-size tradeoff; current HINK213 clock-panel flow is unaffected.
 - Next milestone: `TASK D3A — device auto-minute clock policy/design`.
+
+## TASK D3C Final Clock Milestone Closeout
+
+- Repo: `D:\EINK\Clock`
+- Canonical web URL: `https://onlysky17.github.io/Clock/test.html`
+- Canonical source: `D:\EINK\Clock\firmware\active\HINK213_CLOCK_22_BASE`
+- Final raw firmware image: `D:\EINK\Clock\_incoming\TASK_D3C_FINAL_RAW.bin`
+- Final raw size: `64128` bytes
+- Final raw SHA256: `3A360340C943F1EAD0E9EA5AC14EF584767EF57B2AC6229A221F5CA84BCC6EBC`
+- Final packed firmware image: `D:\EINK\Clock\_incoming\TASK_D3C_FINAL_PACKED_256KB.bin`
+- Final packed size: `262144` bytes
+- Final packed SHA256: `648123BE0CC83291D9CD0DC6E5B8D3B2AD68373698954BA7F6C189C1260F44F1`
+- Build final: Code `40760`, RO-data `21624`, RW-data `608`, ZI-data `22920`
+- Packer raw limit: `65528` bytes
+- Raw headroom: `1400` bytes
+- Do not commit `.bin` firmware images.
+
+Verified D3C final state:
+- D3B dedicated five-minute clock scheduler is active.
+- D3C firmware clock renderer shows `HH:mm`, weekday/solar date, and lunar date with `AL dd/MM` label.
+- Safe disconnect/re-advertise PASS: BLE can scan and reconnect after disconnect.
+- Minute-boundary pending race fixed: initial render crossing into a non-5-minute boundary does not retrigger stale pending.
+- SPI Burn/Verify PASS.
+- Cold boot PASS.
+- Two disconnected five-minute refresh boundaries PASS.
+- No duplicate same-minute refresh.
+- No unintended second black refresh.
+- Time remains RAM-only: after power cycle/cold boot, run SET_TIME once again before device-side clock rendering/scheduling.

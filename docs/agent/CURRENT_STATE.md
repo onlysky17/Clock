@@ -138,3 +138,44 @@ Policy now defined:
 
 Next implementation milestone:
 - TASK D3B — auto-minute scheduler implementation.
+
+## D3C final persistent clock state
+
+Current persistent firmware image:
+D:\EINK\Clock\_incoming\TASK_D3C_FINAL_PACKED_256KB.bin
+
+Packed SHA256:
+648123BE0CC83291D9CD0DC6E5B8D3B2AD68373698954BA7F6C189C1260F44F1
+
+Raw image:
+D:\EINK\Clock\_incoming\TASK_D3C_FINAL_RAW.bin
+
+Raw SHA256:
+3A360340C943F1EAD0E9EA5AC14EF584767EF57B2AC6229A221F5CA84BCC6EBC
+
+Verified D3C final state:
+- D3B dedicated minute timer PASS.
+- D3C date + lunar renderer PASS.
+- Safe disconnect/re-advertise PASS.
+- Minute-boundary pending race fixed.
+- Lunar label is `AL`.
+- SPI Burn/Verify PASS.
+- Cold boot PASS.
+- Two disconnected five-minute refresh boundaries PASS.
+- BLE reconnect after disconnect PASS.
+- No duplicate refresh.
+- No second black refresh.
+
+Build/package facts:
+- Code: 40760.
+- RO-data: 21624.
+- RW-data: 608.
+- ZI-data: 22920.
+- Raw BIN: 64128 bytes.
+- Packer raw limit: 65528 bytes.
+- Raw headroom: 1400 bytes.
+- Packed size: 262144 bytes.
+
+Runtime note:
+- Time remains RAM-only.
+- After power cycle/cold boot, run SET_TIME once before relying on the device-side clock scheduler.
