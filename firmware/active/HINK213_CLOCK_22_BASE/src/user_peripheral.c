@@ -69,6 +69,7 @@ const volatile u32 epd_version[3] = {0xF9A51379, ~0xF9A51379, EPD_VERSION};
 extern int year,month; // å½“å‰æ—¶é—´å˜é‡
 extern int second; // å½“å‰ç§’æ•°ï¼Œç”¨äºŽè®¡ç®—åˆ°æ•´åˆ†é’Ÿçš„å‰©ä½™æ—¶é—´
 extern uint8_t hink_d2_dedicated_clock_active(void);
+extern void hink_d3d_boot_load_last_known_time(void);
 
 /*
  * å‡½æ•°å®šä¹‰
@@ -193,6 +194,7 @@ void user_app_init(void)
 	fspi_config(0x00030605); // é…ç½®FSPIæŽ¥å£
 
 	selflash(otp_boot); // æ ¹æ®OTPå¯åŠ¨æ•°æ®æ‰§è¡Œè‡ªé—ªå­˜æ“ä½œ
+    hink_d3d_boot_load_last_known_time();
 
 	// åˆå§‹åŒ–EPDå±å¹•ï¼ˆ2.13é»‘ç™½å±ï¼Œ6ä¸ªæµ‹è¯•ç‚¹ï¼‰
 	epd_hw_init(0x23200700, 0x05210006, detect_w, detect_h, detect_mode | ROTATE_3);
