@@ -179,3 +179,46 @@ Build/package facts:
 Runtime note:
 - Time remains RAM-only.
 - After power cycle/cold boot, run SET_TIME once before relying on the device-side clock scheduler.
+
+## D3D-2 final last-known time persistence
+
+D3D-2 is now the current final persistent clock milestone.
+
+Current final firmware image remains local only:
+D:\EINK\Clock\_incoming\TASK_D3D2_FINAL_PACKED_256KB.bin
+
+Raw firmware image:
+D:\EINK\Clock\_incoming\TASK_D3D2_FINAL_RAW.bin
+
+Build/package facts:
+- Code: 41516.
+- RO-data: 21624.
+- RW-data: 608.
+- ZI-data: 22928.
+- Raw BIN: 64884 bytes.
+- Packer raw limit: 65528 bytes.
+- Raw headroom: 644 bytes.
+- Raw SHA256: 0F79057E2FCC37951F855E2425A20CE08822EB83789929556954D937DFC8A843.
+- Packed size: 262144 bytes.
+- Packed SHA256: 81E19127880D60730F8DC09588A9D15A452AAC69F81EAC5ECE92D3BAD08B1C14.
+
+Persistence layout:
+- Safe sector: 0x3B000..0x3BFFF.
+- Sector size: 4096 bytes.
+- Slot A: 0x3B000.
+- Slot B: 0x3B020.
+- Record size: 32 bytes.
+- Record stores last-known metadata only: magic, version, sequence, epoch, timezone, flags, and CRC.
+- Only a valid SET_TIME writes a record.
+- Firmware does not write every minute and does not write on each refresh.
+
+Verified:
+- SPI Burn/Verify PASS.
+- Cold boot PASS.
+- BLE boot/connect PASS.
+- BLE reconnect PASS.
+- SET_TIME record write PASS.
+- Cold boot status from a valid record is NOT_INITIALIZED + UNSET + STALE_PRESENT, with flags 0x82.
+- Stale metadata does not start the dedicated scheduler and does not auto-refresh.
+- SET_TIME again clears stale behavior, returns to RUNNING, and five-minute refresh PASS.
+- D3C dedicated timer, renderer, lunar layout, safe disconnect, and minute-boundary race fix remain valid.

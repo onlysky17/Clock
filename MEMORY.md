@@ -123,3 +123,40 @@ Verified D3C final state:
 - No duplicate same-minute refresh.
 - No unintended second black refresh.
 - Time remains RAM-only: after power cycle/cold boot, run SET_TIME once again before device-side clock rendering/scheduling.
+
+## TASK D3D-2 Final Time Persistence Closeout
+
+- Repo: `D:\EINK\Clock`
+- Canonical web URL: `https://onlysky17.github.io/Clock/test.html`
+- Canonical source: `D:\EINK\Clock\firmware\active\HINK213_CLOCK_22_BASE`
+- Final raw firmware image: `D:\EINK\Clock\_incoming\TASK_D3D2_FINAL_RAW.bin`
+- Final raw size: `64884` bytes
+- Final raw SHA256: `0F79057E2FCC37951F855E2425A20CE08822EB83789929556954D937DFC8A843`
+- Final packed firmware image: `D:\EINK\Clock\_incoming\TASK_D3D2_FINAL_PACKED_256KB.bin`
+- Final packed size: `262144` bytes
+- Final packed SHA256: `81E19127880D60730F8DC09588A9D15A452AAC69F81EAC5ECE92D3BAD08B1C14`
+- Build final: Code `41516`, RO-data `21624`, RW-data `608`, ZI-data `22928`
+- Packer raw limit: `65528` bytes
+- Raw headroom: `644` bytes
+- Do not commit `.bin` firmware images.
+
+Persistence layout:
+- Safe sector: `0x3B000..0x3BFFF`
+- Sector size: `4096` bytes
+- Slot A: `0x3B000`
+- Slot B: `0x3B020`
+- Record size: `32` bytes
+- Record contains magic, version, sequence, epoch, timezone, flags, and CRC.
+- Only valid `D2 00 SET_TIME` writes a record.
+- The firmware never writes on each minute tick or each panel refresh.
+
+Verified D3D-2 final state:
+- SPI Burn/Verify PASS.
+- Cold boot PASS.
+- BLE boot/connect PASS.
+- BLE reconnect PASS.
+- `D2 SET_TIME` writes the last-known record PASS.
+- Cold boot from a valid record returns `NOT_INITIALIZED` + `UNSET` with flags `0x82` (`STALE_PRESENT`).
+- Stale metadata does not start the dedicated scheduler and does not auto-refresh the panel.
+- A new `SET_TIME` clears stale behavior, returns to RUNNING, and five-minute refresh PASS.
+- D3C renderer, lunar date, safe disconnect/re-advertise, and minute-boundary race fix remain intact.

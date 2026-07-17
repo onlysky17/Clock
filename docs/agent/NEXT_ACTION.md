@@ -116,4 +116,40 @@ Important runtime note:
 - After power cycle/cold boot, connect and send SET_TIME once before relying on the device-side auto clock.
 
 Next recommended milestone:
-- TASK D4A — decide whether to persist time/clock settings or keep RAM-only behavior.
+- TASK D4A — decide next product behavior after D3D-2 last-known time persistence.
+
+## D3D-2 final closeout
+
+D3D-2 is now the current final SPI milestone.
+
+Verified:
+- Safe persistence sector: `0x3B000..0x3BFFF`.
+- Slot A: `0x3B000`.
+- Slot B: `0x3B020`.
+- Sector size: `4096` bytes.
+- Only valid SET_TIME writes the last-known metadata record.
+- Cold boot from a valid record reports NOT_INITIALIZED + UNSET + STALE_PRESENT, with flags `0x82`.
+- Stale metadata does not start the dedicated scheduler and does not auto-refresh.
+- SET_TIME again returns to RUNNING and five-minute refresh PASS.
+- BLE reconnect PASS.
+- SPI Burn/Verify PASS.
+
+Current final firmware image remains local only:
+D:\EINK\Clock\_incoming\TASK_D3D2_FINAL_PACKED_256KB.bin
+
+D3D-2 final image facts:
+- Packed size: 262144 bytes.
+- Packed SHA256: `81E19127880D60730F8DC09588A9D15A452AAC69F81EAC5ECE92D3BAD08B1C14`.
+- Raw BIN: 64884 bytes.
+- Raw SHA256: `0F79057E2FCC37951F855E2425A20CE08822EB83789929556954D937DFC8A843`.
+- Code=41516, RO=21624, RW=608, ZI=22928.
+- Raw headroom: 644 bytes.
+
+Important runtime note:
+- D3D-2 persists only last-known metadata.
+- It does not claim accurate RUNNING time after cold boot.
+- After cold boot, send SET_TIME once to return to RUNNING and restart the dedicated five-minute scheduler.
+
+Recommended next milestone:
+- TASK D4A — product behavior decision after stale metadata support.
+- Decide whether to improve UX around STALE_PRESENT in the web UI, add user-facing stale messaging, or continue with another firmware feature.
