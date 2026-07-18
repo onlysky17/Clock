@@ -54,3 +54,29 @@ Expected result:
 BLE physical validation remains an Owner phone test at:
 
 `https://onlysky17.github.io/Clock/test.html`
+
+## Final Closeout
+
+Status: CLOSED/PASS.
+
+- D4B implementation commit: `9b4cb9b58907960b3605b4cbf6a62dc39524b89f`.
+- D4B merge/main commit: `ca359a025a7e854b468a381dc7c601a9be053bdc`.
+- Smoke PASS.
+- Automated browser 4/4 PASS:
+  - `A_STALE`
+  - `B_NOTIFY_RACE_GUARD`
+  - `C_FOLLOW_UP_CONFIRM`
+  - `D_RECOVERY_ERROR`
+- Owner physical test at `https://onlysky17.github.io/Clock/test.html` PASS.
+- Owner confirmed steps 1-10 PASS:
+  - stale warning đúng;
+  - CTA đúng;
+  - render bị khóa khi stale;
+  - SET_TIME recovery thành công;
+  - stale flag clear;
+  - warning ẩn;
+  - render mở lại;
+  - BLE thật PASS;
+  - màn e-ink render đúng giờ PASS.
+- D4B did not change firmware or protocol.
+- D4B required no Keil build or flash.

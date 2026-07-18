@@ -1,4 +1,4 @@
-# MEMORY
+﻿# MEMORY
 
 ## Canonical Current State
 
@@ -26,8 +26,8 @@ Firmware milestone cuối đã đóng:
 - D3D2 persistence is a passed foundation milestone, but it is not the final firmware milestone.
 - D3E handoff has `VERIFY_HOME PASS`.
 
-Product decision:
-- `TASK D4A` stale recovery UX decision is approved by Owner.
+Product and web milestones:
+- `TASK D4A` stale recovery UX decision is CLOSED and approved by Owner.
 - Decision: Option B, Web recovery CTA.
 - When D2 status has `flags & 0x80`, web must interpret it as `STALE_PRESENT`.
 - Exact warning: `Thiết bị đang giữ giờ cũ. Hãy đồng bộ giờ hiện tại để tiếp tục chạy đồng hồ.`
@@ -37,12 +37,29 @@ Product decision:
 - After successful `SET_TIME`, read D2 status again, confirm stale flag is cleared, hide the warning, and re-enable render.
 - Use the existing D2 `SET_TIME` flow.
 - No firmware change and no new command or protocol.
+- `TASK D4B` stale recovery CTA implementation and physical validation are CLOSED/PASS.
+- D4B implementation commit: `9b4cb9b58907960b3605b4cbf6a62dc39524b89f`.
+- D4B merge/main commit: `ca359a025a7e854b468a381dc7c601a9be053bdc`.
+- D4B smoke PASS.
+- D4B automated browser 4/4 PASS: `A_STALE`, `B_NOTIFY_RACE_GUARD`, `C_FOLLOW_UP_CONFIRM`, `D_RECOVERY_ERROR`.
+- Owner physical test at `https://onlysky17.github.io/Clock/test.html` PASS:
+  - stale warning đúng;
+  - CTA đúng;
+  - render bị khóa khi stale;
+  - SET_TIME recovery thành công;
+  - stale flag clear;
+  - warning ẩn;
+  - render mở lại;
+  - BLE thật PASS;
+  - màn e-ink render đúng giờ PASS.
+- D4B did not change firmware or protocol.
+- D4B required no Keil build or flash.
+- D4B is the latest closed web/UX milestone.
 
 Next canonical action:
-- `TASK D4B` - implement web stale recovery CTA.
-- D4B is not implemented and has not passed validation.
-- Expected D4B scope: canonical web, web-only smoke, and closeout doc.
-- BLE physical validation remains an Owner phone test at `https://onlysky17.github.io/Clock/test.html`.
+- `TASK D5A` - read-only next-feature/product-direction selection after D4B.
+- D5A is not approved and not implemented.
+- Do not invent a feature or acceptance criteria before Owner decision.
 
 ## Historical Milestones
 
@@ -82,14 +99,14 @@ Final geometry:
 
 - Canonical web URL: `https://onlysky17.github.io/Clock/test.html`
 - Current page title: `TASK D1C - Auto Minute Clock Sync`
-- Current badge: `TASK D1C • AUTO MINUTE CLOCK SYNC • HINK213 BW`
-- Current heading: `250×122 Clock Preview → Auto E5/E6 Minute Sync`
+- Current badge: `TASK D1C â€¢ AUTO MINUTE CLOCK SYNC â€¢ HINK213 BW`
+- Current heading: `250Ã—122 Clock Preview â†’ Auto E5/E6 Minute Sync`
 - The current page no longer shows `TASK C2G`, `C2G`, or `C1 TEST` labels.
 
 Verified web clock state:
 - D1A PASS: preview uses browser local time, large `HH:mm`, short Vietnamese weekday/date, and the update button only redraws/repacks without sending BLE.
-- D1B PASS: `Đồng bộ giờ lên màn` draws the current clock, sends E5, waits for E5 COMPLETE with CRC match, then sends E6 and waits for E6 COMPLETE.
-- D1C PASS: `Tự đồng bộ khi phút đổi` defaults OFF, first enable does not send immediately, sends only when the full minute key changes, does not overlap transfers, and turns OFF on disconnect/error.
+- D1B PASS: `Äá»“ng bá»™ giá» lÃªn mÃ n` draws the current clock, sends E5, waits for E5 COMPLETE with CRC match, then sends E6 and waits for E6 COMPLETE.
+- D1C PASS: `Tá»± Ä‘á»“ng bá»™ khi phÃºt Ä‘á»•i` defaults OFF, first enable does not send immediately, sends only when the full minute key changes, does not overlap transfers, and turns OFF on disconnect/error.
 - D1C physical auto minute sync PASS.
 
 Stable web/firmware contract:
@@ -103,7 +120,7 @@ Stable web/firmware contract:
 - Persistent firmware still runs from SPI after cold boot, does not need SysRAM, and does not refresh black after disconnect.
 
 Next proposed milestone:
-- `TASK D2A — DEVICE TIME SYNC PROTOCOL DESIGN`
+- `TASK D2A â€” DEVICE TIME SYNC PROTOCOL DESIGN`
 - D2A should design epoch/timezone transfer from web to firmware only.
 - D2A should not implement yet, should not auto refresh device-side, and should not modify EPD.
 - D2A must decide data format, persistence, drift handling, and reconnect behavior.
@@ -138,9 +155,9 @@ Verified D2 state:
 
 Operational notes:
 - Time state is still RAM-only and is lost after reset/cold boot.
-- After cold boot, run: Connect -> Gửi giờ xuống thiết bị -> Vẽ giờ từ thiết bị lên màn.
+- After cold boot, run: Connect -> Gá»­i giá» xuá»‘ng thiáº¿t bá»‹ -> Váº½ giá» tá»« thiáº¿t bá»‹ lÃªn mÃ n.
 - QR and low-battery legacy visual redraw paths are disabled as an accepted firmware-size tradeoff; current HINK213 clock-panel flow is unaffected.
-- Next milestone: `TASK D3A — device auto-minute clock policy/design`.
+- Next milestone: `TASK D3A â€” device auto-minute clock policy/design`.
 
 ## TASK D3C Final Clock Milestone Closeout
 
