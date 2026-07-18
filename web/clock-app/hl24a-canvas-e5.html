@@ -13,6 +13,7 @@
 button,input,select{min-height:40px;padding:10px 12px;border:1px solid #526d8f;border-radius:10px;background:#1a2940;color:white;font-weight:750}
 button{cursor:pointer}button.primary{background:#1d4ed8}button.good{background:#066047}button:disabled{opacity:.4;cursor:not-allowed}
 .stat{padding:11px;border:1px solid var(--line);border-radius:11px;background:#0b1421}.stat span{display:block;color:var(--muted);font-size:.8rem}.stat strong{font-size:1.08rem}
+.staleBox{margin-top:12px;padding:12px;border:1px solid #8a6a25;border-radius:11px;background:#241b08}.staleBox[hidden]{display:none}.staleBox p{margin:0 0 10px;color:#ffd166}
 .ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}p{color:var(--muted);line-height:1.5}code{color:#cfe2ff}
 .canvasWrap{overflow:auto;padding:12px;border:1px solid var(--line);border-radius:12px;background:#080d14}
 canvas{display:block;width:min(100%,500px);height:auto;image-rendering:pixelated;background:#fff;touch-action:none;border:1px solid #62708a}
@@ -90,6 +91,10 @@ small{color:var(--muted)}
 </div>
 <p>D2: <strong id="d2StatusText" class="warn" aria-live="polite">DISCONNECTED</strong></p>
 <p>D2 render: <strong id="d2RenderStatus" class="warn" aria-live="polite">NOT RUN</strong></p>
+<div id="d2StaleBox" class="staleBox" role="alert" aria-live="assertive" hidden>
+<p id="d2StaleWarning">Thiết bị đang giữ giờ cũ. Hãy đồng bộ giờ hiện tại để tiếp tục chạy đồng hồ.</p>
+<button id="d2StaleRecover" class="primary" type="button">Đồng bộ giờ hiện tại</button>
+</div>
 <div class="grid" style="margin-top:12px">
 <div class="stat"><span>Result</span><strong id="d2Result">-</strong></div>
 <div class="stat"><span>State</span><strong id="d2State">-</strong></div>
@@ -150,6 +155,8 @@ const EXPECTED_CHUNKS=286;
 const SERVICE='18424398-7cbc-11e9-8f9e-2a86e4085a59';
 const WRITE='2d86686a-53dc-25b3-0c4a-f0e10c8dee20';
 const NOTIFY='15005991-b131-3396-014c-664c9867b917';
+const D2_STALE_PRESENT_FLAG=0x80;
+const D2_STALE_WARNING='Thiết bị đang giữ giờ cũ. Hãy đồng bộ giờ hiện tại để tiếp tục chạy đồng hồ.';
 
 const $=id=>document.getElementById(id);
 const canvas=$('canvas');
@@ -162,6 +169,8 @@ let e6Running=false,e5Success=false,latestFwCrc=null;
 let oneTapRunning=false;
 let autoSyncTimer=0,autoSyncEnabled=false,autoArmedMinuteKey='',lastAutoSentMinuteKey='';
 let d2Running=false;
+let d2StalePresent=false;
+let d2StaleRecoveryPending=false;
 
 const hex=a=>[...a].map(v=>v.toString(16).padStart(2,'0').toUpperCase()).join(' ');
 const u16=(lo,hi)=>lo|(hi<<8);
@@ -418,7 +427,8 @@ function controls(){
   $('autoSync').disabled=locked;
   $('d2SetTime').disabled=!connected||locked;
   $('d2GetStatus').disabled=!connected||locked;
-  $('d2RenderClock').disabled=!connected||locked;
+  $('d2RenderClock').disabled=!connected||locked||d2StalePresent;
+  $('d2StaleRecover').disabled=!connected||locked||!d2StalePresent;
   $('refresh').disabled=!connected||!token||!e5Complete||locked;
 
   $('clearWhite').disabled=locked;
@@ -489,6 +499,8 @@ async function checkAutoSyncMinute(){
 }
 
 function resetD2UiDisconnected(){
+  d2StalePresent=false;
+  d2StaleRecoveryPending=false;
   setD2Status('DISCONNECTED','warn');
   $('d2Result').textContent='-';
   $('d2State').textContent='-';
@@ -499,6 +511,7 @@ function resetD2UiDisconnected(){
   $('d2Uptime').textContent='-';
   $('d2RenderStatus').textContent='NOT RUN';
   $('d2RenderStatus').className='warn';
+  renderD2StaleRecovery();
 }
 
 function toggleAutoSync(){
@@ -595,6 +608,10 @@ function parseD2Status(bytes){
   };
 }
 
+function hasD2StalePresent(status){
+  return (status.flags & D2_STALE_PRESENT_FLAG) !== 0;
+}
+
 function parseD2RenderStatus(bytes){
   if(bytes.length!==4||bytes[0]!==0xD2||bytes[1]!==0x82){
     throw Error(`Unknown D2 render response: ${hex(bytes)}`);
@@ -609,7 +626,7 @@ function renderDeviceLocalTime(epoch,timezone){
   return `${date.getUTCFullYear()}-${pad(date.getUTCMonth()+1)}-${pad(date.getUTCDate())} ${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())}`;
 }
 
-function renderD2Status(status){
+function renderD2Status(status,{recoveryConfirm=false}={}){
   $('d2Result').textContent=`${status.result.toString(16).padStart(2,'0').toUpperCase()} ${d2ResultName(status.result)}`;
   $('d2State').textContent=`${status.state.toString(16).padStart(2,'0').toUpperCase()} ${d2StateName(status.state)}`;
   $('d2Epoch').textContent=String(status.epoch);
@@ -617,7 +634,19 @@ function renderD2Status(status){
   $('d2Timezone').textContent=String(status.timezone);
   $('d2Flags').textContent=`0x${status.flags.toString(16).padStart(2,'0').toUpperCase()}`;
   $('d2Uptime').textContent=String(status.uptime);
+  if(d2StaleRecoveryPending && !recoveryConfirm){
+    d2StalePresent=true;
+  }else{
+    d2StalePresent=hasD2StalePresent(status);
+  }
+  renderD2StaleRecovery();
   setD2Status(status.result===0?'STATUS OK':'STATUS ERROR',status.result===0?'ok':'bad');
+}
+
+function renderD2StaleRecovery(){
+  $('d2StaleWarning').textContent=D2_STALE_WARNING;
+  $('d2StaleBox').hidden=!d2StalePresent;
+  controls();
 }
 
 function handleD2Notify(bytes){
@@ -710,23 +739,50 @@ async function runD2Flow(action){
   }
 }
 
-async function d2SetCurrentTime(){
+async function d2SetCurrentTime(options={}){
   const packet=buildD2SetTimePacket(new Date());
   const response=await request(
     packet,
     a=>a[0]===0xD2&&a[1]===0x81,
     {timeout:2500}
   );
-  parseD2Status(response);
+  const status=parseD2Status(response);
+  renderD2Status(status,options);
+  return status;
 }
 
-async function d2GetTimeStatus(){
+async function d2GetTimeStatus(options={}){
   const response=await request(
     buildD2GetStatusPacket(),
     a=>a[0]===0xD2&&a[1]===0x81,
     {timeout:2500}
   );
-  parseD2Status(response);
+  const status=parseD2Status(response);
+  renderD2Status(status,options);
+  return status;
+}
+
+async function d2RecoverStaleTime(){
+  if(!d2StalePresent)return;
+  d2StalePresent=true;
+  d2StaleRecoveryPending=true;
+  renderD2StaleRecovery();
+  try{
+    await d2SetCurrentTime();
+    const status=await d2GetTimeStatus({recoveryConfirm:true});
+    if(hasD2StalePresent(status)){
+      throw Error('STALE_PRESENT vẫn còn sau khi đồng bộ giờ.');
+    }
+    d2StaleRecoveryPending=false;
+    d2StalePresent=false;
+    renderD2StaleRecovery();
+    setD2Status('STALE CLEARED','ok');
+  }catch(error){
+    d2StaleRecoveryPending=false;
+    d2StalePresent=true;
+    renderD2StaleRecovery();
+    throw error;
+  }
 }
 
 async function d2RenderClockFromDevice(){
@@ -1046,6 +1102,7 @@ $('syncClock').onclick=()=>safe(syncClockToPanel);
 $('d2SetTime').onclick=()=>runD2Flow(d2SetCurrentTime);
 $('d2GetStatus').onclick=()=>runD2Flow(d2GetTimeStatus);
 $('d2RenderClock').onclick=()=>runD2Flow(d2RenderClockFromDevice);
+$('d2StaleRecover').onclick=()=>runD2Flow(d2RecoverStaleTime);
 $('autoSync').onchange=toggleAutoSync;
 $('clearLog').onclick=()=>{$('log').value=''};
 
