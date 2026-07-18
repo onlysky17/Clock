@@ -28,13 +28,46 @@ Firmware milestone cuối đã đóng:
 - D3D2 persistence is a passed foundation milestone, but it is not the final firmware milestone.
 - D3E handoff has `VERIFY_HOME PASS`.
 
+## Product Decision
+
+`TASK D4A` stale recovery UX decision is approved by Owner.
+
+Decision: Option B, Web recovery CTA.
+
+When D2 status has `flags & 0x80`, web must interpret it as `STALE_PRESENT`.
+
+Exact warning:
+
+`Thiết bị đang giữ giờ cũ. Hãy đồng bộ giờ hiện tại để tiếp tục chạy đồng hồ.`
+
+Exact CTA:
+
+`Đồng bộ giờ hiện tại`
+
+Rules:
+
+- Web must not automatically send `SET_TIME`; the user must press the CTA.
+- When stale is present, lock `Vẽ giờ từ thiết bị lên màn`.
+- After successful `SET_TIME`, read D2 status again, confirm stale flag is cleared, hide the warning, and re-enable render.
+- Use the existing D2 `SET_TIME` flow.
+- Do not change firmware.
+- Do not add a command or protocol.
+
 ## Next Canonical Action
 
-`TASK D4A` is the only next canonical action.
+`TASK D4B` is the only next canonical action.
 
-D4A is a product-decision task. It must start by deciding UX for `STALE_PRESENT` and the next feature direction after D3E.
+D4B is to implement web stale recovery CTA. It is not implemented and has not passed validation.
 
-Do not claim D4A is approved or implemented yet. Do not invent protocol, firmware behavior, or acceptance criteria before Owner approval.
+Expected D4B scope:
+
+- Canonical web implementation.
+- Web-only smoke/validation.
+- Closeout doc.
+
+BLE physical validation remains an Owner phone test at:
+
+`https://onlysky17.github.io/Clock/test.html`
 
 ## Guardrails For The Next Task
 
