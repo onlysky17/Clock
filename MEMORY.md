@@ -1,5 +1,38 @@
 # MEMORY
 
+## Canonical Current State
+
+- E1A automatic foundation has been merged into `main`.
+- E1A merge baseline commit: `0b5027d3945bc8514a1191a3a37576de8255e489`.
+- Active automation files:
+  - `AGENTS.md`
+  - `.codex/skills/eink-automatic/SKILL.md`
+  - `tools/eink-auto-preflight.ps1`
+  - `docs/agent/AUTOMATION_MODE.md`
+- Canonical web URL: `https://onlysky17.github.io/Clock/test.html`
+
+Firmware milestone cuối đã đóng:
+- `TASK D3E` long-run BLE/EPD lifecycle fix.
+- Firmware commit: `08447bf3d142cd9aa1c1314a5beb58559f46659c`.
+- Physical evidence:
+  - Khoảng 90 phút RUNNING.
+  - Uptime `5466` giây.
+  - BLE reconnect PASS.
+  - Refresh mỗi 5 phút tiếp tục đều.
+  - Keil `0 errors`, `0 warnings`.
+  - Code `41628`, RO-data `21624`, RW-data `608`, ZI-data `22928`.
+  - Raw BIN `64996` bytes.
+  - Raw headroom `532` bytes against the `65528` byte limit.
+- D3D2 persistence is a passed foundation milestone, but it is not the final firmware milestone.
+- D3E handoff has `VERIFY_HOME PASS`.
+
+Next canonical action:
+- `TASK D4A` product-decision task.
+- Start by deciding UX for `STALE_PRESENT` and the next feature direction after D3E.
+- Do not claim D4A is approved or implemented yet.
+
+## Historical Milestones
+
 ## TASK C2K SPI Final Closeout
 
 - Repo: `D:\EINK\Clock`
@@ -124,7 +157,7 @@ Verified D3C final state:
 - No unintended second black refresh.
 - Time remains RAM-only: after power cycle/cold boot, run SET_TIME once again before device-side clock rendering/scheduling.
 
-## TASK D3D-2 Final Time Persistence Closeout
+## TASK D3D2 Historical Time Persistence Closeout
 
 - Repo: `D:\EINK\Clock`
 - Canonical web URL: `https://onlysky17.github.io/Clock/test.html`
@@ -150,7 +183,7 @@ Persistence layout:
 - Only valid `D2 00 SET_TIME` writes a record.
 - The firmware never writes on each minute tick or each panel refresh.
 
-Verified D3D-2 final state:
+Verified D3D2 historical state:
 - SPI Burn/Verify PASS.
 - Cold boot PASS.
 - BLE boot/connect PASS.

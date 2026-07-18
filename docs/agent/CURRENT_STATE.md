@@ -1,5 +1,41 @@
 # CURRENT_STATE
 
+## Canonical Current State
+
+E1A automatic foundation is merged into `main`.
+
+- E1A merge baseline commit: `0b5027d3945bc8514a1191a3a37576de8255e489`
+- Active automation files:
+  - `AGENTS.md`
+  - `.codex/skills/eink-automatic/SKILL.md`
+  - `tools/eink-auto-preflight.ps1`
+  - `docs/agent/AUTOMATION_MODE.md`
+- Canonical web URL: `https://onlysky17.github.io/Clock/test.html`
+
+Firmware milestone cuối đã đóng:
+
+- `TASK D3E` long-run BLE/EPD lifecycle fix.
+- Firmware commit: `08447bf3d142cd9aa1c1314a5beb58559f46659c`.
+- Physical evidence:
+  - Khoảng 90 phút RUNNING.
+  - Uptime `5466` giây.
+  - BLE reconnect PASS.
+  - Refresh mỗi 5 phút tiếp tục đều.
+  - Keil `0 errors`, `0 warnings`.
+  - Code `41628`, RO-data `21624`, RW-data `608`, ZI-data `22928`.
+  - Raw BIN `64996` bytes.
+  - Raw headroom `532` bytes against the `65528` byte limit.
+- D3D2 persistence is a passed foundation milestone, but it is not the final firmware milestone.
+- D3E handoff has `VERIFY_HOME PASS`.
+
+Next canonical action:
+
+- `TASK D4A` product-decision task.
+- Start by deciding UX for `STALE_PRESENT` and the next feature direction after D3E.
+- Do not claim D4A is approved or implemented yet.
+
+## Historical Project State
+
 Active firmware base:
 firmware/active/HINK213_CLOCK_22_BASE
 
@@ -77,7 +113,7 @@ D2B firmware time handler:
 Do not commit `.bin` firmware images. The final `.bin` remains local under:
 D:\EINK\Clock\_incoming
 
-## D2E D2D final persistent state
+## Historical D2E D2D persistent state
 
 Current persistent firmware image:
 D:\EINK\Clock\_incoming\TASK_D2D_FINAL_PACKED_256KB.bin
@@ -85,7 +121,7 @@ D:\EINK\Clock\_incoming\TASK_D2D_FINAL_PACKED_256KB.bin
 SHA256:
 F9C08469C1267C291EA722818E6A7451773D86C5AA271741BEF113AB2537142B
 
-Verified D2 final state:
+Verified historical D2 state:
 - D2B firmware RAM-only time handler PASS.
 - D2C web device time controls PASS.
 - D2D firmware-rendered clock command PASS.
@@ -112,10 +148,10 @@ Runtime note:
 - After cold boot, use: Connect -> Gửi giờ xuống thiết bị -> Vẽ giờ từ thiết bị lên màn.
 - QR and low-battery legacy visual redraw paths are disabled as an accepted firmware-size tradeoff; current HINK213 clock-panel flow is unaffected.
 
-Next milestone:
+Historical next milestone at that time:
 - TASK D3A — device auto-minute clock policy/design.
 
-## D3A auto-minute policy design
+## Historical D3A auto-minute policy design
 
 D3A is design-only and does not change firmware or web runtime.
 
@@ -136,10 +172,10 @@ Policy now defined:
 - D2 02 manual render remains valid and updates last-rendered minute state.
 - D3B implementation must fit within the approximate 364-byte raw headroom.
 
-Next implementation milestone:
+Historical next implementation milestone at that time:
 - TASK D3B — auto-minute scheduler implementation.
 
-## D3C final persistent clock state
+## Historical D3C persistent clock state
 
 Current persistent firmware image:
 D:\EINK\Clock\_incoming\TASK_D3C_FINAL_PACKED_256KB.bin
@@ -153,7 +189,7 @@ D:\EINK\Clock\_incoming\TASK_D3C_FINAL_RAW.bin
 Raw SHA256:
 3A360340C943F1EAD0E9EA5AC14EF584767EF57B2AC6229A221F5CA84BCC6EBC
 
-Verified D3C final state:
+Verified historical D3C state:
 - D3B dedicated minute timer PASS.
 - D3C date + lunar renderer PASS.
 - Safe disconnect/re-advertise PASS.
@@ -180,9 +216,9 @@ Runtime note:
 - Time remains RAM-only.
 - After power cycle/cold boot, run SET_TIME once before relying on the device-side clock scheduler.
 
-## D3D-2 final last-known time persistence
+## Historical D3D2 last-known time persistence
 
-D3D-2 is now the current final persistent clock milestone.
+D3D2 is a passed persistence foundation milestone. It is not the final firmware milestone; D3E is the final closed firmware milestone.
 
 Current final firmware image remains local only:
 D:\EINK\Clock\_incoming\TASK_D3D2_FINAL_PACKED_256KB.bin
