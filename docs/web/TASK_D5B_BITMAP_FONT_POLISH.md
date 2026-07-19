@@ -78,4 +78,34 @@ Automated browser evidence for Fix2 must be stored under:
 
 `D:\EINK\Clock\_incoming\D5B_FIX2_BASELINE_PROOF`
 
-Owner BLE/e-ink physical validation remains a post-deploy phone test.
+## D5C Closeout - Physical PASS
+
+D5A flagship daily layout is CLOSED.
+
+D5B bitmap font polish is CLOSED.
+
+D5B-FIX1 Vietnamese glyph/layout fix is CLOSED.
+
+D5B-FIX2 bitmap baseline normalization is CLOSED/PASS.
+
+- D5B-FIX2 implementation commit: `642738c0b4d4f4bbf763838fe9eb43dca7b4749b`
+- Automated smoke PASS.
+- Automated browser/metrics PASS.
+- Owner physical màn e-ink PASS on `19/07/2026`.
+- Owner physical evidence:
+  - `THÁNG` and `ÂM` show correct accents;
+  - baseline is straight;
+  - solar date does not overflow the divider;
+  - `HH:mm` is clear and prominent;
+  - month calendar has 7 columns;
+  - current day highlight is clear;
+  - no clipping or stuck-together text.
+- D5B-FIX2 did not change firmware or protocol.
+- No Keil build or flash was required.
+- Layout is frozen; do not adjust the font again unless there is a regression.
+
+Next canonical action:
+
+`TASK D6A` - firmware headroom reduction audit and autonomous flagship layout port plan.
+
+D6A must start as a read-only audit to look for at least about `1-2 KB` of additional firmware headroom and evaluate how to port the flagship daily layout into the device-side renderer while preserving D3E scheduler/persistence and without changing protocol or SPI sector.

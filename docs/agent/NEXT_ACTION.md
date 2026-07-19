@@ -1,4 +1,4 @@
-﻿# NEXT_ACTION
+# NEXT_ACTION
 
 ## Canonical Current State
 
@@ -13,32 +13,41 @@ Firmware milestone cuối đã đóng:
 - Firmware commit: `08447bf3d142cd9aa1c1314a5beb58559f46659c`.
 - D3D2 persistence is a passed foundation milestone, but it is not the final firmware milestone.
 
-Web/UX milestone cuối đã đóng:
+Web/layout milestone cuối đã đóng:
 
-- `TASK D4A` stale recovery UX decision is CLOSED and approved by Owner.
-- `TASK D4B` stale recovery CTA implementation and physical validation are CLOSED/PASS.
-- D4B implementation commit: `9b4cb9b58907960b3605b4cbf6a62dc39524b89f`.
-- D4B merge/main commit: `ca359a025a7e854b468a381dc7c601a9be053bdc`.
-- D4B smoke PASS.
-- D4B automated browser 4/4 PASS: `A_STALE`, `B_NOTIFY_RACE_GUARD`, `C_FOLLOW_UP_CONFIRM`, `D_RECOVERY_ERROR`.
-- Owner physical test at `https://onlysky17.github.io/Clock/test.html` PASS, including BLE thật PASS and màn e-ink render đúng giờ PASS.
-- D4B did not change firmware or protocol.
-- D4B required no Keil build or flash.
+- `TASK D5A` flagship daily layout is CLOSED.
+- `TASK D5B` bitmap font polish is CLOSED.
+- `TASK D5B-FIX1` Vietnamese glyph/layout fix is CLOSED.
+- `TASK D5B-FIX2` bitmap baseline normalization is CLOSED/PASS.
+- D5B-FIX2 implementation commit: `642738c0b4d4f4bbf763838fe9eb43dca7b4749b`.
+- D5B-FIX2 automated smoke PASS.
+- D5B-FIX2 automated browser/metrics PASS.
+- Owner physical màn e-ink PASS on `19/07/2026`.
+- Physical evidence:
+  - `THÁNG` and `ÂM` show correct accents;
+  - baseline is straight;
+  - solar date does not overflow the divider;
+  - `HH:mm` is clear and prominent;
+  - month calendar has 7 columns;
+  - current day highlight is clear;
+  - no clipping or stuck-together text.
+- Layout is frozen; do not adjust the font again unless there is a regression.
+- D5B-FIX2 did not change firmware or protocol.
 
 ## Next Canonical Action
 
-`TASK D5A` is the only next canonical action.
+`TASK D6A` is the only next canonical action.
 
-D5A is read-only next-feature/product-direction selection after D4B.
+TASK D6A — firmware headroom reduction audit and autonomous flagship layout port plan.
 
-D5A has not been approved and has not been implemented. Do not invent a feature, firmware behavior, protocol change, or acceptance criteria before Owner decision.
+D6A must start as a read-only audit:
 
-Expected D5A scope:
-
-- Read canonical state and directly related closeout docs.
-- Summarize possible next product directions after D4B.
-- Recommend options for Owner decision only.
-- Do not modify firmware, web, SDK, smoke, or protocol.
+- Find a way to recover at least about `1-2 KB` of firmware headroom.
+- Evaluate how to port the flagship daily layout into the device-side renderer.
+- Preserve D3E scheduler/persistence.
+- Do not change protocol or SPI sector.
+- Do not implement yet.
+- Do not claim feasibility until the audit is complete.
 
 ## Guardrails For The Next Task
 
