@@ -9,6 +9,13 @@
 *{box-sizing:border-box}body{margin:0;background:linear-gradient(#050a12,#101a2a);color:var(--text)}main{max-width:1040px;margin:auto;padding:20px}
 .badge{display:inline-block;padding:7px 11px;border:1px solid #2d6b52;border-radius:999px;background:#092a20;color:#b5f7dd;font-weight:800}
 .card{margin:14px 0;padding:16px;border:1px solid var(--line);border-radius:14px;background:rgba(17,28,44,.96)}
+.productHeader{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:14px}
+.productHeader h1{margin:.2rem 0 .35rem;font-size:clamp(1.55rem,4vw,2.25rem);line-height:1.1}
+.productHeader p{max-width:680px;margin:.25rem 0 0}.productStatus{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:9px;margin-top:12px}
+.heroAction{font-size:1rem;min-width:160px}.presetRow button{min-width:160px}
+.advanced{margin:18px 0;border:1px solid var(--line);border-radius:12px;background:rgba(11,20,33,.96);overflow:hidden}
+.advanced>summary{cursor:pointer;list-style:none;padding:15px 16px;font-weight:850;color:#dbeafe}.advanced>summary::-webkit-details-marker{display:none}
+.advanced>summary:focus-visible{outline:2px solid #93c5fd;outline-offset:3px}.advancedBody{padding:0 16px 16px}.advancedBody .card{border-radius:10px;background:#0e1928}
 .row{display:flex;flex-wrap:wrap;gap:9px;align-items:center}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:9px}
 button,input,select{min-height:40px;padding:10px 12px;border:1px solid #526d8f;border-radius:10px;background:#1a2940;color:white;font-weight:750}
 button{cursor:pointer}button.primary{background:#1d4ed8}button.good{background:#066047}button:disabled{opacity:.4;cursor:not-allowed}
@@ -172,6 +179,61 @@ let autoSyncTimer=0,autoSyncEnabled=false,autoArmedMinuteKey='',lastAutoSentMinu
 let d2Running=false;
 let d2StalePresent=false;
 let d2StaleRecoveryPending=false;
+
+function setupProductMode(){
+  const main=document.querySelector('main');
+  const originalSections=[...main.querySelectorAll('section.card')];
+  const refs={
+    connect:$('connect'),
+    disconnect:$('disconnect'),
+    d2SetTime:$('d2SetTime'),
+    syncClock:$('syncClock'),
+    dailyCalendar:$('dailyCalendar'),
+    updateClock:$('updateClock'),
+    syncStatus:$('syncStatus'),
+    d2StaleBox:$('d2StaleBox'),
+    canvasWrap:document.querySelector('.canvasWrap')
+  };
+  const header=document.createElement('div');
+  header.className='productHeader';
+  header.innerHTML='<div><div class="badge">EINK Clock</div><h1>Đồng hồ lịch hằng ngày</h1><p>Chọn mặt đồng hồ, xem preview và gửi lên màn e-ink. Các thông số kỹ thuật vẫn có sẵn trong mục nâng cao.</p></div><div class="row" id="productConnectRow"></div>';
+
+  const statusCard=document.createElement('section');
+  statusCard.className='card';
+  statusCard.innerHTML='<h2>Trạng thái</h2><div class="productStatus"><div class="stat"><span>Thiết bị</span><strong id="productState" class="warn">Chưa kết nối</strong></div><div class="stat"><span>Tiến trình</span><span id="productSyncSlot"></span></div></div><div class="row" id="productActionRow"></div>';
+
+  const presetCard=document.createElement('section');
+  presetCard.className='card';
+  presetCard.innerHTML='<h2>Chọn mặt đồng hồ</h2><div class="row presetRow" id="productPresetRow"></div>';
+
+  const previewCard=document.createElement('section');
+  previewCard.className='card';
+  previewCard.innerHTML='<h2>Preview</h2><p><small>Preview dùng đúng khung 250×122 của màn.</small></p>';
+
+  const advanced=document.createElement('details');
+  advanced.className='advanced';
+  advanced.id='advancedPanel';
+  advanced.innerHTML='<summary>Kỹ thuật / Nâng cao</summary><div class="advancedBody"></div>';
+
+  main.innerHTML='';
+  main.append(header,statusCard,presetCard,previewCard,advanced);
+
+  $('productConnectRow').append(refs.connect,refs.disconnect);
+  refs.connect.textContent='Kết nối';
+  refs.disconnect.textContent='Ngắt kết nối';
+  $('productActionRow').append(refs.d2SetTime,refs.syncClock);
+  refs.d2SetTime.textContent='Đồng bộ giờ';
+  refs.syncClock.textContent='Gửi lên màn';
+  $('productPresetRow').append(refs.dailyCalendar,refs.updateClock);
+  refs.dailyCalendar.textContent='Mặt lịch hằng ngày';
+  refs.updateClock.textContent='Giờ đơn giản';
+  $('productSyncSlot').append(refs.syncStatus);
+  statusCard.insertBefore(refs.d2StaleBox,$('productActionRow'));
+  previewCard.insertBefore(refs.canvasWrap,previewCard.querySelector('p'));
+  for(const section of originalSections){
+    advanced.querySelector('.advancedBody').append(section);
+  }
+}
 
 const hex=a=>[...a].map(v=>v.toString(16).padStart(2,'0').toUpperCase()).join(' ');
 const u16=(lo,hi)=>lo|(hi<<8);
@@ -739,6 +801,25 @@ function controls(){
   $('repack').disabled=locked;
   $('brush').disabled=locked;
   $('text').disabled=locked;
+  updateProductState();
+}
+
+function updateProductState(){
+  const productState=$('productState');
+  if(!productState)return;
+  if(!server?.connected){
+    productState.textContent='Chưa kết nối';
+    productState.className='warn';
+  }else if(d2StalePresent){
+    productState.textContent='Cần đồng bộ giờ';
+    productState.className='warn';
+  }else if($('result').textContent==='FAIL' || $('e6Result').textContent==='ERROR' || $('d2StatusText').className==='bad'){
+    productState.textContent='Có lỗi';
+    productState.className='bad';
+  }else{
+    productState.textContent='Đang chạy';
+    productState.className='ok';
+  }
 }
 
 function minuteKey(date=new Date()){
@@ -1385,6 +1466,8 @@ async function safe(fn){
     setBusy(false);
   }
 }
+
+setupProductMode();
 
 $('clearWhite').onclick=clearWhite;
 $('fillBlack').onclick=fillBlack;
