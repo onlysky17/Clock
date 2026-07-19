@@ -215,6 +215,9 @@ static void hink_d2_minute_start_cb(void);
 static void hink_d2_minute_timer_cb(void);
 static void hink_d3d_store_last_known_time(uint32_t epoch, int16_t timezone, uint8_t flags);
 void hink_d3d_boot_load_last_known_time(void);
+static void hink_bitmap_draw_clock(uint8_t h, uint8_t m, uint16_t sy, uint8_t sm,
+                                   uint8_t sd, uint8_t sw, uint8_t lunar_valid,
+                                   uint8_t lm, uint8_t ld);
 
 static void hink_e4_arm_timer(void);
 
@@ -979,7 +982,16 @@ const u8 font_bt[] = {
  */
 static void draw_bt(int x, int y)
 {
-	fb_draw_font_info(x, y, font_bt, BLACK);
+	int row, col;
+	const u8 *bits = font_bt + 5;
+
+	for(row=0; row<15; row++){
+		for(col=0; col<8; col++){
+			if(bits[row] & (0x80>>col)){
+				draw_pixel(x+col, y+row, BLACK);
+			}
+		}
+	}
 }
 
 
@@ -987,8 +999,6 @@ static void draw_bt(int x, int y)
 
 typedef struct {
 	int xres, yres;
-	int font_char;
-	int font_dseg;
 	u16 x[8];
 	u16 y[8];
 }LAYOUT;
@@ -1004,15 +1014,15 @@ typedef struct {
 
 LAYOUT layouts[3] = {
 	/* Legacy 212x104 slot disabled for the fixed HINK-E0213A53 physical override. */
-	{0, 0, 0, 1,
+	{0, 0,
 		{15, 172, 190,  16,  12,  98, 150, 12},
 		{ 6,   7,  14,  27,  82,  82,  82, 44},
 	},
-	{250, 122, 2, 3,
+	{250, 122,
 		{15, 206, 226,  12,  12, 118, 176, 15},
 		{ 6,   8,  15,  28,  98,  98,  98, 50},
 	},
-	{296, 128, 2, 3,
+	{296, 128,
 		{15, 246, 268,  30,  12, 140, 220, 15,},
 		{ 6,   8,  15,  30, 102, 102, 102, 52,},
 	},
@@ -1030,6 +1040,76 @@ void select_layout(int xres, int yres)
 			return;
 		}
 	}
+}
+
+static void hink_put_2(char *dst, uint8_t value)
+{
+	dst[0] = (char)('0' + (value / 10U));
+	dst[1] = (char)('0' + (value % 10U));
+}
+
+static void hink_put_4(char *dst, uint16_t value)
+{
+	dst[0] = (char)('0' + ((value / 1000U) % 10U));
+	dst[1] = (char)('0' + ((value / 100U) % 10U));
+	dst[2] = (char)('0' + ((value / 10U) % 10U));
+	dst[3] = (char)('0' + (value % 10U));
+}
+
+static void hink_weekday(char *dst, uint8_t sw)
+{
+	switch (sw)
+	{
+		case 1U: dst[0] = 'T'; dst[1] = '2'; break;
+		case 2U: dst[0] = 'T'; dst[1] = '3'; break;
+		case 3U: dst[0] = 'T'; dst[1] = '4'; break;
+		case 4U: dst[0] = 'T'; dst[1] = '5'; break;
+		case 5U: dst[0] = 'T'; dst[1] = '6'; break;
+		case 6U: dst[0] = 'T'; dst[1] = '7'; break;
+		default: dst[0] = 'C'; dst[1] = 'N'; break;
+	}
+}
+
+static void hink_bitmap_draw_clock(uint8_t h, uint8_t m, uint16_t sy, uint8_t sm,
+                                   uint8_t sd, uint8_t sw, uint8_t lunar_valid,
+                                   uint8_t lm, uint8_t ld)
+{
+	char date_buf[16];
+	char lunar_buf[10];
+	int time_x = (fb_w > 137) ? ((fb_w - 137) / 2) : 0;
+	int time_y = (fb_h > 56) ? ((fb_h - 56) / 2) : 0;
+
+	hink_weekday(date_buf, sw);
+	date_buf[2] = ' ';
+	hink_put_2(&date_buf[3], sd);
+	date_buf[5] = '/';
+	hink_put_2(&date_buf[6], (uint8_t)(sm + 1U));
+	date_buf[8] = '/';
+	hink_put_4(&date_buf[9], sy);
+	date_buf[13] = 0;
+
+	lunar_buf[0] = 'A';
+	lunar_buf[1] = 'L';
+	lunar_buf[2] = ' ';
+	if (lunar_valid)
+	{
+		hink_put_2(&lunar_buf[3], ld);
+		lunar_buf[5] = '/';
+		hink_put_2(&lunar_buf[6], lm);
+	}
+	else
+	{
+		lunar_buf[3] = '-';
+		lunar_buf[4] = '-';
+		lunar_buf[5] = '/';
+		lunar_buf[6] = '-';
+		lunar_buf[7] = '-';
+	}
+	lunar_buf[8] = 0;
+
+	draw_text(8, 8, date_buf, BLACK);
+	bitmap_draw_time_hhmm(time_x, time_y, h, m, BLACK);
+	draw_text(8, fb_h - 16, lunar_buf, BLACK);
 }
 
 
@@ -1188,8 +1268,9 @@ void LB_draw()
  */
 void clock_draw(int flags)
 {
-	char tbuf[64];
 	LAYOUT *lt = &layouts[current_layout];
+	uint8_t draw_hour = (uint8_t)hour;
+	uint8_t lunar_month = (uint8_t)((l_month & 0x7f) + 1);
 
 	if(hink_e6_state >= HINK_E6_STATE_REFRESHING){
 		return;
@@ -1216,42 +1297,22 @@ void clock_draw(int flags)
 	// ä½¿ç”¨å¤§å­—æ˜¾ç¤ºæ—¶é—´
 	if(h24_format){
 		// 24å°æ—¶åˆ¶
-		select_font(lt->font_dseg);
-		sprintf(tbuf, "%02d:%02d", hour, minute);
-		draw_text(lt->x[3], lt->y[3], tbuf, BLACK);
+		draw_hour = (uint8_t)hour;
 	}else{
 		// 12å°æ—¶åˆ¶
-		int h = hour;
-		int ampm = 0;
-		if(h>=12){
-			if(h>12)
-				h -= 12;
-			ampm = 1;
-		}else if(h==0){
-			h = 12; // 0ç‚¹æ˜¾ç¤ºä¸º12ç‚¹
+		draw_hour = (uint8_t)hour;
+		if(draw_hour>=12U){
+			if(draw_hour>12U)
+				draw_hour -= 12U;
+		}else if(draw_hour==0U){
+			draw_hour = 12U;
 		}
-		select_font(lt->font_dseg);
-		sprintf(tbuf, "%2d:%02d", h, minute);
-		draw_text(lt->x[3], lt->y[3], tbuf, BLACK);
-
-		// æ˜¾ç¤ºä¸Šåˆ/ä¸‹åˆ
-		select_font(lt->font_char);
-		if(ampm){
-			strcpy(tbuf, "ä¸‹åˆ");
-		}else{
-			strcpy(tbuf, "ä¸Šåˆ");
-		}
-		draw_text(lt->x[7], lt->y[7], tbuf, BLACK);
 	}
 
-	// æ˜¾ç¤ºå…¬åŽ†æ—¥æœŸ
-	sprintf(tbuf, "%4då¹´%2dæœˆ%2dæ—¥   æ˜ŸæœŸ%s", year, month+1, date+1, wday_str[wday]);
-	select_font(lt->font_char);
-	draw_text(lt->x[0], lt->y[0], tbuf, BLACK);
-
-	// æ˜¾ç¤ºå†œåŽ†æ—¥æœŸ(ä¸æ˜¾ç¤ºå¹´)
-    sprintf(tbuf, "AL %02d/%02d", l_date + 1, (l_month & 0x7f) + 1);
-	draw_text(lt->x[4], lt->y[4], tbuf, BLACK);
+	hink_bitmap_draw_clock(draw_hour, (uint8_t)minute, (uint16_t)year,
+	                       (uint8_t)month, (uint8_t)(date + 1),
+	                       (uint8_t)wday, 1U, lunar_month,
+	                       (uint8_t)(l_date + 1));
 	if(flags&DRAW_BT){
 		draw_text(lt->x[6], lt->y[6], bt_id, BLACK);
 	}
@@ -1646,7 +1707,7 @@ static void hink_d2_render_timer_cb(void)
     uint8_t sw;
     uint8_t lm;
     uint8_t ld;
-    char tbuf[10];
+    uint8_t lunar_valid;
     uint8_t h = 0U;
     uint8_t m = 0U;
 
@@ -1689,31 +1750,8 @@ static void hink_d2_render_timer_cb(void)
     hink_d2_render_notify(HINK_D2_RESULT_OK, HINK_D2_RENDER_RENDERING);
 
     memset(fb_bw, 0xff, scr_h * line_bytes);
-    sprintf(tbuf, "%02d:%02d", h, m);
-    select_font(layouts[current_layout].font_dseg);
-    draw_text(layouts[current_layout].x[3], layouts[current_layout].y[3], tbuf, BLACK);
-    select_font(layouts[current_layout].font_char);
-    switch (sw)
-    {
-        case 1U: tbuf[0] = 'T'; tbuf[1] = '2'; break;
-        case 2U: tbuf[0] = 'T'; tbuf[1] = '3'; break;
-        case 3U: tbuf[0] = 'T'; tbuf[1] = '4'; break;
-        case 4U: tbuf[0] = 'T'; tbuf[1] = '5'; break;
-        case 5U: tbuf[0] = 'T'; tbuf[1] = '6'; break;
-        case 6U: tbuf[0] = 'T'; tbuf[1] = '7'; break;
-        default: tbuf[0] = 'C'; tbuf[1] = 'N'; break;
-    }
-    sprintf(&tbuf[2], " %02d/%02d", sd, sm + 1U);
-    draw_text(layouts[current_layout].x[0], layouts[current_layout].y[0], tbuf, BLACK);
-    if (hink_d3c_lunar_from_solar(sy, sm, sd, &lm, &ld))
-    {
-        sprintf(tbuf, "AL %02d/%02d", ld, lm);
-    }
-    else
-    {
-        sprintf(tbuf, "AL --/--");
-    }
-    draw_text(layouts[current_layout].x[4], layouts[current_layout].y[4], tbuf, BLACK);
+    lunar_valid = hink_d3c_lunar_from_solar(sy, sm, sd, &lm, &ld);
+    hink_bitmap_draw_clock(h, m, sy, sm, sd, sw, lunar_valid, lm, ld);
 
     epd_hw_open();
     epd_update_mode(UPDATE_FULL);

@@ -136,120 +136,188 @@ void draw_qr_code(
 /******************************************************************************/
 
 
-#include "sfont.h"
-#include "sfont16.h"
-#include "font50.h"
-#include "font66.h"
+#define COMPACT_GLYPH_W 5
+#define COMPACT_GLYPH_H 7
+#define COMPACT_GLYPH_ADV 6
 
-const u8 *font_list[6] = {
-	sfont,
-	F_DSEG7_50,
-	sfont16,
-	F_DSEG7_66,
+static const u8 compact_glyph_digit[10][COMPACT_GLYPH_H] = {
+	{0x0e,0x11,0x13,0x15,0x19,0x11,0x0e},
+	{0x04,0x0c,0x04,0x04,0x04,0x04,0x0e},
+	{0x0e,0x11,0x01,0x02,0x04,0x08,0x1f},
+	{0x1e,0x01,0x01,0x0e,0x01,0x01,0x1e},
+	{0x02,0x06,0x0a,0x12,0x1f,0x02,0x02},
+	{0x1f,0x10,0x10,0x1e,0x01,0x01,0x1e},
+	{0x06,0x08,0x10,0x1e,0x11,0x11,0x0e},
+	{0x1f,0x01,0x02,0x04,0x08,0x08,0x08},
+	{0x0e,0x11,0x11,0x0e,0x11,0x11,0x0e},
+	{0x0e,0x11,0x11,0x0f,0x01,0x02,0x0c},
 };
 
-const u8 *current_font = (u8*)sfont;
+static const u8 compact_glyph_colon[COMPACT_GLYPH_H] = {
+	0x00,0x04,0x04,0x00,0x04,0x04,0x00
+};
 
-int select_font(int id)
+static const u8 compact_glyph_slash[COMPACT_GLYPH_H] = {
+	0x01,0x02,0x02,0x04,0x08,0x08,0x10
+};
+
+static const u8 compact_glyph_dash[COMPACT_GLYPH_H] = {
+	0x00,0x00,0x00,0x1f,0x00,0x00,0x00
+};
+
+static const u8 compact_glyph_question[COMPACT_GLYPH_H] = {
+	0x0e,0x11,0x01,0x02,0x04,0x00,0x04
+};
+
+static const u8 compact_glyph_alpha[26][COMPACT_GLYPH_H] = {
+	{0x0e,0x11,0x11,0x1f,0x11,0x11,0x11}, /* A */
+	{0x1e,0x11,0x11,0x1e,0x11,0x11,0x1e},
+	{0x0f,0x10,0x10,0x10,0x10,0x10,0x0f},
+	{0x1e,0x11,0x11,0x11,0x11,0x11,0x1e},
+	{0x1f,0x10,0x10,0x1e,0x10,0x10,0x1f},
+	{0x1f,0x10,0x10,0x1e,0x10,0x10,0x10},
+	{0x0f,0x10,0x10,0x13,0x11,0x11,0x0f},
+	{0x11,0x11,0x11,0x1f,0x11,0x11,0x11},
+	{0x0e,0x04,0x04,0x04,0x04,0x04,0x0e},
+	{0x01,0x01,0x01,0x01,0x11,0x11,0x0e},
+	{0x11,0x12,0x14,0x18,0x14,0x12,0x11},
+	{0x10,0x10,0x10,0x10,0x10,0x10,0x1f},
+	{0x11,0x1b,0x15,0x15,0x11,0x11,0x11},
+	{0x11,0x19,0x15,0x13,0x11,0x11,0x11},
+	{0x0e,0x11,0x11,0x11,0x11,0x11,0x0e},
+	{0x1e,0x11,0x11,0x1e,0x10,0x10,0x10},
+	{0x0e,0x11,0x11,0x11,0x15,0x12,0x0d},
+	{0x1e,0x11,0x11,0x1e,0x14,0x12,0x11},
+	{0x0f,0x10,0x10,0x0e,0x01,0x01,0x1e},
+	{0x1f,0x04,0x04,0x04,0x04,0x04,0x04},
+	{0x11,0x11,0x11,0x11,0x11,0x11,0x0e},
+	{0x11,0x11,0x11,0x11,0x0a,0x0a,0x04},
+	{0x11,0x11,0x11,0x15,0x15,0x1b,0x11},
+	{0x11,0x11,0x0a,0x04,0x0a,0x11,0x11},
+	{0x11,0x11,0x0a,0x04,0x04,0x04,0x04},
+	{0x1f,0x01,0x02,0x04,0x08,0x10,0x1f},
+};
+
+static const u8 *compact_glyph(int ch)
 {
-	current_font = font_list[id];
-	return 0;
+	if(ch>='0' && ch<='9'){
+		return compact_glyph_digit[ch-'0'];
+	}
+	if(ch>='a' && ch<='z'){
+		ch -= 32;
+	}
+	if(ch>='A' && ch<='Z'){
+		return compact_glyph_alpha[ch-'A'];
+	}
+	if(ch==':'){
+		return compact_glyph_colon;
+	}
+	if(ch=='/'){
+		return compact_glyph_slash;
+	}
+	if(ch=='-'){
+		return compact_glyph_dash;
+	}
+	if(ch==' '){
+		return NULL;
+	}
+	return compact_glyph_question;
 }
 
-
-static const u8 *find_font(const u8 *font, int ucs)
+static void bitmap_pixel(int x, int y, int color)
 {
-	int total = *(u16*)font;
-	int i;
+	if(x<0 || y<0 || x>=fb_w || y>=fb_h){
+		return;
+	}
+	draw_pixel(x, y, color);
+}
 
-	for(i=0; i<total; i++){
-		if(*(u16*)(font+2+i*4+0)==ucs){
-			int offset = *(u16*)(font+2+i*4+2);
-			//printk("  %04x at %04x\n", ucs, offset);
-			return font+offset;
+static void bitmap_box(int x1, int y1, int x2, int y2, int color)
+{
+	int x, y;
+
+	if(x1<0){ x1 = 0; }
+	if(y1<0){ y1 = 0; }
+	if(x2>=fb_w){ x2 = fb_w-1; }
+	if(y2>=fb_h){ y2 = fb_h-1; }
+	if(x1>x2 || y1>y2){
+		return;
+	}
+	for(y=y1; y<=y2; y++){
+		for(x=x1; x<=x2; x++){
+			draw_pixel(x, y, color);
 		}
 	}
-
-	return NULL;
 }
 
-
-int fb_draw_font_info(int x, int y, const u8 *font_data, int color)
+void draw_char(int x, int y, int ch, int color)
 {
-	int r, c;
+	const u8 *glyph = compact_glyph(ch);
+	int row, col;
 
-	int ft_adv = font_data[0];
-	int ft_bw = font_data[1];
-	int ft_bh = font_data[2];
-	int ft_bx = (signed char)font_data[3];
-	int ft_by = (signed char)font_data[4];
-	int ft_lsize = (ft_bw+7)/8;
-	font_data += 5;
-
-	x += ft_bx;
-	y += ft_by;
-
-	for (r=0; r<ft_bh; r++) {
-		for (c=0; c<ft_bw; c++) {
-			int b = font_data[c>>3];
-			int mask = 0x80>>(c%8);
-			if(b&mask){
-				draw_pixel(x+c, y, color);
+	if(glyph==NULL){
+		return;
+	}
+	for(row=0; row<COMPACT_GLYPH_H; row++){
+		for(col=0; col<COMPACT_GLYPH_W; col++){
+			if(glyph[row] & (0x10>>col)){
+				bitmap_pixel(x+col, y+row, color);
 			}
-			mask >>= 1;
 		}
-		font_data += ft_lsize;
-		y += 1;
-	}
-
-	return ft_adv;
-}
-
-
-int fb_draw_font(int x, int y, int ucs, int color)
-{
-	const u8 *font_data = find_font(current_font, ucs);
-	if(font_data==NULL){
-		printf("fb_draw %04x: not found!\n", ucs);
-		return -1;
-	}
-
-	return fb_draw_font_info(x, y, font_data, color);
-}
-
-
-static int utf8_to_ucs(char **ustr)
-{
-	u8 *str = (u8*)*ustr;
-	int ucs = 0;
-
-	if(*str==0){
-		return 0;
-	}else if(*str<0x80){
-		*ustr = (char*)str+1;
-		return *str;
-	}else if(*str<0xe0){
-		ucs = ((str[0]&0x1f)<<6) | (str[1]&0x3f);
-		*ustr = (char*)str+2;
-		return ucs;
-	}else{
-		ucs = ((str[0]&0x0f)<<12) | ((str[1]&0x3f)<<6) | (str[2]&0x3f);
-		*ustr = (char*)str+3;
-		return ucs;
 	}
 }
-
 
 void draw_text(int x, int y, char *str, int color)
 {
-	int ch;
-
-	while(1){
-		ch = utf8_to_ucs(&str);
-		if(ch==0)
-			break;
-		x += fb_draw_font(x, y, ch, color);
+	while(*str){
+		draw_char(x, y, (int)*str, color);
+		x += COMPACT_GLYPH_ADV;
+		str++;
 	}
+}
+
+static void bitmap_segment(int x, int y, int seg, int color)
+{
+	switch(seg){
+		case 0: bitmap_box(x+4,  y+0,  x+23, y+4,  color); break;
+		case 1: bitmap_box(x+24, y+4,  x+28, y+25, color); break;
+		case 2: bitmap_box(x+24, y+31, x+28, y+52, color); break;
+		case 3: bitmap_box(x+4,  y+52, x+23, y+56, color); break;
+		case 4: bitmap_box(x+0,  y+31, x+4,  y+52, color); break;
+		case 5: bitmap_box(x+0,  y+4,  x+4,  y+25, color); break;
+		default: bitmap_box(x+4, y+26, x+23, y+30, color); break;
+	}
+}
+
+static void bitmap_large_digit(int x, int y, int digit, int color)
+{
+	static const u8 segs[10] = {
+		0x3f, 0x06, 0x5b, 0x4f, 0x66,
+		0x6d, 0x7d, 0x07, 0x7f, 0x6f
+	};
+	u8 mask = segs[digit%10];
+	int seg;
+
+	for(seg=0; seg<7; seg++){
+		if(mask & (1<<seg)){
+			bitmap_segment(x, y, seg, color);
+		}
+	}
+}
+
+static void bitmap_large_colon(int x, int y, int color)
+{
+	bitmap_box(x+2, y+16, x+6, y+21, color);
+	bitmap_box(x+2, y+36, x+6, y+41, color);
+}
+
+void bitmap_draw_time_hhmm(int x, int y, int hour, int minute, int color)
+{
+	bitmap_large_digit(x, y, hour/10, color);
+	bitmap_large_digit(x+33, y, hour%10, color);
+	bitmap_large_colon(x+65, y, color);
+	bitmap_large_digit(x+76, y, minute/10, color);
+	bitmap_large_digit(x+109, y, minute%10, color);
 }
 
 
