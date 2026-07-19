@@ -531,8 +531,11 @@ const PIXEL_FONT_5X7={
   'M':['10001','11011','10101','10101','10001','10001','10001'],
   'N':['10001','11001','10101','10011','10001','10001','10001'],
   'T':['11111','00100','00100','00100','00100','00100','00100'],
+  'Á':['00010','00100','01110','10001','10001','11111','10001','10001','10001'],
+  'Â':['00100','01010','01110','10001','10001','11111','10001','10001','10001'],
   ':':['00000','00100','00100','00000','00100','00100','00000'],
   '/':['00001','00010','00010','00100','01000','01000','10000'],
+  '?':['01110','10001','00001','00010','00100','00000','00100'],
   ' ':['00000','00000','00000','00000','00000','00000','00000']
 };
 
@@ -563,15 +566,17 @@ function drawPixelGlyph(pattern,x,y,scale=1,color='#000'){
 
 function drawBitmapText(text,x,y,{scale=1,color='#000',spacing=1,align='left'}={}){
   const chars=String(text).toUpperCase().split('');
-  const widths=chars.map(char=>(PIXEL_FONT_5X7[char]||PIXEL_FONT_5X7[' '])[0].length*scale);
+  const widths=chars.map(char=>(PIXEL_FONT_5X7[char]||PIXEL_FONT_5X7['?'])[0].length*scale);
   const total=widths.reduce((sum,width)=>sum+width,0)+Math.max(0,chars.length-1)*spacing*scale;
   let cursor=Math.round(align==='center'?x-total/2:(align==='right'?x-total:x));
+  const startX=cursor;
   for(const char of chars){
-    const glyph=PIXEL_FONT_5X7[char]||PIXEL_FONT_5X7[' '];
+    const glyph=PIXEL_FONT_5X7[char]||PIXEL_FONT_5X7['?'];
     drawPixelGlyph(glyph,cursor,y,scale,color);
     cursor+=glyph[0].length*scale+spacing*scale;
   }
-  return total;
+  const maxRows=chars.reduce((rows,char)=>Math.max(rows,(PIXEL_FONT_5X7[char]||PIXEL_FONT_5X7['?']).length),0);
+  return {x:startX,y,width:total,height:maxRows*scale};
 }
 
 function drawBlockTime(text,x,y,scale=8){
@@ -605,17 +610,17 @@ function drawDailyCalendar(sourceDate=new Date()){
   const solar=`${weekdaysLong[now.getDay()]} ${pad2(now.getDate())}/${pad2(now.getMonth()+1)}/${now.getFullYear()}`;
   const time=`${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
   const lunar=solarToLunar(now);
-  const lunarText=`AL ${pad2(lunar.day)}/${pad2(lunar.month)}${lunar.leap?' N':''}`;
+  const lunarText=`ÂM ${pad2(lunar.day)}/${pad2(lunar.month)}${lunar.leap?' N':''}`;
 
-  drawBitmapText(solar,5,8,{scale:2});
+  const solarBox=drawBitmapText(solar,5,10,{scale:1});
   drawBlockTime(time,72,35,6);
-  drawBitmapText(lunarText,6,93,{scale:2});
+  const lunarBox=drawBitmapText(lunarText,6,93,{scale:2});
   ctx.beginPath();
   ctx.moveTo(leftW,5);
   ctx.lineTo(leftW,117);
   ctx.stroke();
 
-  drawBitmapText(`THANG ${now.getMonth()+1}/${now.getFullYear()}`,rightX+rightW/2,8,{scale:1,align:'center'});
+  const monthTitleBox=drawBitmapText(`THÁNG ${now.getMonth()+1}/${now.getFullYear()}`,rightX+rightW/2,8,{scale:1,align:'center'});
 
   const cellW=14;
   const cellH=12;
@@ -645,6 +650,15 @@ function drawDailyCalendar(sourceDate=new Date()){
     }
   }
 
+  window.__D5B_DAILY_LAYOUT_DEBUG={
+    dividerX:leftW,
+    leftPaneRight:leftW-1,
+    rightPaneLeft:rightX,
+    solarBox,
+    lunarBox,
+    monthTitleBox,
+    calendar:{x:gridX,y:headerY,width:cellW*7,cellW,cellH}
+  };
   ctx.restore();
   repack();
   log(`Daily calendar updated: ${time} · ${solar} · ${lunarText}`);
