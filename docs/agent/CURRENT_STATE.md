@@ -48,13 +48,33 @@ Product and web milestones:
   - màn e-ink render đúng giờ PASS.
 - D4B did not change firmware or protocol.
 - D4B required no Keil build or flash.
-- D4B is the latest closed web/UX milestone.
+- `TASK D5A` flagship daily layout is CLOSED.
+- `TASK D5B` bitmap font polish is CLOSED.
+- `TASK D5B-FIX1` Vietnamese glyph/layout fix is CLOSED.
+- `TASK D5B-FIX2` bitmap baseline normalization is CLOSED/PASS.
+- D5B-FIX2 implementation commit: `642738c0b4d4f4bbf763838fe9eb43dca7b4749b`.
+- D5B-FIX2 automated smoke PASS.
+- D5B-FIX2 automated browser/metrics PASS.
+- Owner physical màn e-ink PASS on `19/07/2026`:
+  - `THÁNG` and `ÂM` show correct accents;
+  - baseline is straight;
+  - solar date does not overflow the divider;
+  - `HH:mm` is clear and prominent;
+  - month calendar has 7 columns;
+  - current day highlight is clear;
+  - no clipping or stuck-together text.
+- Layout is frozen; do not adjust the font again unless there is a regression.
+- D5B-FIX2 is the latest closed web/layout milestone.
 
 Next canonical action:
 
-- `TASK D5A` - read-only next-feature/product-direction selection after D4B.
-- D5A is not approved and not implemented.
-- Do not invent a feature or acceptance criteria before Owner decision.
+- `TASK D6A` - firmware headroom reduction audit and autonomous flagship layout port plan.
+- D6A is read-only audit first.
+- D6A should look for at least about `1-2 KB` additional firmware headroom.
+- D6A should evaluate how to port the flagship daily layout into the device-side renderer.
+- D6A must preserve D3E scheduler/persistence.
+- D6A must not change protocol or SPI sector.
+- D6A is not implemented and must not claim feasibility until the audit is complete.
 
 ## Historical Project State
 
