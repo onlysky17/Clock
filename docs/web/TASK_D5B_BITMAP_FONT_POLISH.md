@@ -33,6 +33,21 @@ Fix1 keeps the bitmap renderer and changes only the web preset renderer:
 - Draws the solar date `CN dd/mm/yyyy` at compact bitmap scale so its ink stays fully inside the left pane.
 - Records layout bounds for automated checks of the solar date, month title, divider, calendar, and payload.
 
+## Fix2 - Fixed Cell Metrics And Baselines
+
+Owner visual review found that accented bitmap glyphs could appear vertically misaligned because `Á` and `Â` were taller than ASCII glyphs while the renderer still positioned text from a top-left origin.
+
+Fix2 keeps the bitmap renderer and normalizes small-text metrics:
+
+- Small glyph cell: `5 x 9`.
+- Advance: `6`.
+- Baseline row: `8`.
+- ASCII, `Á`, `Â`, and fallback `?` all use the same cell height, advance, and baseline.
+- Shorter glyphs are padded inside the fixed cell instead of changing the vertical origin.
+- `drawBitmapText` now takes a baseline coordinate and returns a precise bounding box with `baselineY`, `advance`, `cellWidth`, and `cellHeight`.
+- `CN dd/mm/yyyy`, `THÁNG m/yyyy`, `ÂM dd/mm`, weekday labels, and month numbers each render on a single stable baseline.
+- The weekday underline sits below the weekday glyph boxes and does not cross text.
+
 ## Layout Guards
 
 - Logical canvas: `250 x 122`.
@@ -58,5 +73,9 @@ Expected:
 Automated browser evidence for Fix1 must be stored under:
 
 `D:\EINK\Clock\_incoming\D5B_FIX1_VIETNAMESE_LAYOUT_PROOF`
+
+Automated browser evidence for Fix2 must be stored under:
+
+`D:\EINK\Clock\_incoming\D5B_FIX2_BASELINE_PROOF`
 
 Owner BLE/e-ink physical validation remains a post-deploy phone test.
