@@ -14,14 +14,21 @@ function mustMatch(label, pattern) {
 
 mustContain('canonical implementation', '<title>TASK D2D - Device Clock Renderer</title>');
 mustContain('daily calendar preset button', 'Mặt lịch hằng ngày');
-mustMatch('bitmap glyph table exists', /const PIXEL_FONT_5X7=\{/);
+mustMatch('fixed bitmap cell width', /const BITMAP_FONT_CELL_WIDTH=5/);
+mustMatch('fixed bitmap cell height', /const BITMAP_FONT_CELL_HEIGHT=9/);
+mustMatch('fixed bitmap advance', /const BITMAP_FONT_ADVANCE=6/);
+mustMatch('fixed bitmap baseline', /const BITMAP_FONT_BASELINE=8/);
+mustMatch('bitmap glyph table exists', /const PIXEL_FONT_5X9=\{/);
+mustMatch('legacy alias remains for D5B checks', /const PIXEL_FONT_5X7=PIXEL_FONT_5X9/);
 mustMatch('block digit table exists', /const BLOCK_DIGITS_3X5=\{/);
-mustMatch('Vietnamese Á glyph exists', /'Á':\[/);
-mustMatch('Vietnamese Â glyph exists', /'Â':\[/);
+mustMatch('Vietnamese Á glyph exists as escape', /'\\u00c1':\[/);
+mustMatch('Vietnamese Â glyph exists as escape', /'\\u00c2':\[/);
 mustMatch('unknown glyph fallback exists', /'\?':\[/);
 mustMatch('pixel glyph renderer exists', /function drawPixelGlyph\(pattern,x,y,scale=1,color='#000'\)/);
-mustMatch('bitmap text renderer exists', /function drawBitmapText\(text,x,y,\{scale=1,color='#000',spacing=1,align='left'\}=\{\}\)/);
-mustMatch('bitmap text falls back to question glyph', /PIXEL_FONT_5X7\[char\]\|\|PIXEL_FONT_5X7\['\?'\]/);
+mustMatch('baseline text renderer exists', /function drawBitmapText\(text,x,baselineY,\{scale=1,color='#000',align='left'\}=\{\}\)/);
+mustMatch('baseline top calculation exists', /const top=Math\.round\(baselineY-BITMAP_FONT_BASELINE\*scale\)/);
+mustMatch('same advance used for all glyphs', /cursor\+=advance/);
+mustMatch('bbox returns baseline metrics', /return \{x:startX,y:top,width:total,height:cellHeight,baselineY,advance,cellWidth,cellHeight\}/);
 mustMatch('HH:mm uses block digits', /drawBlockTime\(time,72,35,6\)/);
 mustMatch('image smoothing disabled', /ctx\.imageSmoothingEnabled=false/);
 
@@ -32,12 +39,15 @@ const flagship = html.slice(flagshipStart, flagshipEnd);
 
 assert.ok(!/ctx\.font|fillText\(/.test(flagship), 'flagship layout must not use canvas text fonts');
 assert.ok(!/Arial|system-ui/.test(flagship), 'flagship layout must not use Arial/system-ui');
-mustMatch('solar text uses compact bitmap', /const solarBox=drawBitmapText\(solar,5,10,\{scale:1\}\)/);
-mustMatch('ÂM text uses bitmap', /const lunarText=`ÂM \$\{pad2\(lunar\.day\)\}\/\$\{pad2\(lunar\.month\)\}/);
-mustMatch('THÁNG title uses bitmap', /drawBitmapText\(`THÁNG \$\{now\.getMonth\(\)\+1\}\/\$\{now\.getFullYear\(\)\}`/);
+mustMatch('solar text uses one baseline', /const solarBox=drawBitmapText\(solar,5,18,\{scale:1\}\)/);
+mustMatch('ÂM text uses one baseline', /const lunarText=`\\u00c2M \$\{pad2\(lunar\.day\)\}\/\$\{pad2\(lunar\.month\)\}/);
+mustMatch('ÂM text baseline', /const lunarBox=drawBitmapText\(lunarText,6,110,\{scale:2\}\)/);
+mustMatch('THÁNG title uses one baseline', /drawBitmapText\(`TH\\u00c1NG \$\{now\.getMonth\(\)\+1\}\/\$\{now\.getFullYear\(\)\}`,rightX\+rightW\/2,17,\{scale:1,align:'center'\}\)/);
+mustMatch('weekday row uses one baseline', /const headerBaseline=32[\s\S]*weekdayBoxes=weekdaysShort\.map/);
+mustMatch('weekday rule below row', /const weekdayRuleY=35/);
 mustMatch('layout bounds debug exists', /window\.__D5B_DAILY_LAYOUT_DEBUG=\{/);
 mustMatch('divider guard constants present', /dividerX:leftW[\s\S]*leftPaneRight:leftW-1/);
-mustMatch('calendar 7 columns', /weekdaysShort\.forEach[\s\S]*const col=pos%7/);
+mustMatch('calendar 7 columns', /weekdaysShort\.map[\s\S]*const col=pos%7/);
 mustMatch('current day invert has padding', /if\(day===now\.getDate\(\)\)\{[\s\S]*ctx\.fillRect\(x,y-1,cellW,cellH\)[\s\S]*color:'#fff'/);
 
 mustMatch('logical width', /const WIDTH=250/);
