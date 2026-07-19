@@ -33,6 +33,7 @@ small{color:var(--muted)}
 <button id="fillBlack">Fill black</button>
 <button id="invert">Invert</button>
 <button id="updateClock" class="primary">Cập nhật giờ hiện tại</button>
+<button id="dailyCalendar" class="primary">Mặt lịch hằng ngày</button>
 <button id="sample">Draw sample</button>
 <label>Brush
 <select id="brush">
@@ -377,6 +378,221 @@ function drawSample(){
   repack();
 }
 
+function jdFromDate(dd,mm,yy){
+  const a=Math.floor((14-mm)/12);
+  const y=yy+4800-a;
+  const m=mm+12*a-3;
+  let jd=dd+Math.floor((153*m+2)/5)+365*y+Math.floor(y/4)-Math.floor(y/100)+Math.floor(y/400)-32045;
+  if(jd<2299161){
+    jd=dd+Math.floor((153*m+2)/5)+365*y+Math.floor(y/4)-32083;
+  }
+  return jd;
+}
+
+function jdToDate(jd){
+  let a,b,c;
+  if(jd>2299160){
+    a=jd+32044;
+    b=Math.floor((4*a+3)/146097);
+    c=a-Math.floor(146097*b/4);
+  }else{
+    b=0;
+    c=jd+32082;
+  }
+  const d=Math.floor((4*c+3)/1461);
+  const e=c-Math.floor(1461*d/4);
+  const m=Math.floor((5*e+2)/153);
+  const day=e-Math.floor((153*m+2)/5)+1;
+  const month=m+3-12*Math.floor(m/10);
+  const year=100*b+d-4800+Math.floor(m/10);
+  return{day,month,year};
+}
+
+function newMoon(k){
+  const t=k/1236.85;
+  const t2=t*t;
+  const t3=t2*t;
+  const dr=Math.PI/180;
+  let jd=2415020.75933+29.53058868*k+0.0001178*t2-0.000000155*t3;
+  jd+=0.00033*Math.sin((166.56+132.87*t-0.009173*t2)*dr);
+  const m=359.2242+29.10535608*k-0.0000333*t2-0.00000347*t3;
+  const mpr=306.0253+385.81691806*k+0.0107306*t2+0.00001236*t3;
+  const f=21.2964+390.67050646*k-0.0016528*t2-0.00000239*t3;
+  let c1=(0.1734-0.000393*t)*Math.sin(m*dr)+0.0021*Math.sin(2*dr*m);
+  c1-=0.4068*Math.sin(mpr*dr)+0.0161*Math.sin(2*dr*mpr);
+  c1-=0.0004*Math.sin(3*dr*mpr);
+  c1+=0.0104*Math.sin(2*dr*f)-0.0051*Math.sin((m+mpr)*dr);
+  c1-=0.0074*Math.sin((m-mpr)*dr)+0.0004*Math.sin((2*f+m)*dr);
+  c1-=0.0004*Math.sin((2*f-m)*dr)-0.0006*Math.sin((2*f+mpr)*dr);
+  c1+=0.0010*Math.sin((2*f-mpr)*dr)+0.0005*Math.sin((2*mpr+m)*dr);
+  const deltaT=t<-11?0.001+0.000839*t+0.0002261*t2-0.00000845*t3-0.000000081*t*t3:-0.000278+0.000265*t+0.000262*t2;
+  return jd+c1-deltaT;
+}
+
+function sunLongitude(jdn){
+  const t=(jdn-2451545.0)/36525;
+  const t2=t*t;
+  const dr=Math.PI/180;
+  const m=357.52910+35999.05030*t-0.0001559*t2-0.00000048*t*t2;
+  const l0=280.46645+36000.76983*t+0.0003032*t2;
+  let dl=(1.914600-0.004817*t-0.000014*t2)*Math.sin(dr*m);
+  dl+=(0.019993-0.000101*t)*Math.sin(2*dr*m)+0.000290*Math.sin(3*dr*m);
+  let l=(l0+dl)*dr;
+  l-=Math.PI*2*Math.floor(l/(Math.PI*2));
+  return Math.floor(l/Math.PI*6);
+}
+
+function lunarMonth11(year,timeZone){
+  const off=jdFromDate(31,12,year)-2415021;
+  const k=Math.floor(off/29.530588853);
+  let nm=Math.floor(newMoon(k)+0.5+timeZone/24);
+  const sunLong=sunLongitude(nm-0.5-timeZone/24);
+  if(sunLong>=9)nm=Math.floor(newMoon(k-1)+0.5+timeZone/24);
+  return nm;
+}
+
+function leapMonthOffset(a11,timeZone){
+  const k=Math.floor((a11-2415021.076998695)/29.530588853+0.5);
+  let last=0;
+  let i=1;
+  let arc=sunLongitude(Math.floor(newMoon(k+i)+0.5+timeZone/24)-0.5-timeZone/24);
+  do{
+    last=arc;
+    i++;
+    arc=sunLongitude(Math.floor(newMoon(k+i)+0.5+timeZone/24)-0.5-timeZone/24);
+  }while(arc!==last&&i<14);
+  return i-1;
+}
+
+function solarToLunar(date,timeZone=7){
+  const dd=date.getDate();
+  const mm=date.getMonth()+1;
+  const yy=date.getFullYear();
+  const dayNumber=jdFromDate(dd,mm,yy);
+  const k=Math.floor((dayNumber-2415021.076998695)/29.530588853);
+  let monthStart=Math.floor(newMoon(k+1)+0.5+timeZone/24);
+  if(monthStart>dayNumber)monthStart=Math.floor(newMoon(k)+0.5+timeZone/24);
+  let a11=lunarMonth11(yy,timeZone);
+  let b11=a11;
+  let lunarYear;
+  if(a11>=monthStart){
+    lunarYear=yy;
+    a11=lunarMonth11(yy-1,timeZone);
+  }else{
+    lunarYear=yy+1;
+    b11=lunarMonth11(yy+1,timeZone);
+  }
+  const lunarDay=dayNumber-monthStart+1;
+  const diff=Math.floor((monthStart-a11)/29);
+  let lunarLeap=0;
+  let lunarMonth=diff+11;
+  if(b11-a11>365){
+    const leapMonthDiff=leapMonthOffset(a11,timeZone);
+    if(diff>=leapMonthDiff){
+      lunarMonth=diff+10;
+      if(diff===leapMonthDiff)lunarLeap=1;
+    }
+  }
+  if(lunarMonth>12)lunarMonth-=12;
+  if(lunarMonth>=11&&diff<4)lunarYear-=1;
+  return{day:lunarDay,month:lunarMonth,year:lunarYear,leap:lunarLeap};
+}
+
+function pad2(value){
+  return String(value).padStart(2,'0');
+}
+
+function drawFitText(text,x,y,maxWidth,font,align='left'){
+  ctx.font=font;
+  let value=String(text);
+  while(ctx.measureText(value).width>maxWidth&&value.length>1){
+    value=value.slice(0,-1);
+  }
+  ctx.textAlign=align;
+  ctx.fillText(value,x,y);
+}
+
+function drawDailyCalendar(sourceDate=new Date()){
+  const now=new Date(sourceDate);
+  clearWhite();
+  ctx.save();
+  ctx.fillStyle='#000';
+  ctx.strokeStyle='#000';
+  ctx.lineWidth=1;
+  ctx.textBaseline='alphabetic';
+
+  const weekdaysLong=['CN','T2','T3','T4','T5','T6','T7'];
+  const weekdaysShort=['CN','2','3','4','5','6','7'];
+  const leftW=145;
+  const rightX=148;
+  const rightW=99;
+  const solar=`${weekdaysLong[now.getDay()]} ${pad2(now.getDate())}/${pad2(now.getMonth()+1)}/${now.getFullYear()}`;
+  const time=`${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
+  const lunar=solarToLunar(now);
+  const lunarText=`Âm ${pad2(lunar.day)}/${pad2(lunar.month)}${lunar.leap?' N':''}`;
+
+  ctx.font='bold 13px system-ui,sans-serif';
+  ctx.textAlign='left';
+  ctx.fillText(solar,4,17);
+  ctx.font='bold 52px Arial,system-ui,sans-serif';
+  ctx.textAlign='center';
+  ctx.fillText(time,72,72);
+  ctx.font='bold 14px system-ui,sans-serif';
+  ctx.textAlign='left';
+  ctx.fillText(lunarText,6,103);
+  ctx.beginPath();
+  ctx.moveTo(leftW,5);
+  ctx.lineTo(leftW,117);
+  ctx.stroke();
+
+  ctx.font='bold 11px system-ui,sans-serif';
+  ctx.textAlign='center';
+  ctx.fillText(`Tháng ${now.getMonth()+1}/${now.getFullYear()}`,rightX+rightW/2,14);
+
+  const cellW=13;
+  const cellH=12;
+  const gridX=151;
+  const headerY=29;
+  ctx.font='bold 8px system-ui,sans-serif';
+  weekdaysShort.forEach((label,index)=>ctx.fillText(label,gridX+index*cellW+cellW/2,headerY));
+  ctx.beginPath();
+  ctx.moveTo(gridX,33);
+  ctx.lineTo(gridX+cellW*7,33);
+  ctx.stroke();
+
+  const first=new Date(now.getFullYear(),now.getMonth(),1);
+  const lastDay=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
+  const start=first.getDay();
+  ctx.font='bold 9px Arial,system-ui,sans-serif';
+  for(let day=1;day<=lastDay;day++){
+    const pos=start+day-1;
+    const col=pos%7;
+    const row=Math.floor(pos/7);
+    const x=gridX+col*cellW;
+    const y=39+row*cellH;
+    const cx=x+cellW/2;
+    const baseline=y+9;
+    if(day===now.getDate()){
+      ctx.fillRect(x+1,y,cellW-2,cellH-1);
+      ctx.save();
+      ctx.fillStyle='#fff';
+      ctx.textAlign='center';
+      ctx.fillText(String(day),cx,baseline);
+      ctx.restore();
+    }else{
+      ctx.textAlign='center';
+      ctx.fillText(String(day),cx,baseline);
+    }
+  }
+
+  ctx.font='bold 8px system-ui,sans-serif';
+  ctx.textAlign='center';
+  ctx.fillText('Hôm nay',rightX+rightW/2,116);
+  ctx.restore();
+  repack();
+  log(`Daily calendar updated: ${time} · ${solar} · ${lunarText}`);
+}
+
 function drawCurrentClock(){
   const now=new Date();
   const timeText=new Intl.DateTimeFormat('vi-VN',{
@@ -435,6 +651,7 @@ function controls(){
   $('fillBlack').disabled=locked;
   $('invert').disabled=locked;
   $('updateClock').disabled=locked;
+  $('dailyCalendar').disabled=locked;
   $('sample').disabled=locked;
   $('addText').disabled=locked;
   $('repack').disabled=locked;
@@ -1050,7 +1267,7 @@ async function syncClockToPanel(){
   controls();
   try{
     setSyncStatus('Đang cập nhật giờ','warn');
-    drawCurrentClock();
+    drawDailyCalendar();
 
     setSyncStatus('Đang gửi E5','warn');
     await sendFramebuffer();
@@ -1091,6 +1308,7 @@ $('clearWhite').onclick=clearWhite;
 $('fillBlack').onclick=fillBlack;
 $('invert').onclick=invertCanvas;
 $('updateClock').onclick=drawCurrentClock;
+$('dailyCalendar').onclick=()=>drawDailyCalendar();
 $('sample').onclick=drawSample;
 $('addText').onclick=addSimpleText;
 $('repack').onclick=repack;
@@ -1107,7 +1325,7 @@ $('autoSync').onchange=toggleAutoSync;
 $('clearLog').onclick=()=>{$('log').value=''};
 
 clearWhite();
-drawCurrentClock();
+drawDailyCalendar();
 resetD2UiDisconnected();
 controls();
 log('TASK D2D ready. D2 controls sync device RAM time; D2 render asks firmware to draw and refresh from that time.');
