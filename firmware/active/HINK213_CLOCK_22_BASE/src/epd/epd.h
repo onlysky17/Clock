@@ -69,9 +69,7 @@ void draw_rect(int x1, int y1, int x2, int y2, int color);
 void draw_box(int x1, int y1, int x2, int y2, int color);
 void draw_char(int x, int y, int ch, int color);
 void draw_text(int x, int y, char *str, int color);
-int select_font(int id);
-int fb_draw_font_info(int x, int y, const u8 *font_data, int color);
-int fb_draw_font(int x, int y, int ucs, int color);
+void bitmap_draw_time_hhmm(int x, int y, int hour, int minute, int color);
 void fb_test(void);
 
 void draw_qr_code(
