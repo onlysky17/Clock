@@ -1237,6 +1237,7 @@ static void hink_bitmap_draw_clock(uint8_t h, uint8_t m, uint16_t sy, uint8_t sm
 	char date_buf[16];
 	char lunar_buf[10];
 	char month_buf[14];
+	char weekday_buf[3];
 	uint8_t mdays;
 	uint8_t first_wday;
 	uint8_t offset;
@@ -1293,7 +1294,13 @@ static void hink_bitmap_draw_clock(uint8_t h, uint8_t m, uint16_t sy, uint8_t sm
 
 	draw_text(124, 6, month_buf, BLACK);
 	hink_d7a_draw_acute(136, 4);
-	draw_text(110, 25, "T2 T3 T4 T5 T6 T7 CN", BLACK);
+	weekday_buf[2] = 0;
+	for (col = 0U; col < 7U; col++)
+	{
+		weekday_buf[0] = (col == 6U) ? 'C' : 'T';
+		weekday_buf[1] = (col == 6U) ? 'N' : (char)('2' + col);
+		draw_text((uint8_t)(109U + (col * 20U)), 25, weekday_buf, BLACK);
+	}
 
 	mdays = hink_d3c_solar_mdays(sy, sm);
 	first_wday = (uint8_t)((sw + 7U - ((sd - 1U) % 7U)) % 7U);
@@ -1701,6 +1708,7 @@ static void hink_d2_minute_start_cb(void)
     hink_d2_first_interval_seconds = (second_now == 0U) ? 60U : (uint8_t)(60U - second_now);
     hink_d2_timer_flags = HINK_D2_TIMER_ACTIVE | HINK_D2_TIMER_FIRST;
     hink_d2_arm_minute_timer(hink_d2_first_interval_seconds);
+    HINK_AUTO_TRY_SCHEDULE();
 }
 
 static void hink_d2_minute_timer_cb(void)
@@ -1832,7 +1840,6 @@ static uint8_t hink_d2_time_handle(struct custs1_val_write_ind const *param)
         {
             hink_d2_start_timer_hnd = hnd;
         }
-        HINK_AUTO_TRY_SCHEDULE();
         /* D2 smoke anchor: hink_d2_notify(HINK_D2_RESULT_OK, HINK_D2_STATE_SYNCED) */
         msg[2] = HINK_D2_RESULT_OK;
         msg[3] = HINK_D2_STATE_SYNCED;
