@@ -179,6 +179,8 @@ let autoSyncTimer=0,autoSyncEnabled=false,autoArmedMinuteKey='',lastAutoSentMinu
 let d2Running=false;
 let d2StalePresent=false;
 let d2StaleRecoveryPending=false;
+let productErrorReason='';
+let productD2Result=null,productD2State=null,productD2RenderResult=null,productD2RenderState=null;
 
 function setupProductMode(){
   const main=document.querySelector('main');
@@ -289,6 +291,41 @@ function setD2Status(text,cls='warn'){
   $('d2StatusText').textContent=text;
   $('d2StatusText').className=cls;
 }
+
+function clearProductError(){
+  productErrorReason='';
+}
+
+function markProductError(reason){
+  productErrorReason=reason||'error';
+}
+
+function productD2StatusIsRunning(result,state){
+  return result===0x00 && (state===0x01 || state===0x02);
+}
+
+function productD2RenderIsRunning(result,state){
+  return result===0x00 && (state===0x01 || state===0x02 || state===0x03);
+}
+
+function resolveProductState(input){
+  if(!input.connected){
+    return{text:'Chưa kết nối',cls:'warn'};
+  }
+  if(input.hasError){
+    return{text:'Có lỗi',cls:'bad'};
+  }
+  if(input.stalePresent){
+    return{text:'Cần đồng bộ giờ',cls:'warn'};
+  }
+  if(productD2StatusIsRunning(input.d2Result,input.d2State) ||
+     productD2RenderIsRunning(input.d2RenderResult,input.d2RenderState)){
+    return{text:'Đang chạy',cls:'ok'};
+  }
+  return{text:'Cần đồng bộ giờ',cls:'warn'};
+}
+
+window.__resolveEinkProductState=resolveProductState;
 
 function clearWhite(){
   ctx.save();
@@ -807,19 +844,17 @@ function controls(){
 function updateProductState(){
   const productState=$('productState');
   if(!productState)return;
-  if(!server?.connected){
-    productState.textContent='Chưa kết nối';
-    productState.className='warn';
-  }else if(d2StalePresent){
-    productState.textContent='Cần đồng bộ giờ';
-    productState.className='warn';
-  }else if($('result').textContent==='FAIL' || $('e6Result').textContent==='ERROR' || $('d2StatusText').className==='bad'){
-    productState.textContent='Có lỗi';
-    productState.className='bad';
-  }else{
-    productState.textContent='Đang chạy';
-    productState.className='ok';
-  }
+  const state=resolveProductState({
+    connected:!!server?.connected,
+    stalePresent:d2StalePresent,
+    hasError:!!productErrorReason,
+    d2Result:productD2Result,
+    d2State:productD2State,
+    d2RenderResult:productD2RenderResult,
+    d2RenderState:productD2RenderState
+  });
+  productState.textContent=state.text;
+  productState.className=state.cls;
 }
 
 function minuteKey(date=new Date()){
@@ -881,6 +916,11 @@ async function checkAutoSyncMinute(){
 function resetD2UiDisconnected(){
   d2StalePresent=false;
   d2StaleRecoveryPending=false;
+  clearProductError();
+  productD2Result=null;
+  productD2State=null;
+  productD2RenderResult=null;
+  productD2RenderState=null;
   setD2Status('DISCONNECTED','warn');
   $('d2Result').textContent='-';
   $('d2State').textContent='-';
@@ -1007,6 +1047,8 @@ function renderDeviceLocalTime(epoch,timezone){
 }
 
 function renderD2Status(status,{recoveryConfirm=false}={}){
+  productD2Result=status.result;
+  productD2State=status.state;
   $('d2Result').textContent=`${status.result.toString(16).padStart(2,'0').toUpperCase()} ${d2ResultName(status.result)}`;
   $('d2State').textContent=`${status.state.toString(16).padStart(2,'0').toUpperCase()} ${d2StateName(status.state)}`;
   $('d2Epoch').textContent=String(status.epoch);
@@ -1021,6 +1063,12 @@ function renderD2Status(status,{recoveryConfirm=false}={}){
   }
   renderD2StaleRecovery();
   setD2Status(status.result===0?'STATUS OK':'STATUS ERROR',status.result===0?'ok':'bad');
+  if(status.result===0x00){
+    clearProductError();
+  }else if(status.result!==0x04){
+    markProductError(`D2 status ${d2ResultName(status.result)}`);
+  }
+  controls();
 }
 
 function renderD2StaleRecovery(){
@@ -1038,16 +1086,26 @@ function handleD2Notify(bytes){
       log(`D2 status result=${d2ResultName(status.result)} state=${d2StateName(status.state)} epoch=${status.epoch} tz=${status.timezone} uptime=${status.uptime}`,'D2');
     }else if(bytes[1]===0x82){
       const status=parseD2RenderStatus(bytes);
+      productD2RenderResult=status.result;
+      productD2RenderState=status.state;
       const complete=status.result===0x00&&status.state===0x03;
       $('d2RenderStatus').textContent=`${d2ResultName(status.result)} / ${d2RenderStateName(status.state)}`;
       $('d2RenderStatus').className=complete?'ok':(status.result===0x00?'warn':'bad');
+      if(status.result===0x00 && status.state!==0x04){
+        clearProductError();
+      }else{
+        markProductError(`D2 render ${d2ResultName(status.result)} / ${d2RenderStateName(status.state)}`);
+      }
       log(`D2 render result=${d2ResultName(status.result)} state=${d2RenderStateName(status.state)}`,'D2');
     }else{
       log(`Unknown D2 response: ${hex(bytes)}`,'D2');
+      markProductError('Unknown D2 response');
     }
   }catch(error){
+    markProductError(error.message);
     log(error.message,'D2');
   }
+  controls();
 }
 
 function onNotify(event){
@@ -1110,6 +1168,7 @@ async function runD2Flow(action){
     setD2Status('RUNNING','warn');
     await action();
   }catch(error){
+    markProductError(error.message);
     setD2Status(`ERROR: ${error.message}`,'bad');
     log(`D2 error: ${error.message}`,'ERROR');
     alert(error.message);
@@ -1174,8 +1233,14 @@ async function d2RenderClockFromDevice(){
     {timeout:2500}
   ));
   if(accepted.result!==0x00||accepted.state!==0x01){
+    productD2RenderResult=accepted.result;
+    productD2RenderState=accepted.state;
+    markProductError(`D2 render rejected: ${d2ResultName(accepted.result)} / ${d2RenderStateName(accepted.state)}`);
     throw Error(`D2 render rejected: ${d2ResultName(accepted.result)} / ${d2RenderStateName(accepted.state)}`);
   }
+  productD2RenderResult=accepted.result;
+  productD2RenderState=accepted.state;
+  clearProductError();
 
   const deadline=Date.now()+30000;
   while(Date.now()<deadline){
@@ -1183,15 +1248,20 @@ async function d2RenderClockFromDevice(){
       a=>a[0]===0xD2&&a[1]===0x82,
       deadline-Date.now()
     ));
+    productD2RenderResult=status.result;
+    productD2RenderState=status.state;
     if(status.result!==0x00||status.state===0x04){
+      markProductError(`D2 render error: ${d2ResultName(status.result)} / ${d2RenderStateName(status.state)}`);
       throw Error(`D2 render error: ${d2ResultName(status.result)} / ${d2RenderStateName(status.state)}`);
     }
     if(status.state===0x03){
       $('d2RenderStatus').textContent='OK / COMPLETE';
       $('d2RenderStatus').className='ok';
+      clearProductError();
       return;
     }
   }
+  markProductError('D2 render timeout');
   throw Error('D2 render timeout');
 }
 
@@ -1412,6 +1482,7 @@ async function refreshPanel() {
     }
 
   } catch (err) {
+    markProductError(err.message);
     $('e6Result').textContent = 'ERROR';
     $('e6Result').className = 'bad';
     log(`E6 Error: ${err.message}`, 'ERROR');
@@ -1459,6 +1530,7 @@ async function safe(fn){
     setBusy(true);
     await fn();
   }catch(error){
+    markProductError(error.message);
     setResult('FAIL','bad');
     log(`ERROR: ${error.message}`,'ERROR');
     alert(error.message);
