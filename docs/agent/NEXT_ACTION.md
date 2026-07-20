@@ -9,9 +9,22 @@ E1A automatic foundation is merged into `main`.
 
 Firmware milestone cuối đã đóng:
 
-- `TASK D3E` long-run BLE/EPD lifecycle fix.
-- Firmware commit: `08447bf3d142cd9aa1c1314a5beb58559f46659c`.
-- D3D2 persistence is a passed foundation milestone, but it is not the final firmware milestone.
+- `TASK D6C` compact bitmap renderer replacement is PHYSICAL PASS, merged into `main`, and CLOSED.
+- Merge commit: `2ad9dc6b228f8406741fb9046c33b2554fa6e179`.
+- Implementation commit: `14d72b9f169bf7ef2e3ccbea721e638c7d073ee3`.
+- PR: `#37`.
+- Owner physical evidence on `20/07/2026`:
+  - SysRAM load PASS.
+  - D2 immediate render PASS.
+  - HH:mm bitmap, colon, and clipping PASS.
+  - BLE disconnect PASS.
+  - Five-minute autonomous refresh PASS.
+  - No duplicate refresh and no second black refresh PASS.
+  - E-ink panel displayed `08:35` on `20/07/2026`.
+- Build evidence: Code `40804`, RO-data `3592`, RW-data `552`, ZI-data `22928`, raw BIN `46084` bytes, headroom `19444` bytes.
+- Legacy font symbols are gone from the active D6C renderer link path.
+- Post-merge gate PASS: `HEAD == origin/main`, working tree clean, and EINK AUTO PREFLIGHT PASS.
+- D3E long-run BLE/EPD lifecycle fix and D3D2 persistence remain passed foundation milestones.
 
 Web/layout milestone cuối đã đóng:
 
@@ -34,20 +47,24 @@ Web/layout milestone cuối đã đóng:
 - Layout is frozen; do not adjust the font again unless there is a regression.
 - D5B-FIX2 did not change firmware or protocol.
 
+## Current Finding
+
+- Web Product Mode can show `Có lỗi` even when the D2 log reports OK/SYNCED/COMPLETE.
+- This is a web status rendering/state issue and did not block D6C firmware merge or physical PASS.
+
 ## Next Canonical Action
 
-`TASK D6A` is the only next canonical action.
+`TASK D6B-FIX1` is the only next canonical action.
 
-TASK D6A — firmware headroom reduction audit and autonomous flagship layout port plan.
+TASK D6B-FIX1 — repair Product Mode device-state mapping.
 
-D6A must start as a read-only audit:
+Reason:
 
-- Find a way to recover at least about `1-2 KB` of firmware headroom.
-- Evaluate how to port the flagship daily layout into the device-side renderer.
-- Preserve D3E scheduler/persistence.
-- Do not change protocol or SPI sector.
-- Do not implement yet.
-- Do not claim feasibility until the audit is complete.
+- Web Product Mode can show `Có lỗi` while D2 state/log is OK/SYNCED/RENDERING/COMPLETE.
+
+D6D must not start until D6B-FIX1 is fixed and closed out.
+
+D6B-FIX1 must preserve D6C bitmap firmware behavior, D3E scheduler/persistence, geometry, protocol, and SPI sector unless the task explicitly scopes changes.
 
 ## Guardrails For The Next Task
 
