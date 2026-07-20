@@ -1,5 +1,30 @@
 # TASK D6C - Compact Bitmap Renderer Replacement Proof
 
+## Final Status
+
+- Status: PHYSICAL PASS, merged, and CLOSED.
+- Merge commit: `2ad9dc6b228f8406741fb9046c33b2554fa6e179`.
+- Implementation commit: `14d72b9f169bf7ef2e3ccbea721e638c7d073ee3`.
+- PR: `#37`.
+- Owner physical evidence on `20/07/2026`:
+  - SysRAM load PASS.
+  - D2 immediate render PASS.
+  - HH:mm bitmap, colon, and clipping PASS.
+  - BLE disconnect PASS.
+  - Five-minute autonomous refresh PASS.
+  - No duplicate refresh and no second black refresh PASS.
+  - E-ink panel displayed `08:35` on `20/07/2026`.
+- Post-merge gate PASS:
+  - `HEAD == origin/main == 2ad9dc6b228f8406741fb9046c33b2554fa6e179`.
+  - Working tree clean.
+  - `tools/eink-auto-preflight.ps1` PASS.
+- Legacy font symbols are gone from the active D6C renderer link path.
+
+## Separate Finding
+
+- Web Product Mode can show `Có lỗi` even when the D2 log reports OK/SYNCED/COMPLETE.
+- This is a web status rendering/state issue and does not block D6C firmware merge or physical PASS.
+
 ## Scope
 
 - Replace the active device-side clock render path with a compact bitmap renderer.
@@ -69,18 +94,18 @@ The smoke checks compact glyph primitives, framebuffer bounds, deterministic out
 
 ## Build Gate
 
-Keil CLI is not used for D6C.
+Build evidence from the D6C company physical package:
 
-Before commit, Keil GUI build evidence must prove:
+- Keil `0 errors`.
+- Keil `0 warnings`.
+- Code `40804`.
+- RO-data `3592`.
+- RW-data `552`.
+- ZI-data `22928`.
+- Raw BIN `46084` bytes.
+- Raw headroom `19444` bytes against the `65528` byte limit.
+- SysRAM executable was used for the Owner physical gate.
 
-- 0 errors.
-- 0 warnings.
-- Code/RO/RW/ZI captured.
-- Raw BIN size captured.
-- Raw BIN `<= 63480` bytes.
-- Headroom `>= 2048` bytes.
-- Map/font-link audit confirms legacy font symbols are gone or reduced from the active link path.
+The previous pre-physical blocker is closed:
 
-If Keil GUI cannot be automated, D6C must stop before commit with:
-
-`BLOCKED: KEIL GUI BUILD REQUIRED`
+`D6C PHYSICAL PASS / MERGED`

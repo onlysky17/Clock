@@ -12,19 +12,22 @@
 - Canonical web URL: `https://onlysky17.github.io/Clock/test.html`
 
 Firmware milestone cuối đã đóng:
-- `TASK D3E` long-run BLE/EPD lifecycle fix.
-- Firmware commit: `08447bf3d142cd9aa1c1314a5beb58559f46659c`.
-- Physical evidence:
-  - Khoảng 90 phút RUNNING.
-  - Uptime `5466` giây.
-  - BLE reconnect PASS.
-  - Refresh mỗi 5 phút tiếp tục đều.
-  - Keil `0 errors`, `0 warnings`.
-  - Code `41628`, RO-data `21624`, RW-data `608`, ZI-data `22928`.
-  - Raw BIN `64996` bytes.
-  - Raw headroom `532` bytes against the `65528` byte limit.
-- D3D2 persistence is a passed foundation milestone, but it is not the final firmware milestone.
-- D3E handoff has `VERIFY_HOME PASS`.
+- `TASK D6C` compact bitmap renderer replacement is PHYSICAL PASS, merged into `main`, and CLOSED.
+- Merge commit: `2ad9dc6b228f8406741fb9046c33b2554fa6e179`.
+- Implementation commit: `14d72b9f169bf7ef2e3ccbea721e638c7d073ee3`.
+- PR: `#37`.
+- Owner physical evidence on `20/07/2026`:
+  - SysRAM load PASS.
+  - D2 immediate render PASS.
+  - HH:mm bitmap, colon, and clipping PASS.
+  - BLE disconnect PASS.
+  - Five-minute autonomous refresh PASS.
+  - No duplicate refresh and no second black refresh PASS.
+  - E-ink panel displayed `08:35` on `20/07/2026`.
+- Build evidence: Code `40804`, RO-data `3592`, RW-data `552`, ZI-data `22928`, raw BIN `46084` bytes, headroom `19444` bytes.
+- Legacy font symbols are gone from the active D6C renderer link path.
+- Post-merge gate PASS: `HEAD == origin/main`, working tree clean, and EINK AUTO PREFLIGHT PASS.
+- D3E long-run BLE/EPD lifecycle fix and D3D2 persistence remain passed foundation milestones, but D6C is now the latest closed firmware milestone.
 
 Product and web milestones:
 - `TASK D4A` stale recovery UX decision is CLOSED and approved by Owner.
@@ -70,16 +73,15 @@ Product and web milestones:
   - current day highlight is clear;
   - no clipping or stuck-together text.
 - Layout is frozen; do not adjust the font again unless there is a regression.
-- D5B-FIX2 is the latest closed web/layout milestone.
+- D5B-FIX2 remains the latest closed flagship web/layout milestone.
+- D6B Product Mode is merged.
+- Separate finding: Web Product Mode can show `Có lỗi` even when the D2 log reports OK/SYNCED/COMPLETE; this did not block D6C firmware merge or physical PASS.
 
 Next canonical action:
-- `TASK D6A` - firmware headroom reduction audit and autonomous flagship layout port plan.
-- D6A is read-only audit first.
-- D6A should look for at least about `1-2 KB` additional firmware headroom.
-- D6A should evaluate how to port the flagship daily layout into the device-side renderer.
-- D6A must preserve D3E scheduler/persistence.
-- D6A must not change protocol or SPI sector.
-- D6A is not implemented and must not claim feasibility until the audit is complete.
+- `TASK D6B-FIX1` - repair Product Mode device-state mapping.
+- Reason: Web Product Mode can show `Có lỗi` while D2 state/log is OK/SYNCED/RENDERING/COMPLETE.
+- D6D must not start until D6B-FIX1 is fixed and closed out.
+- D6B-FIX1 must not change D6C firmware behavior, D3E scheduler/persistence, geometry, protocol, or SPI sector unless explicitly scoped otherwise.
 
 ## Historical Milestones
 
