@@ -1237,6 +1237,7 @@ static void hink_bitmap_draw_clock(uint8_t h, uint8_t m, uint16_t sy, uint8_t sm
 	char date_buf[16];
 	char lunar_buf[10];
 	char month_buf[14];
+	char weekday_buf[3];
 	uint8_t mdays;
 	uint8_t first_wday;
 	uint8_t offset;
@@ -1293,7 +1294,13 @@ static void hink_bitmap_draw_clock(uint8_t h, uint8_t m, uint16_t sy, uint8_t sm
 
 	draw_text(124, 6, month_buf, BLACK);
 	hink_d7a_draw_acute(136, 4);
-	draw_text(110, 25, "T2 T3 T4 T5 T6 T7 CN", BLACK);
+	weekday_buf[2] = 0;
+	for (col = 0U; col < 7U; col++)
+	{
+		weekday_buf[0] = (col == 6U) ? 'C' : 'T';
+		weekday_buf[1] = (col == 6U) ? 'N' : (char)('2' + col);
+		draw_text((uint8_t)(109U + (col * 20U)), 25, weekday_buf, BLACK);
+	}
 
 	mdays = hink_d3c_solar_mdays(sy, sm);
 	first_wday = (uint8_t)((sw + 7U - ((sd - 1U) % 7U)) % 7U);
