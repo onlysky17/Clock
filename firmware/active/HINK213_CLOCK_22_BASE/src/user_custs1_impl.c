@@ -218,6 +218,11 @@ void hink_d3d_boot_load_last_known_time(void);
 static void hink_bitmap_draw_clock(uint8_t h, uint8_t m, uint16_t sy, uint8_t sm,
                                    uint8_t sd, uint8_t sw, uint8_t lunar_valid,
                                    uint8_t lm, uint8_t ld);
+static void hink_d7a_draw_hhmm(uint8_t x, uint8_t y, uint8_t h, uint8_t m, uint8_t color);
+static void hink_d7a_draw_day(uint8_t x, uint8_t y, uint8_t day, uint8_t color);
+static void hink_d7a_box(int x1, int y1, int x2, int y2, uint8_t color);
+static void hink_d7a_draw_acute(uint8_t x, uint8_t y);
+static void hink_d7a_draw_text_al(uint8_t x, uint8_t y, char *text);
 
 static void hink_e4_arm_timer(void);
 
@@ -1070,14 +1075,177 @@ static void hink_weekday(char *dst, uint8_t sw)
 	}
 }
 
+static void hink_d7a_pixel(int x, int y, uint8_t color)
+{
+	int nx;
+	int ny;
+	int rmode = scr_mode & 0x03;
+	int byte_pos;
+	int bit_mask;
+
+	if (x < 0 || y < 0 || x >= fb_w || y >= fb_h)
+	{
+		return;
+	}
+
+	if (rmode == 0)
+	{
+		nx = x;
+		ny = y;
+	}
+	else if (rmode == 1)
+	{
+		nx = scr_w - 1 - y;
+		ny = x;
+	}
+	else if (rmode == 2)
+	{
+		nx = scr_w - 1 - x;
+		ny = scr_h - 1 - y;
+	}
+	else
+	{
+		nx = y;
+		ny = scr_h - 1 - x;
+	}
+	if (scr_mode & MIRROR_H)
+	{
+		nx += scr_padding;
+	}
+	if (nx < 0 || ny < 0)
+	{
+		return;
+	}
+
+	byte_pos = ny * line_bytes + (nx >> 3);
+	bit_mask = 0x80 >> (nx & 7);
+	if (color == WHITE)
+	{
+		fb_bw[byte_pos] |= bit_mask;
+	}
+	else
+	{
+		fb_bw[byte_pos] &= (uint8_t)~bit_mask;
+	}
+}
+
+static void hink_d7a_box(int x1, int y1, int x2, int y2, uint8_t color)
+{
+	int x;
+	int y;
+
+	if (x1 < 0) { x1 = 0; }
+	if (y1 < 0) { y1 = 0; }
+	if (x2 >= fb_w) { x2 = fb_w - 1; }
+	if (y2 >= fb_h) { y2 = fb_h - 1; }
+	if (x1 > x2 || y1 > y2)
+	{
+		return;
+	}
+	for (y = y1; y <= y2; y++)
+	{
+		for (x = x1; x <= x2; x++)
+		{
+			hink_d7a_pixel(x, y, color);
+		}
+	}
+}
+
+static void hink_d7a_digit_seg(uint8_t x, uint8_t y, uint8_t seg,
+                               uint8_t w, uint8_t h, uint8_t t, uint8_t color)
+{
+	switch (seg)
+	{
+		case 0U: hink_d7a_box(x + t, y, x + w - t - 1U, y + t - 1U, color); break;
+		case 1U: hink_d7a_box(x + w - t, y + t, x + w - 1U, y + (h / 2U) - 1U, color); break;
+		case 2U: hink_d7a_box(x + w - t, y + (h / 2U) + 1U, x + w - 1U, y + h - t - 1U, color); break;
+		case 3U: hink_d7a_box(x + t, y + h - t, x + w - t - 1U, y + h - 1U, color); break;
+		case 4U: hink_d7a_box(x, y + (h / 2U) + 1U, x + t - 1U, y + h - t - 1U, color); break;
+		case 5U: hink_d7a_box(x, y + t, x + t - 1U, y + (h / 2U) - 1U, color); break;
+		default: hink_d7a_box(x + t, y + (h / 2U), x + w - t - 1U, y + (h / 2U) + t - 1U, color); break;
+	}
+}
+
+static void hink_d7a_digit(uint8_t x, uint8_t y, uint8_t digit,
+                           uint8_t w, uint8_t h, uint8_t t, uint8_t color)
+{
+	static const uint8_t segs[10] = {
+		0x3fU, 0x06U, 0x5bU, 0x4fU, 0x66U,
+		0x6dU, 0x7dU, 0x07U, 0x7fU, 0x6fU
+	};
+	uint8_t mask = segs[digit % 10U];
+	uint8_t seg;
+
+	for (seg = 0U; seg < 7U; seg++)
+	{
+		if (mask & (1U << seg))
+		{
+			hink_d7a_digit_seg(x, y, seg, w, h, t, color);
+		}
+	}
+}
+
+static void hink_d7a_draw_hhmm(uint8_t x, uint8_t y, uint8_t h, uint8_t m, uint8_t color)
+{
+	hink_d7a_digit(x, y, (uint8_t)(h / 10U), 16U, 31U, 3U, color);
+	hink_d7a_digit((uint8_t)(x + 19U), y, (uint8_t)(h % 10U), 16U, 31U, 3U, color);
+	hink_d7a_box(x + 38U, y + 8U, x + 41U, y + 12U, color);
+	hink_d7a_box(x + 38U, y + 20U, x + 41U, y + 24U, color);
+	hink_d7a_digit((uint8_t)(x + 45U), y, (uint8_t)(m / 10U), 16U, 31U, 3U, color);
+	hink_d7a_digit((uint8_t)(x + 64U), y, (uint8_t)(m % 10U), 16U, 31U, 3U, color);
+}
+
+static void hink_d7a_draw_day(uint8_t x, uint8_t y, uint8_t day, uint8_t color)
+{
+	if (day >= 10U)
+	{
+		hink_d7a_digit(x, y, (uint8_t)(day / 10U), 6U, 10U, 1U, color);
+		hink_d7a_digit((uint8_t)(x + 8U), y, (uint8_t)(day % 10U), 6U, 10U, 1U, color);
+	}
+	else
+	{
+		hink_d7a_digit((uint8_t)(x + 4U), y, day, 6U, 10U, 1U, color);
+	}
+}
+
+static void hink_d7a_draw_acute(uint8_t x, uint8_t y)
+{
+	hink_d7a_pixel(x + 3U, y + 2U, BLACK);
+	hink_d7a_pixel(x + 4U, y + 1U, BLACK);
+	hink_d7a_pixel(x + 5U, y, BLACK);
+}
+
+static void hink_d7a_draw_circumflex(uint8_t x, uint8_t y)
+{
+	hink_d7a_pixel(x + 1U, y + 2U, BLACK);
+	hink_d7a_pixel(x + 2U, y + 1U, BLACK);
+	hink_d7a_pixel(x + 3U, y, BLACK);
+	hink_d7a_pixel(x + 4U, y + 1U, BLACK);
+	hink_d7a_pixel(x + 5U, y + 2U, BLACK);
+}
+
+static void hink_d7a_draw_text_al(uint8_t x, uint8_t y, char *text)
+{
+	draw_text(x, y, text, BLACK);
+	hink_d7a_draw_circumflex(x, (uint8_t)(y - 4U));
+}
+
 static void hink_bitmap_draw_clock(uint8_t h, uint8_t m, uint16_t sy, uint8_t sm,
                                    uint8_t sd, uint8_t sw, uint8_t lunar_valid,
                                    uint8_t lm, uint8_t ld)
 {
 	char date_buf[16];
 	char lunar_buf[10];
-	int time_x = (fb_w > 137) ? ((fb_w - 137) / 2) : 0;
-	int time_y = (fb_h > 56) ? ((fb_h - 56) / 2) : 0;
+	char month_buf[14];
+	uint8_t mdays;
+	uint8_t first_wday;
+	uint8_t offset;
+	uint8_t day;
+	uint8_t pos;
+	uint8_t row;
+	uint8_t col;
+	uint8_t x;
+	uint8_t y;
 
 	hink_weekday(date_buf, sw);
 	date_buf[2] = ' ';
@@ -1107,9 +1275,46 @@ static void hink_bitmap_draw_clock(uint8_t h, uint8_t m, uint16_t sy, uint8_t sm
 	}
 	lunar_buf[8] = 0;
 
-	draw_text(8, 8, date_buf, BLACK);
-	bitmap_draw_time_hhmm(time_x, time_y, h, m, BLACK);
-	draw_text(8, fb_h - 16, lunar_buf, BLACK);
+	month_buf[0] = 'T';
+	month_buf[1] = 'H';
+	month_buf[2] = 'A';
+	month_buf[3] = 'N';
+	month_buf[4] = 'G';
+	month_buf[5] = ' ';
+	hink_put_2(&month_buf[6], (uint8_t)(sm + 1U));
+	month_buf[8] = '/';
+	hink_put_4(&month_buf[9], sy);
+	month_buf[13] = 0;
+
+	draw_text(4, 8, date_buf, BLACK);
+	hink_d7a_draw_hhmm(6, 32, h, m, BLACK);
+	hink_d7a_draw_text_al(4, 104, lunar_buf);
+	hink_d7a_box(101, 6, 102, 116, BLACK);
+
+	draw_text(124, 6, month_buf, BLACK);
+	hink_d7a_draw_acute(136, 4);
+	draw_text(110, 25, "T2 T3 T4 T5 T6 T7 CN", BLACK);
+
+	mdays = hink_d3c_solar_mdays(sy, sm);
+	first_wday = (uint8_t)((sw + 7U - ((sd - 1U) % 7U)) % 7U);
+	offset = (uint8_t)((first_wday + 6U) % 7U);
+	for (day = 1U; day <= mdays; day++)
+	{
+		pos = (uint8_t)(offset + day - 1U);
+		row = (uint8_t)(pos / 7U);
+		col = (uint8_t)(pos % 7U);
+		x = (uint8_t)(109U + (col * 20U));
+		y = (uint8_t)(40U + (row * 13U));
+		if (day == sd)
+		{
+			hink_d7a_box(x - 2, y - 1, x + 15, y + 10, BLACK);
+			hink_d7a_draw_day(x, y, day, WHITE);
+		}
+		else
+		{
+			hink_d7a_draw_day(x, y, day, BLACK);
+		}
+	}
 }
 
 
