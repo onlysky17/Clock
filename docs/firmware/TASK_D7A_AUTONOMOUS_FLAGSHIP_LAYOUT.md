@@ -85,3 +85,33 @@ Keil gate before commit:
 - D7A size headroom `10788` bytes against the `58000` byte limit.
 - Packer headroom `18316` bytes against the `65528` byte limit.
 - Legacy font map/symdef scan for `sfont`, `sfont16`, `font50`, and `font66`: no active symbols found.
+
+## Physical Closeout
+
+- D7A implementation commit: `2308fce61388ef99126cc80a6c81fd9b353baed4`.
+- D7A merge/main commit: `248d49b02914a996e503b7e00d73e6db8ef463b9`.
+- Owner Physical PASS date: `2026-07-20`.
+- SysRAM artifact: `D:\EINK\Clock\_incoming\D7A_SYSRAM_TEST\D7A_SYSRAM_ble_app_peripheral_585.bin`.
+- Raw BIN SHA256: `A7AD2917A8A7DCB0C5661E770C9A9E782008397D01F39243C60B7A58B7BDDB37`.
+- D2 SYNCED -> RENDERING -> COMPLETE: PASS.
+- Autonomous immediate render: PASS.
+- Solar date `T2 20/07/2026`: PASS.
+- Large time render: PASS.
+- Lunar `ÂL 07/06`: PASS.
+- Monthly calendar 7 columns: PASS.
+- Current day `20` invert highlight: PASS.
+- Divider/text clipping/overlap: PASS.
+- BLE-disconnected scheduler refresh at `13:35`: PASS.
+- No duplicate refresh and no second black refresh PASS.
+- D7A is CLOSED / MERGED / PHYSICAL PASS.
+
+## Next Action
+
+- `TASK D7A-WEB1` - add visible test identity and cache marker.
+- Canonical URL remains: `https://onlysky17.github.io/Clock/test.html`.
+- Product Mode must show the active web/test build identity.
+- Expected Firmware: `D7A / 2308fce`.
+- BIN hash marker: `A7AD2917`.
+- Do not change BLE protocol.
+- Do not claim the firmware currently in-chip is verified unless firmware later exposes a version command.
+- D7B must not start until D7A-WEB1 is fixed and closed out.
