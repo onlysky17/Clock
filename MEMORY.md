@@ -12,22 +12,32 @@
 - Canonical web URL: `https://onlysky17.github.io/Clock/test.html`
 
 Firmware milestone cuối đã đóng:
-- `TASK D6C` compact bitmap renderer replacement is PHYSICAL PASS, merged into `main`, and CLOSED.
-- Merge commit: `2ad9dc6b228f8406741fb9046c33b2554fa6e179`.
-- Implementation commit: `14d72b9f169bf7ef2e3ccbea721e638c7d073ee3`.
-- PR: `#37`.
-- Owner physical evidence on `20/07/2026`:
-  - SysRAM load PASS.
-  - D2 immediate render PASS.
-  - HH:mm bitmap, colon, and clipping PASS.
-  - BLE disconnect PASS.
-  - Five-minute autonomous refresh PASS.
+- `TASK D7A` autonomous flagship daily layout is FINAL PHYSICAL PASS, merged into `main`, and CLOSED.
+- Actual main merge commit: `b4e8002774231f197821308d49c11327bda3e550`.
+- D7A implementation commit: `2308fce61388ef99126cc80a6c81fd9b353baed4`.
+- Calendar alignment FIX1 commit: `68a47e5c4ce90c874f9c3c21bdb34754e4444600`.
+- Immediate D2 render FIX2 commit: `32fa562d0d36127a3ded4b46bd35148ff3ccc172`.
+- Owner Physical PASS date: `2026-07-20`.
+- Final build evidence:
+  - Keil `0 errors`, `0 warnings`.
+  - Code `41968`, RO-data `3592`, RW-data `552`, ZI-data `22928`.
+  - Raw BIN `47248` bytes.
+  - Raw BIN SHA256: `14CF053BC1EF88B7CCB7733F8372F6484AD635FE6012613D7024FA07F69CE986`.
+  - Legacy font symbols absent.
+- Final physical evidence:
+  - D2 SYNCED -> RENDERING -> COMPLETE: PASS.
+  - Layout appears immediately after `Đồng bộ giờ`: PASS.
+  - No blank panel after D2 COMPLETE: PASS.
+  - Header `T2..CN` aligns with date columns: PASS.
+  - Current-day invert highlight: PASS.
+  - Solar date, large HH:mm, and lunar date: PASS.
+  - Divider, clipping, and overlap: PASS.
+  - BLE-disconnected five-minute scheduler: PASS.
   - No duplicate refresh and no second black refresh PASS.
-  - E-ink panel displayed `08:35` on `20/07/2026`.
-- Build evidence: Code `40804`, RO-data `3592`, RW-data `552`, ZI-data `22928`, raw BIN `46084` bytes, headroom `19444` bytes.
-- Legacy font symbols are gone from the active D6C renderer link path.
+  - E6 NOT RUN during autonomous test.
+- D7A FINAL: CLOSED / MERGED / PHYSICAL PASS.
 - Post-merge gate PASS: `HEAD == origin/main`, working tree clean, and EINK AUTO PREFLIGHT PASS.
-- D3E long-run BLE/EPD lifecycle fix and D3D2 persistence remain passed foundation milestones, but D6C is now the latest closed firmware milestone.
+- D3E long-run BLE/EPD lifecycle fix and D3D2 persistence remain passed foundation milestones, but D7A is now the latest closed firmware milestone.
 
 Product and web milestones:
 - `TASK D4A` stale recovery UX decision is CLOSED and approved by Owner.
@@ -78,10 +88,16 @@ Product and web milestones:
 - Separate finding: Web Product Mode can show `Có lỗi` even when the D2 log reports OK/SYNCED/COMPLETE; this did not block D6C firmware merge or physical PASS.
 
 Next canonical action:
-- `TASK D6B-FIX1` - repair Product Mode device-state mapping.
-- Reason: Web Product Mode can show `Có lỗi` while D2 state/log is OK/SYNCED/RENDERING/COMPLETE.
-- D6D must not start until D6B-FIX1 is fixed and closed out.
-- D6B-FIX1 must not change D6C firmware behavior, D3E scheduler/persistence, geometry, protocol, or SPI sector unless explicitly scoped otherwise.
+- `TASK D7A-WEB1` - add visible test identity and cache marker.
+- Canonical URL remains: `https://onlysky17.github.io/Clock/test.html`.
+- Product Mode must show the active web build/test identity.
+- Expected Firmware: `D7A`.
+- Firmware commit marker: `32fa562d`.
+- BIN hash marker: `14CF053B`.
+- Purpose: help Owner distinguish stale cached web builds from the current test page.
+- Do not change BLE protocol.
+- Do not claim firmware currently in-chip is automatically verified.
+- D7B must not start until D7A-WEB1 is closed out.
 
 ## Historical Milestones
 
