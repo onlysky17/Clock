@@ -27,6 +27,11 @@ must('D7A month length from leap-aware helper', /mdays = hink_d3c_solar_mdays\(s
 must('D7A framebuffer clear stays 4000 source path', /memset\(fb_bw, 0xff, scr_h \* line_bytes\)/);
 must('D2 lifecycle still present', /hink_d2_time_handle/);
 must('D3E scheduler still present', /HINK_AUTO_TRY_SCHEDULE/);
+must('D2 SET_TIME arms start callback', /hnd = app_easy_timer\(1, hink_d2_minute_start_cb\);/);
+must('D2 start callback schedules pending render', /static void hink_d2_minute_start_cb\(void\)[\s\S]*hink_d2_arm_minute_timer\(hink_d2_first_interval_seconds\);[\s\S]*HINK_AUTO_TRY_SCHEDULE\(\);/);
+const setTimeBlock = source.match(/if \(subcmd == 0x00U\)[\s\S]*?if \(subcmd == 0x02U\)/)?.[0] ?? '';
+assert.ok(setTimeBlock.includes('hink_d3d_store_last_known_time(epoch, timezone, flags);'), 'SET_TIME must still persist last-known time');
+assert.ok(!setTimeBlock.includes('HINK_AUTO_TRY_SCHEDULE();'), 'SET_TIME must not schedule D7A render directly from BLE write context');
 must('D3D persistence still present', /HINK_D3D_STORE_SECTOR 0x3B000UL/);
 must('E5 command IDs unchanged', /0xE5[\s\S]*0xE6/);
 must('E6 render path unchanged', /hink_e6_refresh_handle/);
@@ -35,6 +40,8 @@ assert.ok(!/#include\s+"font50/.test(source), 'legacy font50 include must stay g
 assert.ok(!/#include\s+"font66/.test(source), 'legacy font66 include must stay gone');
 assert.ok(!/sprintf\(/.test(source.match(/static void hink_bitmap_draw_clock[\s\S]*?^}/m)?.[0] ?? ''), 'render path must not use sprintf');
 assert.equal(16 * 250, 4000, 'framebuffer must remain 4000 bytes');
+assert.ok(/memset\(fb_bw, 0xff, scr_h \* line_bytes\);[\s\S]*hink_bitmap_draw_clock\(h, m, sy, sm, sd, sw, lunar_valid, lm, ld\);[\s\S]*epd_screen_update\(\);[\s\S]*epd_update\(\);[\s\S]*epd_wait_hnd = app_easy_timer\(40, epd_wait_timer\);/.test(source), 'render callback must draw framebuffer and start EPD before COMPLETE');
+assert.ok(/hink_d2_render_notify\(HINK_D2_RESULT_OK, HINK_D2_RENDER_COMPLETE\);[\s\S]*HINK_AUTO_TRY_SCHEDULE\(\);/.test(source), 'COMPLETE must be emitted from EPD wait completion path');
 
 function isLeap(year) {
   return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);

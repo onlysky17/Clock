@@ -1708,6 +1708,7 @@ static void hink_d2_minute_start_cb(void)
     hink_d2_first_interval_seconds = (second_now == 0U) ? 60U : (uint8_t)(60U - second_now);
     hink_d2_timer_flags = HINK_D2_TIMER_ACTIVE | HINK_D2_TIMER_FIRST;
     hink_d2_arm_minute_timer(hink_d2_first_interval_seconds);
+    HINK_AUTO_TRY_SCHEDULE();
 }
 
 static void hink_d2_minute_timer_cb(void)
@@ -1839,7 +1840,6 @@ static uint8_t hink_d2_time_handle(struct custs1_val_write_ind const *param)
         {
             hink_d2_start_timer_hnd = hnd;
         }
-        HINK_AUTO_TRY_SCHEDULE();
         /* D2 smoke anchor: hink_d2_notify(HINK_D2_RESULT_OK, HINK_D2_STATE_SYNCED) */
         msg[2] = HINK_D2_RESULT_OK;
         msg[3] = HINK_D2_STATE_SYNCED;
