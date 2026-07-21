@@ -12,7 +12,7 @@ if ($RepoRoot -replace "\\","/" -ne "D:/EINK/Clock") {
 }
 
 $PackagePath = (Resolve-Path -LiteralPath $PackagePath).Path
-$ExpectedPackage = "D:\EINK\Clock\_incoming\D7B_SPI_FINAL_2026-07-21"
+$ExpectedPackage = "D:\EINK\Clock\_incoming\D7B_FIX5_SPI_FINAL_2026-07-21"
 if ($PackagePath -ne $ExpectedPackage) {
     throw "Unexpected package path: $PackagePath"
 }
@@ -95,10 +95,10 @@ foreach ($Name in @("D7B_RAW_ble_app_peripheral_585.bin","D7B_ble_app_peripheral
 
 foreach ($Needle in @(
     "REPO_HEAD",
-    "FIRMWARE_COMMIT 32fa562d",
+    "FIX5_COMMIT e9a32950a7093ff31d0a06720fb74d9f9c5cff82",
     "KEIL_TARGET DA14585",
     "KEIL_COMPILER ARMCLANG 6.24",
-    "BUILD Code=41968 RO=3592 RW=552 ZI=22928 Errors=0 Warnings=0",
+    "BUILD Code=42192 RO=3592 RW=552 ZI=22928 Errors=0 Warnings=0",
     "STATUS READY FOR OWNER SPI PHYSICAL GATE - NOT YET BURNED",
     "PACK_COMMAND"
 )) {
@@ -140,7 +140,7 @@ if ((Get-FileHash -LiteralPath $Packed -Algorithm SHA256).Hash -eq (Get-FileHash
 
 $Tracked = git ls-files
 foreach ($Name in $Required) {
-    if ($Tracked -contains "_incoming/D7B_SPI_FINAL_2026-07-21/$Name") {
+    if ($Tracked -contains "_incoming/D7B_FIX5_SPI_FINAL_2026-07-21/$Name") {
         throw "Package artifact is tracked by Git: $Name"
     }
 }
