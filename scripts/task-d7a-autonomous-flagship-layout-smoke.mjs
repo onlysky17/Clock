@@ -28,10 +28,17 @@ must('D7A framebuffer clear stays 4000 source path', /memset\(fb_bw, 0xff, scr_h
 must('D2 lifecycle still present', /hink_d2_time_handle/);
 must('D3E scheduler still present', /HINK_AUTO_TRY_SCHEDULE/);
 must('D2 SET_TIME arms start callback', /hnd = app_easy_timer\(1, hink_d2_minute_start_cb\);/);
-must('D2 start callback schedules pending render', /static void hink_d2_minute_start_cb\(void\)[\s\S]*hink_d2_arm_minute_timer\(hink_d2_first_interval_seconds\);[\s\S]*HINK_AUTO_TRY_SCHEDULE\(\);/);
+must('D2 immediate render timer handle', /static timer_hnd hink_d2_immediate_timer_hnd/);
+must('D2 SET_TIME queues immediate render callback', /hnd = app_easy_timer\(5, hink_d2_immediate_render_cb\);/);
+must('D2 immediate callback schedules pending render', /static void hink_d2_immediate_render_cb\(void\)[\s\S]*hink_d2_immediate_timer_hnd = EASY_TIMER_INVALID_TIMER;[\s\S]*HINK_AUTO_TRY_SCHEDULE\(\);/);
+must('D2 start callback only realigns minute timer', /static void hink_d2_minute_start_cb\(void\)[\s\S]*hink_d2_arm_minute_timer\(hink_d2_first_interval_seconds\);[\s\S]*static void hink_d2_immediate_render_cb\(void\)/);
 const setTimeBlock = source.match(/if \(subcmd == 0x00U\)[\s\S]*?if \(subcmd == 0x02U\)/)?.[0] ?? '';
 assert.ok(setTimeBlock.includes('hink_d3d_store_last_known_time(epoch, timezone, flags);'), 'SET_TIME must still persist last-known time');
 assert.ok(!setTimeBlock.includes('HINK_AUTO_TRY_SCHEDULE();'), 'SET_TIME must not schedule D7A render directly from BLE write context');
+assert.ok(!setTimeBlock.includes('epd_screen_update();'), 'SET_TIME must not call EPD directly from BLE write context');
+const immediateBlock = source.match(/static void hink_d2_immediate_render_cb\(void\)[\s\S]*?\n}/)?.[0] ?? '';
+assert.ok(!immediateBlock.includes('second_now'), 'immediate render must not depend on second == 0 minute boundary');
+assert.ok(!immediateBlock.includes('epd_screen_update();'), 'immediate callback must only queue the render pipeline');
 must('D3D persistence still present', /HINK_D3D_STORE_SECTOR 0x3B000UL/);
 must('E5 command IDs unchanged', /0xE5[\s\S]*0xE6/);
 must('E6 render path unchanged', /hink_e6_refresh_handle/);
@@ -153,7 +160,8 @@ const changed = execFileSync('git', ['status', '--short', '--untracked-files=all
 const allowed = new Set([
   SRC,
   'scripts/task-d7a-autonomous-flagship-layout-smoke.mjs',
-  'docs/firmware/TASK_D7A_AUTONOMOUS_FLAGSHIP_LAYOUT.md'
+  'docs/firmware/TASK_D7A_AUTONOMOUS_FLAGSHIP_LAYOUT.md',
+  'docs/firmware/TASK_D7B_FIX1_IMMEDIATE_D2_RENDER.md'
 ]);
 for (const file of changed) {
   assert.ok(allowed.has(file), `unexpected dirty file: ${file}`);

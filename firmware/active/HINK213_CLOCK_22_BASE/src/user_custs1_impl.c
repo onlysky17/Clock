@@ -200,6 +200,7 @@ static uint32_t hink_auto_rendering_minute     __SECTION_ZERO("retention_mem_are
 static uint8_t hink_auto_flags                 __SECTION_ZERO("retention_mem_area0");
 static timer_hnd hink_d2_minute_timer_hnd      __SECTION_ZERO("retention_mem_area0");
 static timer_hnd hink_d2_start_timer_hnd       __SECTION_ZERO("retention_mem_area0");
+static timer_hnd hink_d2_immediate_timer_hnd   __SECTION_ZERO("retention_mem_area0");
 static uint8_t hink_d2_first_interval_seconds  __SECTION_ZERO("retention_mem_area0");
 static uint8_t hink_d2_timer_flags             __SECTION_ZERO("retention_mem_area0");
 #define HINK_D2_TIMER_ACTIVE 0x01U
@@ -213,6 +214,7 @@ static uint32_t hink_auto_local_minute_key(void);
 static void hink_auto_note_minute(uint32_t auto_minute);
 static void hink_d2_minute_start_cb(void);
 static void hink_d2_minute_timer_cb(void);
+static void hink_d2_immediate_render_cb(void);
 static void hink_d3d_store_last_known_time(uint32_t epoch, int16_t timezone, uint8_t flags);
 void hink_d3d_boot_load_last_known_time(void);
 static void hink_bitmap_draw_clock(uint8_t h, uint8_t m, uint16_t sy, uint8_t sm,
@@ -1659,6 +1661,11 @@ static void hink_d2_minute_cancel(void)
         app_easy_timer_cancel(hink_d2_start_timer_hnd);
         hink_d2_start_timer_hnd = EASY_TIMER_INVALID_TIMER;
     }
+    if (hink_d2_immediate_timer_hnd != EASY_TIMER_INVALID_TIMER)
+    {
+        app_easy_timer_cancel(hink_d2_immediate_timer_hnd);
+        hink_d2_immediate_timer_hnd = EASY_TIMER_INVALID_TIMER;
+    }
     hink_d2_timer_flags = 0U;
 }
 
@@ -1708,6 +1715,16 @@ static void hink_d2_minute_start_cb(void)
     hink_d2_first_interval_seconds = (second_now == 0U) ? 60U : (uint8_t)(60U - second_now);
     hink_d2_timer_flags = HINK_D2_TIMER_ACTIVE | HINK_D2_TIMER_FIRST;
     hink_d2_arm_minute_timer(hink_d2_first_interval_seconds);
+}
+
+static void hink_d2_immediate_render_cb(void)
+{
+    hink_d2_immediate_timer_hnd = EASY_TIMER_INVALID_TIMER;
+    if (hink_d2_synced_epoch == 0UL)
+    {
+        return;
+    }
+
     HINK_AUTO_TRY_SCHEDULE();
 }
 
@@ -1839,6 +1856,16 @@ static uint8_t hink_d2_time_handle(struct custs1_val_write_ind const *param)
         if (hnd != EASY_TIMER_INVALID_TIMER)
         {
             hink_d2_start_timer_hnd = hnd;
+        }
+        hnd = app_easy_timer(5, hink_d2_immediate_render_cb);
+        if (hnd != EASY_TIMER_INVALID_TIMER)
+        {
+            hink_d2_immediate_timer_hnd = hnd;
+        }
+        else
+        {
+            hink_d2_render_state = HINK_D2_RENDER_ERROR;
+            hink_d2_render_notify(HINK_D2_RESULT_INTERNAL, HINK_D2_RENDER_ERROR);
         }
         /* D2 smoke anchor: hink_d2_notify(HINK_D2_RESULT_OK, HINK_D2_STATE_SYNCED) */
         msg[2] = HINK_D2_RESULT_OK;
