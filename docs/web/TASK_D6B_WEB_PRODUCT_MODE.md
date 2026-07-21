@@ -12,14 +12,17 @@
 
 ## Product Mode
 
-The default page is now organized for Owner day-to-day use:
+The default page is organized for Owner day-to-day use:
 
+- A visible `D7A TEST BASELINE` marker appears near the top of Product Mode, before technical/advanced controls.
+- The marker states expected firmware `D7A final / 32fa562d`, expected BIN marker `14CF053B`, and web build `D7A-WEB1-20260720`.
+- The marker is a cache/test identity hint only. It does not claim the firmware running in the chip has been verified, because the current BLE protocol has no firmware version command.
 - Connect and disconnect are visible at the top.
-- A simple state panel shows `Đang chạy`, `Cần đồng bộ giờ`, `Chưa kết nối`, or `Có lỗi`.
-- `Đồng bộ giờ` is visible for explicit user-triggered D2 time sync.
-- `Mặt lịch hằng ngày` remains the highlighted preset.
+- A simple state panel shows `Dang chay`, `Can dong bo gio`, `Chua ket noi`, or `Co loi`.
+- `Dong bo gio` is visible for explicit user-triggered D2 time sync.
+- `Mat lich hang ngay` remains the highlighted preset.
 - The 250 x 122 preview is visible without opening technical sections.
-- `Gửi lên màn` is visible for the existing user-triggered E5/E6 send flow.
+- `Gui len man` is visible for the existing user-triggered E5/E6 send flow.
 - Progress and user-facing errors remain visible through the existing status fields.
 
 ## TASK D6B-FIX1 - Device-State Mapping
@@ -34,10 +37,10 @@ Root cause:
 
 Fixed user-facing mapping:
 
-- BLE disconnected: `Chưa kết nối`.
-- BLE connected without valid device time: `Cần đồng bộ giờ`.
-- D2 result `OK` with state `SYNCED`, `ACCEPTED`, `RENDERING`, or `COMPLETE`: `Đang chạy`.
-- `Có lỗi` is reserved for real failures:
+- BLE disconnected: `Chua ket noi`.
+- BLE connected without valid device time: `Can dong bo gio`.
+- D2 result `OK` with state `SYNCED`, `ACCEPTED`, `RENDERING`, or `COMPLETE`: `Dang chay`.
+- `Co loi` is reserved for real failures:
   - BLE transport exception.
   - Protocol rejection.
   - Malformed response.
@@ -62,11 +65,47 @@ Automated proof path:
 
 `D:\EINK\Clock\_incoming\D6B_FIX1_STATE_MAPPING_PROOF`
 
+## TASK D7A-WEB1 - Visible Test Identity
+
+Status: implemented for web-only validation.
+
+Canonical web remains:
+
+`https://onlysky17.github.io/Clock/test.html`
+
+Canonical implementation remains:
+
+`web/clock-app/hl24a-canvas-e5.html`
+
+Visible identity values:
+
+- Label: `D7A TEST BASELINE`.
+- Expected firmware: `D7A final / 32fa562d`.
+- Expected BIN: `14CF053B`.
+- Web build: `D7A-WEB1-20260720`.
+- Disclaimer: `Thông tin trên là baseline dự kiến, không phải xác minh firmware trong thiết bị.`
+
+Stable DOM markers:
+
+- `data-eink-web-build="D7A-WEB1-20260720"`.
+- `data-expected-firmware="32fa562d"`.
+- `data-expected-bin="14CF053B"`.
+- `window.EINK_TEST_IDENTITY`.
+
+Guards:
+
+- No BLE protocol, command ID, UUID, D2/E5/E6 packet, firmware, SDK, or scheduler change.
+- No query parameter is required for the canonical URL.
+- Marker is rendered from current source and is not loaded from `localStorage`.
+- Reloading the page keeps the same visible marker.
+- The marker does not overwrite BLE, D2, E5, E6, or Product Mode status state.
+- Browser proof path: `D:\EINK\Clock\_incoming\D7A_WEB1_IDENTITY_PROOF`.
+
 ## Advanced Mode
 
 The page keeps the technical tools but moves them under a closed-by-default disclosure:
 
-`Kỹ thuật / Nâng cao`
+`Ky thuat / Nang cao`
 
 This section remains keyboard-accessible and contains the existing low-level controls and debug output:
 
@@ -96,6 +135,10 @@ For FIX1 state mapping, run:
 
 `node .\scripts\task-d6b-fix1-device-state-mapping-smoke.mjs`
 
+For D7A-WEB1 visible identity, run:
+
+`node .\scripts\task-d7a-web1-visible-test-identity-smoke.mjs`
+
 Expected:
 
 `TASK D6B web product mode smoke PASS`
@@ -107,3 +150,7 @@ Automated browser evidence should be stored under:
 FIX1 browser evidence is stored under:
 
 `D:\EINK\Clock\_incoming\D6B_FIX1_STATE_MAPPING_PROOF`
+
+D7A-WEB1 browser evidence is stored under:
+
+`D:\EINK\Clock\_incoming\D7A_WEB1_IDENTITY_PROOF`
