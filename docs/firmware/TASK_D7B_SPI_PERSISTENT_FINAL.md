@@ -20,7 +20,7 @@ This task is not a physical PASS until Owner completes:
 - Full power-cycle/cold boot.
 - Canonical web D7A badge check.
 - D2 time sync.
-- Immediate D7A layout render.
+- FIX5 first-boot prime cycle, 20-second recovery, redraw cycle, and visible D7A layout.
 - BLE-disconnected five-minute scheduler refresh.
 - No blank panel, duplicate refresh, or second black refresh.
 
@@ -28,13 +28,15 @@ Do not merge this task before Owner SPI Burn/Verify + cold-boot PASS.
 
 ## Lineage
 
-- Main HEAD used for D7B: `1ae2f0b91df07ac55680c8e72c9ee86baba20223`.
-- Firmware marker commit: `32fa562d`.
+- Main HEAD used for this final package: `b861a8d3283ede751ffeae1de63cedcd561c653b`.
+- D7B FIX5 implementation: `e9a32950a7093ff31d0a06720fb74d9f9c5cff82`.
+- Firmware marker commit: `e9a32950`.
 - D7A implementation: `2308fce61388ef99126cc80a6c81fd9b353baed4`.
 - D7A calendar alignment FIX1: `68a47e5c4ce90c874f9c3c21bdb34754e4444600`.
 - D7A immediate render FIX2: `32fa562d0d36127a3ded4b46bd35148ff3ccc172`.
 - D7A final closeout: `151bc2c1c694044b08793e0205253dc669af2698`.
 - D7A-WEB1 identity marker: `0970d47e9de8a1af8e5f679204a2f10716597192`.
+- FIX5 first-refresh behavior: one prime EPD cycle, a 20-second recovery, then redraw and a second EPD cycle using the same `fb_bw`.
 
 ## Canonical Source And SDK
 
@@ -66,30 +68,30 @@ Note: `tools\sync-hink213-source.ps1 -Check` still points at a legacy P3 project
 
 - Target: `DA14585`.
 - Compiler: `ARMCLANG 6.24`.
-- Code: `41968`.
+- Code: `42192`.
 - RO-data: `3592`.
 - RW-data: `552`.
 - ZI-data: `22928`.
 - Result: `0 errors`, `0 warnings`.
-- Raw BIN size: `47248` bytes.
+- Raw BIN size: `47472` bytes.
 - Raw BIN gate: PASS, below `65528` bytes.
 - Legacy font symbols: absent from map/symdef scan (`sfont`, `sfont16`, `font50`, `font66`).
 
 Fresh AXF:
 
-- Path: `D:\EINK\Clock\_incoming\D7B_SPI_FINAL_2026-07-21\D7B_ble_app_peripheral_585.axf`.
+- Path: `D:\EINK\Clock\_incoming\D7B_FIX5_SPI_FINAL_2026-07-21\D7B_ble_app_peripheral_585.axf`.
 - Source build path: `D:\EINK\DA14585_SDK_6.0.22.1401\projects\target_apps\ble_examples\HINK213_CLOCK_22_BASE\Keil_5\out_DA14585\Objects\ble_app_peripheral_585.axf`.
-- Timestamp: `2026-07-21 08:34:41 +07:00`.
-- Size: `554316` bytes.
-- SHA256: `4FA82F1F2100E2F3461B6B125DE5C5A11020F9CC4900D553A390CA3F12F842D8`.
+- Timestamp: `2026-07-21 15:29:24.233 +07:00`.
+- Size: `555816` bytes.
+- SHA256: `CCF954BEDCCA89F1D987C56C0FBB62F251AD69FBF0006245F6EC815EA7ECE5AF`.
 
 Fresh raw BIN:
 
-- Path: `D:\EINK\Clock\_incoming\D7B_SPI_FINAL_2026-07-21\D7B_RAW_ble_app_peripheral_585.bin`.
+- Path: `D:\EINK\Clock\_incoming\D7B_FIX5_SPI_FINAL_2026-07-21\D7B_RAW_ble_app_peripheral_585.bin`.
 - Source build path: `D:\EINK\DA14585_SDK_6.0.22.1401\projects\target_apps\ble_examples\HINK213_CLOCK_22_BASE\Keil_5\out_DA14585\Objects\ble_app_peripheral_585.bin`.
-- Timestamp: `2026-07-21 08:34:41 +07:00`.
-- Size: `47248` bytes.
-- SHA256: `82F36EC66C8B914C11EBF620D6BC8DA7294CCBE08A9F3B46D7AD59AEE99FE8FD`.
+- Timestamp: `2026-07-21 15:29:24.451 +07:00`.
+- Size: `47472` bytes.
+- SHA256: `5F58D1DA19CAF657A4629894FCBED8AE4C94B4A4FFC2F8153954DA2FB78093A9`.
 
 The fresh raw SHA256 differs from the prior D7A SysRAM artifact hash, but canonical to SDK source parity PASS and this package uses the fresh D7B Keil GUI rebuild output.
 
@@ -101,7 +103,7 @@ Canonical golden source:
 
 Packaged copy:
 
-`D:\EINK\Clock\_incoming\D7B_SPI_FINAL_2026-07-21\D7B_GOLDEN_BASE_256KB.bin`
+`D:\EINK\Clock\_incoming\D7B_FIX5_SPI_FINAL_2026-07-21\D7B_GOLDEN_BASE_256KB.bin`
 
 Evidence:
 
@@ -120,23 +122,23 @@ Command:
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File "D:\EINK\Clock\tools\pack-hink.ps1" `
-  -Raw "D:\EINK\Clock\_incoming\D7B_SPI_FINAL_2026-07-21\D7B_RAW_ble_app_peripheral_585.bin" `
-  -Out "D:\EINK\Clock\_incoming\D7B_SPI_FINAL_2026-07-21\D7B_FINAL_PACKED_256KB.bin" `
+  -Raw "D:\EINK\Clock\_incoming\D7B_FIX5_SPI_FINAL_2026-07-21\D7B_RAW_ble_app_peripheral_585.bin" `
+  -Out "D:\EINK\Clock\_incoming\D7B_FIX5_SPI_FINAL_2026-07-21\D7B_FINAL_PACKED_256KB.bin" `
   -Name "HINK213-CLOCK" `
-  -Template "D:\EINK\Clock\_incoming\D7B_SPI_FINAL_2026-07-21\D7B_GOLDEN_BASE_256KB.bin"
+  -Template "D:\EINK\Clock\_incoming\D7B_FIX5_SPI_FINAL_2026-07-21\D7B_GOLDEN_BASE_256KB.bin"
 ```
 
 Packer output:
 
 - Status: `READY TO FLASH`.
-- Raw CRC32: `23482129`.
+- Raw CRC32: `ADFE9EFD`.
 - Layout: `7050@00000 7051@04000 PAYLOAD@04040 7052@38000`.
 
 Packed final image:
 
-- Path: `D:\EINK\Clock\_incoming\D7B_SPI_FINAL_2026-07-21\D7B_FINAL_PACKED_256KB.bin`.
+- Path: `D:\EINK\Clock\_incoming\D7B_FIX5_SPI_FINAL_2026-07-21\D7B_FINAL_PACKED_256KB.bin`.
 - Size: `262144` bytes.
-- SHA256: `1D9E3A134E0CB6BAE1223327DAE4A48EA9E280757F8169244DB2697C75DC1B64`.
+- SHA256: `048D916521B6B0A54D2192409340D1D2EB270C8A72CD98147C66ADE9928843FF`.
 - Packed image differs from golden base.
 - Packed image is not all `FF`.
 - Packed payload at `0x4040` matches the fresh raw BIN.
@@ -145,7 +147,7 @@ Packed final image:
 
 Package path:
 
-`D:\EINK\Clock\_incoming\D7B_SPI_FINAL_2026-07-21`
+`D:\EINK\Clock\_incoming\D7B_FIX5_SPI_FINAL_2026-07-21`
 
 Package contents:
 
@@ -159,7 +161,7 @@ Package contents:
 
 Manifest:
 
-`D:\EINK\Clock\_incoming\D7B_SPI_FINAL_2026-07-21\D7B_MANIFEST_SHA256.txt`
+`D:\EINK\Clock\_incoming\D7B_FIX5_SPI_FINAL_2026-07-21\D7B_MANIFEST_SHA256.txt`
 
 Manifest records:
 
@@ -182,8 +184,8 @@ Package verify script:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
-  -File "D:\EINK\Clock\_incoming\D7B_SPI_FINAL_2026-07-21\verify-d7b-package.ps1" `
-  -PackagePath "D:\EINK\Clock\_incoming\D7B_SPI_FINAL_2026-07-21"
+  -File "D:\EINK\Clock\_incoming\D7B_FIX5_SPI_FINAL_2026-07-21\verify-d7b-package.ps1" `
+  -PackagePath "D:\EINK\Clock\_incoming\D7B_FIX5_SPI_FINAL_2026-07-21"
 ```
 
 Result:
@@ -195,7 +197,7 @@ D7B package smoke:
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File ".\scripts\task-d7b-spi-final-smoke.ps1" `
-  -PackagePath "D:\EINK\Clock\_incoming\D7B_SPI_FINAL_2026-07-21"
+  -PackagePath "D:\EINK\Clock\_incoming\D7B_FIX5_SPI_FINAL_2026-07-21"
 ```
 
 Result:
@@ -223,7 +225,7 @@ Smoke checks:
 2. Select DA14585.
 3. Open SPI Flash Programmer.
 4. Select:
-   `D:\EINK\Clock\_incoming\D7B_SPI_FINAL_2026-07-21\D7B_FINAL_PACKED_256KB.bin`
+   `D:\EINK\Clock\_incoming\D7B_FIX5_SPI_FINAL_2026-07-21\D7B_FINAL_PACKED_256KB.bin`
 5. Burn the full image.
 6. Verify must PASS.
 7. Fully power off the board.
@@ -233,10 +235,11 @@ Smoke checks:
     `https://onlysky17.github.io/Clock/test.html`
 11. Check the D7A baseline badge.
 12. Connect BLE and press `Dong bo gio`.
-13. The D7A layout must appear immediately.
-14. Disconnect BLE and wait for the next five-minute boundary.
-15. Scheduler must refresh exactly once.
-16. There must be no blank panel, no duplicate refresh, and no second black refresh.
+13. On the first render after boot, allow the prime cycle, 20-second recovery, and redraw cycle.
+14. The D7A layout must appear after the redraw cycle.
+15. Disconnect BLE and wait for the next five-minute boundary.
+16. Scheduler must refresh exactly once with one normal EPD cycle.
+17. BLE reconnect must PASS with no duplicate refresh or second black refresh.
 
 ## Git Guards
 
