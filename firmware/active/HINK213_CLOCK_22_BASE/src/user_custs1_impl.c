@@ -185,12 +185,7 @@ static uint8_t hink_d3d_stale_valid        __SECTION_ZERO("retention_mem_area0")
                           (epd_wait_hnd == EASY_TIMER_INVALID_TIMER))
 #define HINK_AUTO_TRY_SCHEDULE() do { \
         if ((hink_auto_flags & HINK_AUTO_FLAG_PENDING) && HINK_AUTO_IDLE()) { \
-            hink_auto_rendering_minute = hink_auto_pending_minute; \
-            hink_d2_render_state = HINK_D2_RENDER_ACCEPTED; \
-            if (app_easy_timer(5, hink_d2_render_timer_cb) == EASY_TIMER_INVALID_TIMER) { \
-                hink_auto_rendering_minute = HINK_AUTO_SENTINEL; \
-                hink_d2_render_state = HINK_D2_RENDER_ERROR; \
-            } \
+            (void)hink_d2_start_render_request(hink_auto_pending_minute, 0U); \
         } \
     } while (0)
 
@@ -210,6 +205,7 @@ static void hink_e6_timer_cb(void);
 static void hink_d2_render_timer_cb(void);
 static void hink_d2_render_notify(uint8_t result, uint8_t state);
 static uint8_t hink_d2_render_handle(struct custs1_val_write_ind const *param);
+static uint8_t hink_d2_start_render_request(uint32_t auto_minute, uint8_t notify_error);
 static uint32_t hink_auto_local_minute_key(void);
 static void hink_auto_note_minute(uint32_t auto_minute);
 static void hink_d2_minute_start_cb(void);
@@ -1649,6 +1645,29 @@ static void hink_auto_note_minute(uint32_t auto_minute)
     }
 }
 
+static uint8_t hink_d2_start_render_request(uint32_t auto_minute, uint8_t notify_error)
+{
+    if (!HINK_AUTO_IDLE())
+    {
+        return 0U;
+    }
+
+    hink_auto_rendering_minute = auto_minute;
+    hink_d2_render_state = HINK_D2_RENDER_ACCEPTED;
+    if (app_easy_timer(5, hink_d2_render_timer_cb) != EASY_TIMER_INVALID_TIMER)
+    {
+        return 1U;
+    }
+
+    hink_auto_rendering_minute = HINK_AUTO_SENTINEL;
+    hink_d2_render_state = HINK_D2_RENDER_ERROR;
+    if (notify_error)
+    {
+        hink_d2_render_notify(HINK_D2_RESULT_INTERNAL, HINK_D2_RENDER_ERROR);
+    }
+    return 0U;
+}
+
 static void hink_d2_minute_cancel(void)
 {
     if (hink_d2_minute_timer_hnd != EASY_TIMER_INVALID_TIMER)
@@ -1719,13 +1738,22 @@ static void hink_d2_minute_start_cb(void)
 
 static void hink_d2_immediate_render_cb(void)
 {
+    uint32_t auto_minute;
+
     hink_d2_immediate_timer_hnd = EASY_TIMER_INVALID_TIMER;
     if (hink_d2_synced_epoch == 0UL)
     {
         return;
     }
 
-    HINK_AUTO_TRY_SCHEDULE();
+    auto_minute = hink_auto_pending_minute;
+    if ((hink_auto_flags & HINK_AUTO_FLAG_PENDING) == 0U)
+    {
+        auto_minute = hink_auto_local_minute_key();
+        hink_auto_pending_minute = auto_minute;
+        hink_auto_flags |= HINK_AUTO_FLAG_PENDING;
+    }
+    (void)hink_d2_start_render_request(auto_minute, 1U);
 }
 
 static void hink_d2_minute_timer_cb(void)

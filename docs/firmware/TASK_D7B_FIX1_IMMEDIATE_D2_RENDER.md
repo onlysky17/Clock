@@ -1,10 +1,10 @@
-# TASK D7B-FIX1 — Immediate D2 Render
+# TASK D7B-FIX1/FIX2 - Immediate D2 Render
 
 Status: PRE-PHYSICAL SYSRAM TEST
 
 ## Problem
 
-D7B packaged firmware still delayed the first visible D7A layout when `D2 SET_TIME`
+D7B packaged firmware delayed the first visible D7A layout when `D2 SET_TIME`
 arrived between minute boundaries. The web observed `SYNCED -> RENDERING ->
 COMPLETE`, but the panel stayed white until the next minute tick, where the
 autonomous scheduler rendered successfully.
@@ -15,6 +15,8 @@ Physical evidence:
 - Panel remained white after the immediate D2 flow.
 - At 09:00, the minute scheduler rendered the D7A layout.
 - SysRAM and packed SPI behaved the same, so pack/golden/SPI were ruled out.
+- D7B-FIX1 armed a one-shot timer, but that callback still used the scheduler
+  gate and could become a no-op outside the five-minute policy window.
 
 Root cause:
 
@@ -22,6 +24,9 @@ Root cause:
   autonomous render.
 - A SET_TIME in the middle of a minute could leave the visible render dependent
   on the next minute callback instead of starting a render immediately.
+- FIX1 moved the retry into a one-shot callback but still called
+  `HINK_AUTO_TRY_SCHEDULE()`, so the immediate path remained coupled to the
+  autonomous schedule policy instead of the physical render request engine.
 
 ## Fix
 
@@ -30,10 +35,11 @@ After a valid `D2 SET_TIME`, firmware now:
 1. stores RAM time state and persists the last-known metadata as before;
 2. realigns the dedicated minute timer as before;
 3. arms a short dedicated one-shot app timer;
-4. runs the existing autonomous D7A render pipeline from that timer context;
+4. calls the render request engine directly from that timer context;
 5. reports D2 render `COMPLETE` only from the existing EPD wait completion path.
 
-The BLE write handler still does not call EPD functions directly.
+The BLE write handler still does not call EPD functions directly. The
+five-minute policy remains limited to autonomous scheduler decisions.
 
 ## Preserved Behavior
 
@@ -54,8 +60,8 @@ The BLE write handler still does not call EPD functions directly.
 
 ## SysRAM Artifact
 
-Pending build output will be copied to:
+Pending D7B-FIX2 build output will be copied to:
 
-`D:\EINK\Clock\_incoming\D7B_FIX1_SYSRAM_TEST\D7B_FIX1_SYSRAM_ble_app_peripheral_585.bin`
+`D:\EINK\Clock\_incoming\D7B_FIX2_SYSRAM_TEST\D7B_FIX2_SYSRAM_ble_app_peripheral_585.bin`
 
 Do not pack SPI or treat D7B as final until Owner SysRAM physical retest passes.
