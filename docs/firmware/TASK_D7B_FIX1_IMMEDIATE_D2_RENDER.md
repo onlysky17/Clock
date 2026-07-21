@@ -1,4 +1,4 @@
-# TASK D7B-FIX1/FIX2 - Immediate D2 Render
+# TASK D7B-FIX1/FIX2/FIX3 - Immediate D2 Render
 
 Status: PRE-PHYSICAL SYSRAM TEST
 
@@ -17,6 +17,10 @@ Physical evidence:
 - SysRAM and packed SPI behaved the same, so pack/golden/SPI were ruled out.
 - D7B-FIX1 armed a one-shot timer, but that callback still used the scheduler
   gate and could become a no-op outside the five-minute policy window.
+- D7B-DIAG1 used a non-white black/white diagnostic framebuffer through the
+  immediate request path. D2 reported `RENDERING -> COMPLETE`, but the panel
+  remained white. The diagnostic BIN SHA256 was
+  `5734D1F86343E027C6C4E5550BA825D21212E1B4409D59F173FF72BE55B3E972`.
 
 Root cause:
 
@@ -27,6 +31,11 @@ Root cause:
 - FIX1 moved the retry into a one-shot callback but still called
   `HINK_AUTO_TRY_SCHEDULE()`, so the immediate path remained coupled to the
   autonomous schedule policy instead of the physical render request engine.
+- Source audit after DIAG1 found both paths already converged at
+  `hink_d2_render_timer_cb()` for framebuffer draw, EPD open/init/write/update,
+  wait, power-close, and completion. Their remaining difference was the entry
+  path: scheduled work used the pending/policy latch while immediate D2 called
+  the request helper separately.
 
 ## Fix
 
@@ -37,6 +46,18 @@ After a valid `D2 SET_TIME`, firmware now:
 3. arms a short dedicated one-shot app timer;
 4. calls the render request engine directly from that timer context;
 5. reports D2 render `COMPLETE` only from the existing EPD wait completion path.
+
+FIX3 removes the separate entry logic. Scheduled and immediate requests now
+enter `hink_d2_run_autonomous_worker()` with an explicit reason:
+
+- `HINK_RENDER_REASON_SCHEDULED` requires the pending minute created by the
+  five-minute/day-rollover policy;
+- `HINK_RENDER_REASON_D2_IMMEDIATE` records the current minute and bypasses only
+  that policy gate.
+
+Both reasons then use the same accepted state, render timer, D7A framebuffer
+draw, EPD hardware open/init/update, wait timer, cleanup, and completion path.
+No diagnostic pattern remains in production source.
 
 The BLE write handler still does not call EPD functions directly. The
 five-minute policy remains limited to autonomous scheduler decisions.
@@ -60,8 +81,8 @@ five-minute policy remains limited to autonomous scheduler decisions.
 
 ## SysRAM Artifact
 
-Pending D7B-FIX2 build output will be copied to:
+Pending D7B-FIX3 build output will be copied to:
 
-`D:\EINK\Clock\_incoming\D7B_FIX2_SYSRAM_TEST\D7B_FIX2_SYSRAM_ble_app_peripheral_585.bin`
+`D:\EINK\Clock\_incoming\D7B_FIX3_SYSRAM_TEST\D7B_FIX3_SYSRAM_ble_app_peripheral_585.bin`
 
 Do not pack SPI or treat D7B as final until Owner SysRAM physical retest passes.

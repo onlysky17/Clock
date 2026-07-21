@@ -30,9 +30,9 @@ must('D3E scheduler still present', /HINK_AUTO_TRY_SCHEDULE/);
 must('D2 SET_TIME arms start callback', /hnd = app_easy_timer\(1, hink_d2_minute_start_cb\);/);
 must('D2 immediate render timer handle', /static timer_hnd hink_d2_immediate_timer_hnd/);
 must('D2 SET_TIME queues immediate render callback', /hnd = app_easy_timer\(5, hink_d2_immediate_render_cb\);/);
-must('D2 render request engine', /static uint8_t hink_d2_start_render_request\(uint32_t auto_minute, uint8_t notify_error\)[\s\S]*hink_d2_render_state = HINK_D2_RENDER_ACCEPTED;[\s\S]*app_easy_timer\(5, hink_d2_render_timer_cb\)/);
-must('D2 scheduler uses render request engine after policy', /#define HINK_AUTO_TRY_SCHEDULE\(\)[\s\S]*hink_d2_start_render_request\(hink_auto_pending_minute, 0U\)/);
-must('D2 immediate callback starts render request directly', /static void hink_d2_immediate_render_cb\(void\)[\s\S]*hink_d2_immediate_timer_hnd = EASY_TIMER_INVALID_TIMER;[\s\S]*hink_d2_start_render_request\(auto_minute, 1U\);/);
+must('D2 common autonomous worker', /static uint8_t hink_d2_run_autonomous_worker\(uint32_t auto_minute,[\s\S]*uint8_t reason,[\s\S]*uint8_t notify_error\)[\s\S]*hink_d2_render_state = HINK_D2_RENDER_ACCEPTED;[\s\S]*app_easy_timer\(5, hink_d2_render_timer_cb\)/);
+must('D2 scheduler uses common worker after policy', /#define HINK_AUTO_TRY_SCHEDULE\(\)[\s\S]*hink_d2_run_autonomous_worker\(hink_auto_pending_minute,[\s\S]*HINK_RENDER_REASON_SCHEDULED, 0U\)/);
+must('D2 immediate callback uses common worker', /static void hink_d2_immediate_render_cb\(void\)[\s\S]*hink_d2_immediate_timer_hnd = EASY_TIMER_INVALID_TIMER;[\s\S]*hink_d2_run_autonomous_worker\(auto_minute,[\s\S]*HINK_RENDER_REASON_D2_IMMEDIATE, 1U\);/);
 must('D2 start callback only realigns minute timer', /static void hink_d2_minute_start_cb\(void\)[\s\S]*hink_d2_arm_minute_timer\(hink_d2_first_interval_seconds\);[\s\S]*static void hink_d2_immediate_render_cb\(void\)/);
 const setTimeBlock = source.match(/if \(subcmd == 0x00U\)[\s\S]*?if \(subcmd == 0x02U\)/)?.[0] ?? '';
 assert.ok(setTimeBlock.includes('hink_d3d_store_last_known_time(epoch, timezone, flags);'), 'SET_TIME must still persist last-known time');
@@ -42,10 +42,17 @@ const immediateBlock = source.match(/\nstatic void hink_d2_immediate_render_cb\(
 assert.ok(!immediateBlock.includes('second_now'), 'immediate render must not depend on second == 0 minute boundary');
 assert.ok(!immediateBlock.includes('epd_screen_update();'), 'immediate callback must only queue the render pipeline');
 assert.ok(!immediateBlock.includes('HINK_AUTO_TRY_SCHEDULE();'), 'immediate render must bypass the five-minute scheduler gate');
-assert.ok(immediateBlock.includes('hink_d2_start_render_request(auto_minute, 1U);'), 'immediate render must request a physical render');
-const requestBlock = source.match(/\nstatic uint8_t hink_d2_start_render_request\(uint32_t auto_minute, uint8_t notify_error\)\s*\{[\s\S]*?\nstatic void hink_d2_minute_cancel\(void\)/)?.[0] ?? '';
-assert.ok(!requestBlock.includes('HINK_AUTO_FLAG_PENDING'), 'render request engine must not depend on scheduler pending policy');
-assert.ok(!requestBlock.includes('% 5UL'), 'render request engine must not depend on five-minute policy');
+assert.ok(immediateBlock.includes('HINK_RENDER_REASON_D2_IMMEDIATE'), 'immediate render must select the immediate worker reason');
+assert.ok(!immediateBlock.includes('hink_d2_render_timer_cb'), 'immediate callback must not use a lower-level render shortcut');
+const workerStart = source.lastIndexOf('static uint8_t hink_d2_run_autonomous_worker');
+const workerEnd = source.indexOf('\nstatic void hink_d2_minute_cancel(void)', workerStart);
+const workerBlock = source.slice(workerStart, workerEnd);
+assert.ok(workerBlock.includes('reason == HINK_RENDER_REASON_D2_IMMEDIATE'), 'common worker must recognize immediate reason');
+assert.ok(workerBlock.includes('hink_auto_flags |= HINK_AUTO_FLAG_PENDING;'), 'immediate reason must snapshot its minute as pending');
+assert.ok(workerBlock.includes('HINK_AUTO_FLAG_PENDING') && workerBlock.includes('hink_auto_pending_minute != auto_minute'), 'scheduled reason must keep pending and duplicate guards');
+assert.ok(!workerBlock.includes('% 5UL'), 'common worker must not embed five-minute policy');
+assert.ok(!workerBlock.includes('HINK_D2_RENDER_COMPLETE'), 'worker skip/failure must not emit COMPLETE');
+assert.ok(workerBlock.includes('app_easy_timer(5, hink_d2_render_timer_cb)'), 'common worker must queue the shared render callback');
 must('D3D persistence still present', /HINK_D3D_STORE_SECTOR 0x3B000UL/);
 must('E5 command IDs unchanged', /0xE5[\s\S]*0xE6/);
 must('E6 render path unchanged', /hink_e6_refresh_handle/);
@@ -56,6 +63,41 @@ assert.ok(!/sprintf\(/.test(source.match(/static void hink_bitmap_draw_clock[\s\
 assert.equal(16 * 250, 4000, 'framebuffer must remain 4000 bytes');
 assert.ok(/memset\(fb_bw, 0xff, scr_h \* line_bytes\);[\s\S]*hink_bitmap_draw_clock\(h, m, sy, sm, sd, sw, lunar_valid, lm, ld\);[\s\S]*epd_screen_update\(\);[\s\S]*epd_update\(\);[\s\S]*epd_wait_hnd = app_easy_timer\(40, epd_wait_timer\);/.test(source), 'render callback must draw framebuffer and start EPD before COMPLETE');
 assert.ok(/hink_d2_render_notify\(HINK_D2_RESULT_OK, HINK_D2_RENDER_COMPLETE\);[\s\S]*HINK_AUTO_TRY_SCHEDULE\(\);/.test(source), 'COMPLETE must be emitted from EPD wait completion path');
+
+const renderStart = source.lastIndexOf('static void hink_d2_render_timer_cb(void)');
+const renderEnd = source.indexOf('\nstatic uint8_t hink_d2_render_handle', renderStart);
+const renderBlock = source.slice(renderStart, renderEnd);
+for (const step of ['hink_bitmap_draw_clock(', 'epd_hw_open();', 'epd_update_mode(UPDATE_FULL);', 'epd_init();', 'epd_screen_update();', 'epd_update();', 'app_easy_timer(40, epd_wait_timer)']) {
+  assert.ok(renderBlock.includes(step), `shared render callback missing ${step}`);
+}
+assert.ok(renderBlock.includes('HINK_D2_RENDER_RENDERING'), 'shared render callback must emit RENDERING after acceptance');
+assert.ok(!renderBlock.includes('HINK_D2_RENDER_COMPLETE'), 'shared render callback must not emit COMPLETE before EPD wait finishes');
+
+function simulateWorkerSequence() {
+  const rendered = new Set();
+  const started = [];
+  const run = (minute, reason) => {
+    const scheduled = reason === 'scheduled';
+    if (scheduled && minute % 5 !== 0) return false;
+    if (rendered.has(minute)) return false;
+    rendered.add(minute);
+    started.push({ minute, reason });
+    return true;
+  };
+
+  const minute0958 = 9 * 60 + 58;
+  const minute1000 = 10 * 60;
+  assert.ok(run(minute0958, 'immediate'), '09:58:14 SET_TIME must start immediate render before the minute boundary');
+  assert.ok(!run(minute0958, 'scheduled'), 'same-minute scheduler must not duplicate immediate render');
+  assert.ok(run(minute1000, 'scheduled'), '10:00 five-minute scheduler must render exactly once');
+  assert.ok(!run(minute1000, 'scheduled'), '10:00 scheduler must not duplicate');
+  assert.deepEqual(started, [
+    { minute: minute0958, reason: 'immediate' },
+    { minute: minute1000, reason: 'scheduled' }
+  ]);
+}
+
+simulateWorkerSequence();
 
 function isLeap(year) {
   return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
