@@ -200,6 +200,7 @@ function setupProductMode(){
     connect:$('connect'),
     disconnect:$('disconnect'),
     d2SetTime:$('d2SetTime'),
+    d2GetIdentity:$('d2GetIdentity'),
     syncClock:$('syncClock'),
     dailyCalendar:$('dailyCalendar'),
     updateClock:$('updateClock'),
@@ -237,7 +238,7 @@ function setupProductMode(){
 
   main.innerHTML='';
   main.append(header,identityCard,statusCard,presetCard,previewCard,advanced);
-  $('identityActionRow').append($('d2GetIdentity'));
+  $('identityActionRow').append(refs.d2GetIdentity);
 
   $('productConnectRow').append(refs.connect,refs.disconnect);
   refs.connect.textContent='Kết nối';

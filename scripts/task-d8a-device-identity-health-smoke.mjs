@@ -41,6 +41,9 @@ includes(web, "expectedFirmware:'D8A00001'", 'expected D8A identity marker missi
 includes(web, 'id="actualFirmware"', 'visible actual firmware field missing');
 includes(web, 'id="actualSourceId"', 'visible source ID field missing');
 includes(web, 'id="actualHealth"', 'visible health field missing');
+includes(web, "d2GetIdentity:$('d2GetIdentity')", 'identity button must be retained before Product Mode clears the original DOM');
+includes(web, "$('identityActionRow').append(refs.d2GetIdentity);", 'retained identity button must be mounted without a null text node');
+assert.ok(!web.includes("$('identityActionRow').append($('d2GetIdentity'))"), 'identity button lookup after DOM clear creates visible null text');
 includes(web, 'await d2GetDeviceIdentity();', 'identity must be queried after BLE connect');
 includes(web, "$('d2GetIdentity').onclick=()=>runD2Flow(d2GetDeviceIdentity);", 'manual identity query control missing');
 includes(web, "a[1]===0x81&&a[2]===0x01", 'legacy firmware unsupported fallback missing');
