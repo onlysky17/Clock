@@ -118,6 +118,8 @@ static timer_hnd hink_e6_timer_hnd       __SECTION_ZERO("retention_mem_area0");
 #define HINK_D2_STATUS_LEN          15U
 #define HINK_D2_RENDER_LEN          2U
 #define HINK_D2_RENDER_STATUS_LEN   4U
+#define HINK_D2_IDENTITY_LEN        2U
+#define HINK_D2_IDENTITY_STATUS_LEN 16U
 #define HINK_D2_EPOCH_MIN           1704067200UL
 #define HINK_D2_EPOCH_MAX           4102444799UL
 #define HINK_D2_STALE_SECONDS       86400UL
@@ -142,6 +144,15 @@ static timer_hnd hink_e6_timer_hnd       __SECTION_ZERO("retention_mem_area0");
 #define HINK_D2_RENDER_RENDERING 0x02U
 #define HINK_D2_RENDER_COMPLETE  0x03U
 #define HINK_D2_RENDER_ERROR     0x04U
+
+#define HINK_D8A_IDENTITY_SCHEMA 0x01U
+#define HINK_D8A_SOURCE_ID       0xD8A00001UL
+#define HINK_D8A_HEALTH_TIME     0x01U
+#define HINK_D8A_HEALTH_STALE    0x02U
+#define HINK_D8A_HEALTH_TIMER    0x04U
+#define HINK_D8A_HEALTH_RENDER   0x08U
+#define HINK_D8A_HEALTH_PRIME    0x10U
+#define HINK_D8A_HEALTH_STORE    0x20U
 
 #define HINK_D3C_UNIX_DAY_2024_01_01 19723UL
 #define HINK_D3C_LUNAR_ANCHOR_DAY     40L
@@ -215,6 +226,7 @@ static void hink_d2_render_timer_cb(void);
 static void hink_d2_prime_retry_cb(void);
 static uint8_t hink_d2_start_epd_refresh(void);
 static void hink_d2_render_notify(uint8_t result, uint8_t state);
+static void hink_d2_identity_notify(uint8_t result);
 static uint8_t hink_d2_render_handle(struct custs1_val_write_ind const *param);
 static uint32_t hink_auto_local_minute_key(void);
 static void hink_auto_note_minute(uint32_t auto_minute);
@@ -1895,6 +1907,13 @@ static uint8_t hink_d2_time_handle(struct custs1_val_write_ind const *param)
         return hink_d2_render_handle(param);
     }
 
+    if (subcmd == 0x03U)
+    {
+        hink_d2_identity_notify((param->length == HINK_D2_IDENTITY_LEN) ?
+                                HINK_D2_RESULT_OK : HINK_D2_RESULT_INVALID_LENGTH);
+        return 1U;
+    }
+
     if (subcmd == 0x01U)
     {
         if (param->length != HINK_D2_GET_STATUS_LEN)
@@ -1940,6 +1959,51 @@ notify_state:
     hink_put_u32_le(&msg[11], uptime);
     hink_e4_notify_bytes(msg, HINK_D2_STATUS_LEN);
     return 1U;
+}
+
+static void hink_d2_identity_notify(uint8_t result)
+{
+    uint8_t msg[HINK_D2_IDENTITY_STATUS_LEN];
+    uint8_t health = HINK_D8A_HEALTH_STORE;
+
+    if (hink_d2_synced_epoch != 0UL)
+    {
+        health |= HINK_D8A_HEALTH_TIME;
+    }
+    if (hink_d3d_stale_valid)
+    {
+        health |= HINK_D8A_HEALTH_STALE;
+    }
+    if (hink_d2_timer_flags & HINK_D2_TIMER_ACTIVE)
+    {
+        health |= HINK_D8A_HEALTH_TIMER;
+    }
+    if ((hink_d2_render_state == HINK_D2_RENDER_ACCEPTED) ||
+        (hink_d2_render_state == HINK_D2_RENDER_RENDERING))
+    {
+        health |= HINK_D8A_HEALTH_RENDER;
+    }
+    if (hink_epd_first_refresh_pending)
+    {
+        health |= HINK_D8A_HEALTH_PRIME;
+    }
+
+    msg[0] = 0xD2;
+    msg[1] = 0x83;
+    msg[2] = result;
+    msg[3] = HINK_D8A_IDENTITY_SCHEMA;
+    msg[4] = 'D';
+    msg[5] = '8';
+    msg[6] = 'A';
+    msg[7] = '1';
+    hink_put_u32_le(&msg[8], HINK_D8A_SOURCE_ID);
+    msg[12] = health;
+    msg[13] = (hink_d2_synced_epoch == 0UL) ? HINK_D2_STATE_UNSET :
+              ((hink_d2_elapsed_seconds() >= HINK_D2_STALE_SECONDS) ?
+               HINK_D2_STATE_STALE : HINK_D2_STATE_RUNNING);
+    msg[14] = hink_d2_render_state;
+    msg[15] = hink_e6_state;
+    hink_e4_notify_bytes(msg, HINK_D2_IDENTITY_STATUS_LEN);
 }
 
 static void hink_d2_render_notify(uint8_t result, uint8_t state)

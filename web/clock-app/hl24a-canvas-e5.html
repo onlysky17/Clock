@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TASK D7A-WEB1 - Visible Test Identity</title>
+<title>TASK D8A - Device Identity and Health</title>
 <style>
 :root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;--bg:#07101b;--card:#111c2c;--line:#2a3d59;--text:#f4f8ff;--muted:#9fb1c8;--ok:#45d99c;--warn:#ffd166;--bad:#ff6b86}
 *{box-sizing:border-box}body{margin:0;background:linear-gradient(#050a12,#101a2a);color:var(--text)}main{max-width:1040px;margin:auto;padding:20px}
@@ -30,8 +30,8 @@ small{color:var(--muted)}
 </style>
 </head>
 <body><main>
-<div class="badge">TASK D2D • DEVICE CLOCK RENDERER • HINK213 BW</div>
-<h1>250×122 Clock → Device-Time Render + E5/E6 Tools</h1>
+<div class="badge">TASK D8A • DEVICE IDENTITY + HEALTH • HINK213 BW</div>
+<h1>250×122 Clock → Verified Device Identity + Health</h1>
 <p>Preview hiển thị theo hướng panel thật. Payload gửi RAM controller 122×250, 16 byte/dòng, 4000 byte.</p>
 
 <section class="card">
@@ -97,6 +97,7 @@ small{color:var(--muted)}
 <button id="d2SetTime" class="primary">Gửi giờ xuống thiết bị</button>
 <button id="d2GetStatus">Đọc trạng thái giờ</button>
 <button id="d2RenderClock" class="good">Vẽ giờ từ thiết bị lên màn</button>
+<button id="d2GetIdentity">Đọc danh tính thiết bị</button>
 </div>
 <p>D2: <strong id="d2StatusText" class="warn" aria-live="polite">DISCONNECTED</strong></p>
 <p>D2 render: <strong id="d2RenderStatus" class="warn" aria-live="polite">NOT RUN</strong></p>
@@ -167,10 +168,10 @@ const NOTIFY='15005991-b131-3396-014c-664c9867b917';
 const D2_STALE_PRESENT_FLAG=0x80;
 const D2_STALE_WARNING='Thiết bị đang giữ giờ cũ. Hãy đồng bộ giờ hiện tại để tiếp tục chạy đồng hồ.';
 const EINK_TEST_IDENTITY={
-  webBuild:'D7A-WEB1-20260720',
-  expectedFirmware:'32fa562d',
-  expectedBin:'14CF053B',
-  label:'D7A TEST BASELINE'
+  webBuild:'D8A-IDENTITY-20260721',
+  expectedFirmware:'D8A00001',
+  expectedBin:'BUILD-SPECIFIC',
+  label:'D8A DEVICE IDENTITY'
 };
 window.EINK_TEST_IDENTITY=EINK_TEST_IDENTITY;
 
@@ -189,6 +190,8 @@ let d2StalePresent=false;
 let d2StaleRecoveryPending=false;
 let productErrorReason='';
 let productD2Result=null,productD2State=null,productD2RenderResult=null,productD2RenderState=null;
+let deviceIdentity=null;
+let identityProbePending=false;
 
 function setupProductMode(){
   const main=document.querySelector('main');
@@ -213,7 +216,7 @@ function setupProductMode(){
   identityCard.dataset.einkWebBuild=EINK_TEST_IDENTITY.webBuild;
   identityCard.dataset.expectedFirmware=EINK_TEST_IDENTITY.expectedFirmware;
   identityCard.dataset.expectedBin=EINK_TEST_IDENTITY.expectedBin;
-  identityCard.innerHTML=`<div class="identityTitle">${EINK_TEST_IDENTITY.label}</div><div class="identityGrid"><div class="stat"><span>Expected firmware</span><strong>D7A final / ${EINK_TEST_IDENTITY.expectedFirmware}</strong></div><div class="stat"><span>Expected BIN</span><strong>${EINK_TEST_IDENTITY.expectedBin}</strong></div><div class="stat"><span>Web build</span><strong>${EINK_TEST_IDENTITY.webBuild}</strong></div></div><p class="identityNote">Thông tin trên là baseline dự kiến, không phải xác minh firmware trong thiết bị.</p>`;
+  identityCard.innerHTML=`<div class="identityTitle">${EINK_TEST_IDENTITY.label}</div><div class="identityGrid"><div class="stat"><span>Expected firmware</span><strong>${EINK_TEST_IDENTITY.expectedFirmware}</strong></div><div class="stat"><span>Firmware thực tế</span><strong id="actualFirmware">Chưa đọc</strong></div><div class="stat"><span>Source ID</span><strong id="actualSourceId">-</strong></div><div class="stat"><span>Health</span><strong id="actualHealth">-</strong></div><div class="stat"><span>Web build</span><strong>${EINK_TEST_IDENTITY.webBuild}</strong></div></div><div class="row" id="identityActionRow"></div><p class="identityNote">Firmware thực tế được đọc trực tiếp từ thiết bị qua D2; BIN SHA256 vẫn là thông tin của từng gói build.</p>`;
 
   const statusCard=document.createElement('section');
   statusCard.className='card';
@@ -234,6 +237,7 @@ function setupProductMode(){
 
   main.innerHTML='';
   main.append(header,identityCard,statusCard,presetCard,previewCard,advanced);
+  $('identityActionRow').append($('d2GetIdentity'));
 
   $('productConnectRow').append(refs.connect,refs.disconnect);
   refs.connect.textContent='Kết nối';
@@ -846,6 +850,7 @@ function controls(){
   $('d2SetTime').disabled=!connected||locked;
   $('d2GetStatus').disabled=!connected||locked;
   $('d2RenderClock').disabled=!connected||locked||d2StalePresent;
+  $('d2GetIdentity').disabled=!connected||locked;
   $('d2StaleRecover').disabled=!connected||locked||!d2StalePresent;
   $('refresh').disabled=!connected||!token||!e5Complete||locked;
 
@@ -942,6 +947,8 @@ function resetD2UiDisconnected(){
   productD2State=null;
   productD2RenderResult=null;
   productD2RenderState=null;
+  deviceIdentity=null;
+  identityProbePending=false;
   setD2Status('DISCONNECTED','warn');
   $('d2Result').textContent='-';
   $('d2State').textContent='-';
@@ -952,6 +959,9 @@ function resetD2UiDisconnected(){
   $('d2Uptime').textContent='-';
   $('d2RenderStatus').textContent='NOT RUN';
   $('d2RenderStatus').className='warn';
+  $('actualFirmware').textContent='Chưa đọc';
+  $('actualSourceId').textContent='-';
+  $('actualHealth').textContent='-';
   renderD2StaleRecovery();
 }
 
@@ -1033,6 +1043,10 @@ function buildD2RenderClockPacket(){
   return Uint8Array.of(0xD2,0x02);
 }
 
+function buildD2GetIdentityPacket(){
+  return Uint8Array.of(0xD2,0x03);
+}
+
 function parseD2Status(bytes){
   if(bytes.length!==15||bytes[0]!==0xD2||bytes[1]!==0x81){
     throw Error(`Unknown D2 response: ${hex(bytes)}`);
@@ -1058,6 +1072,38 @@ function parseD2RenderStatus(bytes){
     throw Error(`Unknown D2 render response: ${hex(bytes)}`);
   }
   return{result:bytes[2],state:bytes[3]};
+}
+
+function parseD2Identity(bytes){
+  if(bytes.length!==16||bytes[0]!==0xD2||bytes[1]!==0x83){
+    throw Error(`Unknown D2 identity response: ${hex(bytes)}`);
+  }
+  return{
+    result:bytes[2],
+    schema:bytes[3],
+    firmware:String.fromCharCode(bytes[4],bytes[5],bytes[6],bytes[7]),
+    sourceId:u32(bytes[8],bytes[9],bytes[10],bytes[11]),
+    health:bytes[12],
+    timeState:bytes[13],
+    renderState:bytes[14],
+    refreshState:bytes[15]
+  };
+}
+
+function renderD2Identity(identity){
+  deviceIdentity=identity;
+  const sourceId=identity.sourceId.toString(16).padStart(8,'0').toUpperCase();
+  $('actualFirmware').textContent=identity.result===0?identity.firmware:'Không hỗ trợ';
+  $('actualSourceId').textContent=sourceId;
+  const flags=[];
+  if(identity.health&0x01)flags.push('TIME');
+  if(identity.health&0x02)flags.push('STALE');
+  if(identity.health&0x04)flags.push('TIMER');
+  if(identity.health&0x08)flags.push('RENDER');
+  if(identity.health&0x10)flags.push('PRIME');
+  if(identity.health&0x20)flags.push('STORE');
+  $('actualHealth').textContent=flags.join(' · ')||'IDLE';
+  if(identity.result===0)clearProductError();
 }
 
 function renderDeviceLocalTime(epoch,timezone){
@@ -1103,8 +1149,15 @@ function handleD2Notify(bytes){
   try{
     if(bytes[1]===0x81){
       const status=parseD2Status(bytes);
-      renderD2Status(status);
-      log(`D2 status result=${d2ResultName(status.result)} state=${d2StateName(status.state)} epoch=${status.epoch} tz=${status.timezone} uptime=${status.uptime}`,'D2');
+      if(identityProbePending&&status.result===0x01){
+        $('actualFirmware').textContent='Không hỗ trợ';
+        $('actualSourceId').textContent='-';
+        $('actualHealth').textContent='Firmware cũ';
+        log('D2 identity is not supported by this firmware','D2');
+      }else{
+        renderD2Status(status);
+        log(`D2 status result=${d2ResultName(status.result)} state=${d2StateName(status.state)} epoch=${status.epoch} tz=${status.timezone} uptime=${status.uptime}`,'D2');
+      }
     }else if(bytes[1]===0x82){
       const status=parseD2RenderStatus(bytes);
       productD2RenderResult=status.result;
@@ -1118,6 +1171,10 @@ function handleD2Notify(bytes){
         markProductError(`D2 render ${d2ResultName(status.result)} / ${d2RenderStateName(status.state)}`);
       }
       log(`D2 render result=${d2ResultName(status.result)} state=${d2RenderStateName(status.state)}`,'D2');
+    }else if(bytes[1]===0x83){
+      const identity=parseD2Identity(bytes);
+      renderD2Identity(identity);
+      log(`D2 identity firmware=${identity.firmware} source=${identity.sourceId.toString(16).padStart(8,'0').toUpperCase()} health=0x${identity.health.toString(16).padStart(2,'0').toUpperCase()}`,'D2');
     }else{
       log(`Unknown D2 response: ${hex(bytes)}`,'D2');
       markProductError('Unknown D2 response');
@@ -1168,6 +1225,12 @@ async function connect(){
   setD2Status('READY','ok');
   controls();
   log(`Connected: ${device.name||'unnamed'}`,'PASS');
+  try{
+    await d2GetDeviceIdentity();
+  }catch(error){
+    $('actualFirmware').textContent='Không hỗ trợ';
+    log(`D2 identity unavailable: ${error.message}`,'D2');
+  }
 }
 
 async function openE4(){
@@ -1220,6 +1283,24 @@ async function d2GetTimeStatus(options={}){
   const status=parseD2Status(response);
   renderD2Status(status,options);
   return status;
+}
+
+async function d2GetDeviceIdentity(){
+  identityProbePending=true;
+  try{
+    const response=await request(
+      buildD2GetIdentityPacket(),
+      a=>a[0]===0xD2&&(a[1]===0x83||(a[1]===0x81&&a[2]===0x01)),
+      {timeout:2500}
+    );
+    if(response[1]===0x81)return null;
+    const identity=parseD2Identity(response);
+    renderD2Identity(identity);
+    if(identity.result!==0x00)throw Error(`D2 identity rejected: ${d2ResultName(identity.result)}`);
+    return identity;
+  }finally{
+    identityProbePending=false;
+  }
 }
 
 async function d2RecoverStaleTime(){
@@ -1578,6 +1659,7 @@ $('syncClock').onclick=()=>safe(syncClockToPanel);
 $('d2SetTime').onclick=()=>runD2Flow(d2SetCurrentTime);
 $('d2GetStatus').onclick=()=>runD2Flow(d2GetTimeStatus);
 $('d2RenderClock').onclick=()=>runD2Flow(d2RenderClockFromDevice);
+$('d2GetIdentity').onclick=()=>runD2Flow(d2GetDeviceIdentity);
 $('d2StaleRecover').onclick=()=>runD2Flow(d2RecoverStaleTime);
 $('autoSync').onchange=toggleAutoSync;
 $('clearLog').onclick=()=>{$('log').value=''};
@@ -1588,7 +1670,7 @@ resetD2UiDisconnected();
 controls();
 markLayoutHealth();
 window.addEventListener('resize',markLayoutHealth);
-log('TASK D2D ready. D2 controls sync device RAM time; D2 render asks firmware to draw and refresh from that time.');
+log('TASK D8A ready. Device identity and health are read directly from firmware through D2 03.');
 </script>
 </body>
 </html>
