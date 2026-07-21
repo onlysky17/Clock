@@ -9,6 +9,15 @@ E1A automatic foundation is merged into `main`.
 
 Firmware milestone cuoi da dong:
 
+- `TASK D7B FIX5` flagship layout persistent SPI final is CLOSED, MERGED, and PHYSICAL PASS.
+- D7B FIX5 implementation commit: `e9a32950a7093ff31d0a06720fb74d9f9c5cff82`.
+- D7B package merge commit: `a9396797d3a7300093264722feed0b2578960b21`.
+- Final packed SHA256: `048D916521B6B0A54D2192409340D1D2EB270C8A72CD98147C66ADE9928843FF`.
+- SPI Burn/Verify, cold boot, D2 sync, FIX5 first-boot redraw, five-minute scheduler, and BLE reconnect: PASS.
+- No blank panel, duplicate refresh, or second black refresh.
+
+Historical D7A lineage:
+
 - `TASK D7A` autonomous flagship daily layout is CLOSED, MERGED, and PHYSICAL PASS.
 - D7A implementation commit: `2308fce61388ef99126cc80a6c81fd9b353baed4`.
 - D7A calendar alignment FIX1 commit: `68a47e5c4ce90c874f9c3c21bdb34754e4444600`.
@@ -45,27 +54,15 @@ Web/layout milestone cuoi da dong:
 
 ## Current Finding
 
-- Product Mode needs a visible test identity/cache marker so Owner can distinguish stale cached web builds from the intended D7A test page.
-- The page must not claim the firmware currently in the chip is automatically verified, because there is no firmware version command yet.
+- D7B FIX5 is the current known-good persistent SPI baseline.
+- Package path: `D:\EINK\Clock\_incoming\D7B_FIX5_SPI_FINAL_2026-07-21`.
 
 ## Next Canonical Action
 
-`TASK D7A-WEB1` is the only next canonical action.
+No new implementation task is authorized yet.
 
-TASK D7A-WEB1 - add visible test identity and cache marker.
-
-Goal:
-
-- Keep the canonical URL as `https://onlysky17.github.io/Clock/test.html`.
-- Show the web build/test identity visibly in Product Mode.
-- Show Expected Firmware: `D7A`.
-- Show firmware commit marker: `32fa562d`.
-- Show shortened BIN hash marker: `14CF053B`.
-- Help Owner distinguish stale cached web builds.
-- Do not change BLE protocol.
-- Do not claim firmware in chip has been automatically verified.
-
-D7B must not start until D7A-WEB1 is fixed and closed out.
+- Preserve D7B FIX5 without firmware, web, protocol, or layout changes.
+- Wait for Owner to name the next milestone.
 
 ## Guardrails For The Next Task
 
