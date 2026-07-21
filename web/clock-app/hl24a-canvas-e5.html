@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TASK D2D - Device Clock Renderer</title>
+<title>TASK D7A-WEB1 - Visible Test Identity</title>
 <style>
 :root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;--bg:#07101b;--card:#111c2c;--line:#2a3d59;--text:#f4f8ff;--muted:#9fb1c8;--ok:#45d99c;--warn:#ffd166;--bad:#ff6b86}
 *{box-sizing:border-box}body{margin:0;background:linear-gradient(#050a12,#101a2a);color:var(--text)}main{max-width:1040px;margin:auto;padding:20px}
@@ -12,6 +12,7 @@
 .productHeader{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:14px}
 .productHeader h1{margin:.2rem 0 .35rem;font-size:clamp(1.55rem,4vw,2.25rem);line-height:1.1}
 .productHeader p{max-width:680px;margin:.25rem 0 0}.productStatus{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:9px;margin-top:12px}
+.identityCard{display:grid;grid-template-columns:minmax(0,1fr);gap:9px;padding:12px;border-color:#315b80;background:#0b1726}.identityTitle{font-weight:900;letter-spacing:.02em}.identityGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}.identityNote{margin:0;color:#b8c7db;font-size:.86rem}
 .heroAction{font-size:1rem;min-width:160px}.presetRow button{min-width:160px}
 .advanced{margin:18px 0;border:1px solid var(--line);border-radius:12px;background:rgba(11,20,33,.96);overflow:hidden}
 .advanced>summary{cursor:pointer;list-style:none;padding:15px 16px;font-weight:850;color:#dbeafe}.advanced>summary::-webkit-details-marker{display:none}
@@ -165,6 +166,13 @@ const WRITE='2d86686a-53dc-25b3-0c4a-f0e10c8dee20';
 const NOTIFY='15005991-b131-3396-014c-664c9867b917';
 const D2_STALE_PRESENT_FLAG=0x80;
 const D2_STALE_WARNING='Thiết bị đang giữ giờ cũ. Hãy đồng bộ giờ hiện tại để tiếp tục chạy đồng hồ.';
+const EINK_TEST_IDENTITY={
+  webBuild:'D7A-WEB1-20260720',
+  expectedFirmware:'32fa562d',
+  expectedBin:'14CF053B',
+  label:'D7A TEST BASELINE'
+};
+window.EINK_TEST_IDENTITY=EINK_TEST_IDENTITY;
 
 const $=id=>document.getElementById(id);
 const canvas=$('canvas');
@@ -200,6 +208,13 @@ function setupProductMode(){
   header.className='productHeader';
   header.innerHTML='<div><div class="badge">EINK Clock</div><h1>Đồng hồ lịch hằng ngày</h1><p>Chọn mặt đồng hồ, xem preview và gửi lên màn e-ink. Các thông số kỹ thuật vẫn có sẵn trong mục nâng cao.</p></div><div class="row" id="productConnectRow"></div>';
 
+  const identityCard=document.createElement('section');
+  identityCard.className='card identityCard';
+  identityCard.dataset.einkWebBuild=EINK_TEST_IDENTITY.webBuild;
+  identityCard.dataset.expectedFirmware=EINK_TEST_IDENTITY.expectedFirmware;
+  identityCard.dataset.expectedBin=EINK_TEST_IDENTITY.expectedBin;
+  identityCard.innerHTML=`<div class="identityTitle">${EINK_TEST_IDENTITY.label}</div><div class="identityGrid"><div class="stat"><span>Expected firmware</span><strong>D7A final / ${EINK_TEST_IDENTITY.expectedFirmware}</strong></div><div class="stat"><span>Expected BIN</span><strong>${EINK_TEST_IDENTITY.expectedBin}</strong></div><div class="stat"><span>Web build</span><strong>${EINK_TEST_IDENTITY.webBuild}</strong></div></div><p class="identityNote">Thông tin trên là baseline dự kiến, không phải xác minh firmware trong thiết bị.</p>`;
+
   const statusCard=document.createElement('section');
   statusCard.className='card';
   statusCard.innerHTML='<h2>Trạng thái</h2><div class="productStatus"><div class="stat"><span>Thiết bị</span><strong id="productState" class="warn">Chưa kết nối</strong></div><div class="stat"><span>Tiến trình</span><span id="productSyncSlot"></span></div></div><div class="row" id="productActionRow"></div>';
@@ -218,7 +233,7 @@ function setupProductMode(){
   advanced.innerHTML='<summary>Kỹ thuật / Nâng cao</summary><div class="advancedBody"></div>';
 
   main.innerHTML='';
-  main.append(header,statusCard,presetCard,previewCard,advanced);
+  main.append(header,identityCard,statusCard,presetCard,previewCard,advanced);
 
   $('productConnectRow').append(refs.connect,refs.disconnect);
   refs.connect.textContent='Kết nối';
@@ -235,6 +250,12 @@ function setupProductMode(){
   for(const section of originalSections){
     advanced.querySelector('.advancedBody').append(section);
   }
+}
+
+function markLayoutHealth(){
+  requestAnimationFrame(()=>{
+    document.documentElement.dataset.einkNoOverflow=String(document.documentElement.scrollWidth<=window.innerWidth);
+  });
 }
 
 const hex=a=>[...a].map(v=>v.toString(16).padStart(2,'0').toUpperCase()).join(' ');
@@ -1565,6 +1586,8 @@ clearWhite();
 drawDailyCalendar();
 resetD2UiDisconnected();
 controls();
+markLayoutHealth();
+window.addEventListener('resize',markLayoutHealth);
 log('TASK D2D ready. D2 controls sync device RAM time; D2 render asks firmware to draw and refresh from that time.');
 </script>
 </body>
