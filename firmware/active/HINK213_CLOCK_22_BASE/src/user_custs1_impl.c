@@ -156,6 +156,11 @@ static int16_t hink_d2_timezone_minutes    __SECTION_ZERO("retention_mem_area0")
 static uint8_t hink_d2_flags               __SECTION_ZERO("retention_mem_area0");
 static uint8_t hink_d2_render_state        __SECTION_ZERO("retention_mem_area0");
 static timer_hnd epd_wait_hnd;
+static uint8_t hink_epd_busy_seen;
+static uint8_t hink_epd_busy_start_polls;
+static uint8_t hink_epd_first_refresh_pending = 1U;
+#define HINK_EPD_BUSY_START_POLL_LIMIT 50U
+#define HINK_EPD_PRIME_RECOVERY_TICKS 2000UL
 
 #define HINK_D3D_STORE_SECTOR 0x3B000UL
 #define HINK_D3D_STORE_SLOT_A 0x3B000UL
@@ -207,6 +212,8 @@ static uint8_t hink_d2_timer_flags             __SECTION_ZERO("retention_mem_are
 
 static void hink_e6_timer_cb(void);
 static void hink_d2_render_timer_cb(void);
+static void hink_d2_prime_retry_cb(void);
+static uint8_t hink_d2_start_epd_refresh(void);
 static void hink_d2_render_notify(uint8_t result, uint8_t state);
 static uint8_t hink_d2_render_handle(struct custs1_val_write_ind const *param);
 static uint32_t hink_auto_local_minute_key(void);
@@ -1345,8 +1352,9 @@ static void epd_wait_timer(void)
     timer_hnd hnd;
 
     if(epd_busy()){
+        hink_epd_busy_seen = 1U;
         // å±å¹•ä»åœ¨å¿™ï¼Œ40msåŽå†æ¬¡æ£€æŸ¥
-        hnd = app_easy_timer(40, epd_wait_timer);
+        hnd = app_easy_timer(10, epd_wait_timer);
         if (hnd != EASY_TIMER_INVALID_TIMER) {
             epd_wait_hnd = hnd;
             return;
@@ -1366,6 +1374,24 @@ static void epd_wait_timer(void)
         epd_power(0);
         epd_hw_close();
         arch_set_sleep_mode(ARCH_EXT_SLEEP_ON);
+    }else if ((hink_d2_render_state == HINK_D2_RENDER_RENDERING) &&
+              !hink_epd_busy_seen) {
+        if (hink_epd_busy_start_polls++ < HINK_EPD_BUSY_START_POLL_LIMIT) {
+            hnd = app_easy_timer(10, epd_wait_timer);
+            if (hnd != EASY_TIMER_INVALID_TIMER) {
+                epd_wait_hnd = hnd;
+                return;
+            }
+        }
+
+        epd_wait_hnd = EASY_TIMER_INVALID_TIMER;
+        hink_d2_render_state = HINK_D2_RENDER_ERROR;
+        hink_auto_flags &= (uint8_t)~HINK_AUTO_FLAG_PENDING;
+        hink_auto_rendering_minute = HINK_AUTO_SENTINEL;
+        hink_d2_render_notify(HINK_D2_RESULT_INTERNAL, HINK_D2_RENDER_ERROR);
+        epd_power(0);
+        epd_hw_close();
+        arch_set_sleep_mode(ARCH_EXT_SLEEP_ON);
     }else{
         // å±å¹•æ›´æ–°å®Œæˆ
         epd_wait_hnd = EASY_TIMER_INVALID_TIMER;
@@ -1377,10 +1403,28 @@ static void epd_wait_timer(void)
         epd_hw_close();
         // è®¾ç½®ç³»ç»Ÿè¿›å…¥æ‰©å±•ç¡çœ æ¨¡å¼
         arch_set_sleep_mode(ARCH_EXT_SLEEP_ON);
+        hink_epd_busy_seen = 0U;
+        hink_epd_busy_start_polls = 0U;
         if (hink_e6_state == HINK_E6_STATE_REFRESHING) {
             hink_e6_state = HINK_E6_STATE_COMPLETE;
         }
         if (hink_d2_render_state == HINK_D2_RENDER_RENDERING) {
+            if (hink_epd_first_refresh_pending) {
+                hnd = app_easy_timer(HINK_EPD_PRIME_RECOVERY_TICKS,
+                                     hink_d2_prime_retry_cb);
+                if (hnd != EASY_TIMER_INVALID_TIMER) {
+                    hink_epd_first_refresh_pending = 0U;
+                    epd_wait_hnd = hnd;
+                    return;
+                }
+
+                hink_d2_render_state = HINK_D2_RENDER_ERROR;
+                hink_auto_flags &= (uint8_t)~HINK_AUTO_FLAG_PENDING;
+                hink_auto_rendering_minute = HINK_AUTO_SENTINEL;
+                hink_d2_render_notify(HINK_D2_RESULT_INTERNAL,
+                                      HINK_D2_RENDER_ERROR);
+                return;
+            }
             auto_minute = hink_auto_rendering_minute;
             if (auto_minute == HINK_AUTO_SENTINEL) {
                 auto_minute = hink_auto_local_minute_key();
@@ -1908,7 +1952,30 @@ static void hink_d2_render_notify(uint8_t result, uint8_t state)
     hink_e4_notify_bytes(msg, HINK_D2_RENDER_STATUS_LEN);
 }
 
-static void hink_d2_render_timer_cb(void)
+static uint8_t hink_d2_start_epd_refresh(void)
+{
+    epd_hw_open();
+    epd_update_mode(UPDATE_FULL);
+    epd_init();
+    epd_screen_update();
+    epd_update();
+    arch_set_sleep_mode(ARCH_SLEEP_OFF);
+    hink_epd_busy_seen = 0U;
+    hink_epd_busy_start_polls = 0U;
+    epd_wait_hnd = app_easy_timer(10, epd_wait_timer);
+
+    if (epd_wait_hnd != EASY_TIMER_INVALID_TIMER)
+    {
+        return 1U;
+    }
+
+    epd_power(0);
+    epd_hw_close();
+    arch_set_sleep_mode(ARCH_EXT_SLEEP_ON);
+    return 0U;
+}
+
+static void hink_d2_draw_current_framebuffer(void)
 {
     uint32_t epoch;
     uint32_t local_day;
@@ -1922,11 +1989,6 @@ static void hink_d2_render_timer_cb(void)
     uint8_t lunar_valid;
     uint8_t h = 0U;
     uint8_t m = 0U;
-
-    if (hink_d2_render_state != HINK_D2_RENDER_ACCEPTED)
-    {
-        return;
-    }
 
     epoch = hink_d2_current_epoch();
     if (hink_d2_timezone_minutes >= 0)
@@ -1958,30 +2020,47 @@ static void hink_d2_render_timer_cb(void)
     date = (int)sd - 1;
     wday = sw;
 
-    hink_d2_render_state = HINK_D2_RENDER_RENDERING;
-    hink_d2_render_notify(HINK_D2_RESULT_OK, HINK_D2_RENDER_RENDERING);
-
     memset(fb_bw, 0xff, scr_h * line_bytes);
     lunar_valid = hink_d3c_lunar_from_solar(sy, sm, sd, &lm, &ld);
     hink_bitmap_draw_clock(h, m, sy, sm, sd, sw, lunar_valid, lm, ld);
+}
 
-    epd_hw_open();
-    epd_update_mode(UPDATE_FULL);
-    epd_init();
-    epd_screen_update();
-    epd_update();
-    arch_set_sleep_mode(ARCH_SLEEP_OFF);
-    epd_wait_hnd = app_easy_timer(40, epd_wait_timer);
+static void hink_d2_prime_retry_cb(void)
+{
+    epd_wait_hnd = EASY_TIMER_INVALID_TIMER;
+    if (hink_d2_render_state == HINK_D2_RENDER_RENDERING)
+    {
+        hink_d2_draw_current_framebuffer();
+        if (hink_d2_start_epd_refresh())
+        {
+            return;
+        }
+    }
 
-    if (epd_wait_hnd == EASY_TIMER_INVALID_TIMER)
+    hink_epd_first_refresh_pending = 1U;
+    hink_d2_render_state = HINK_D2_RENDER_ERROR;
+    hink_auto_flags &= (uint8_t)~HINK_AUTO_FLAG_PENDING;
+    hink_auto_rendering_minute = HINK_AUTO_SENTINEL;
+    hink_d2_render_notify(HINK_D2_RESULT_INTERNAL, HINK_D2_RENDER_ERROR);
+}
+
+static void hink_d2_render_timer_cb(void)
+{
+    if (hink_d2_render_state != HINK_D2_RENDER_ACCEPTED)
+    {
+        return;
+    }
+
+    hink_d2_render_state = HINK_D2_RENDER_RENDERING;
+    hink_d2_render_notify(HINK_D2_RESULT_OK, HINK_D2_RENDER_RENDERING);
+
+    hink_d2_draw_current_framebuffer();
+
+    if (!hink_d2_start_epd_refresh())
     {
         hink_d2_render_state = HINK_D2_RENDER_ERROR;
         hink_auto_rendering_minute = HINK_AUTO_SENTINEL;
         hink_d2_render_notify(HINK_D2_RESULT_INTERNAL, HINK_D2_RENDER_ERROR);
-        epd_cmd1(0x10, 0x01);
-        epd_power(0);
-        epd_hw_close();
-        arch_set_sleep_mode(ARCH_EXT_SLEEP_ON);
     }
 }
 

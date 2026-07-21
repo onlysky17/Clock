@@ -25,6 +25,9 @@ assert.ok(!/draw_text\(110, 25, "T2 T3 T4 T5 T6 T7 CN", BLACK\)/.test(source), '
 must('D7A first-day offset', /offset = \(uint8_t\)\(\(first_wday \+ 6U\) % 7U\)/);
 must('D7A month length from leap-aware helper', /mdays = hink_d3c_solar_mdays\(sy, sm\)/);
 must('D7A framebuffer clear stays 4000 source path', /memset\(fb_bw, 0xff, scr_h \* line_bytes\)/);
+must('EPD refresh handshake has bounded BUSY-start wait', /#define HINK_EPD_BUSY_START_POLL_LIMIT 50U/);
+must('cold-boot EPD prime flag starts enabled', /static uint8_t hink_epd_first_refresh_pending = 1U;/);
+must('physical recovery interval matches observed second-sync pass', /#define HINK_EPD_PRIME_RECOVERY_TICKS 2000UL/);
 must('D2 lifecycle still present', /hink_d2_time_handle/);
 must('D3E scheduler still present', /HINK_AUTO_TRY_SCHEDULE/);
 must('D2 SET_TIME arms start callback', /hnd = app_easy_timer\(1, hink_d2_minute_start_cb\);/);
@@ -40,7 +43,18 @@ assert.ok(!/#include\s+"font50/.test(source), 'legacy font50 include must stay g
 assert.ok(!/#include\s+"font66/.test(source), 'legacy font66 include must stay gone');
 assert.ok(!/sprintf\(/.test(source.match(/static void hink_bitmap_draw_clock[\s\S]*?^}/m)?.[0] ?? ''), 'render path must not use sprintf');
 assert.equal(16 * 250, 4000, 'framebuffer must remain 4000 bytes');
-assert.ok(/memset\(fb_bw, 0xff, scr_h \* line_bytes\);[\s\S]*hink_bitmap_draw_clock\(h, m, sy, sm, sd, sw, lunar_valid, lm, ld\);[\s\S]*epd_screen_update\(\);[\s\S]*epd_update\(\);[\s\S]*epd_wait_hnd = app_easy_timer\(40, epd_wait_timer\);/.test(source), 'render callback must draw framebuffer and start EPD before COMPLETE');
+must('shared framebuffer renderer draws the D7A layout', /static void hink_d2_draw_current_framebuffer\(void\)[\s\S]*memset\(fb_bw, 0xff, scr_h \* line_bytes\);[\s\S]*hink_bitmap_draw_clock\(h, m, sy, sm, sd, sw, lunar_valid, lm, ld\);/);
+must('normal render draws before starting EPD', /static void hink_d2_render_timer_cb\(void\)[\s\S]*hink_d2_draw_current_framebuffer\(\);[\s\S]*hink_d2_start_epd_refresh\(\)/);
+must('shared EPD start initializes BUSY handshake', /static uint8_t hink_d2_start_epd_refresh\(void\)[\s\S]*epd_screen_update\(\);[\s\S]*epd_update\(\);[\s\S]*hink_epd_busy_seen = 0U;[\s\S]*app_easy_timer\(10, epd_wait_timer\);/);
+must('EPD wait observes BUSY asserted', /if\(epd_busy\(\)\)[\s\S]*hink_epd_busy_seen = 1U/);
+must('EPD wait does not complete before BUSY starts', /!hink_epd_busy_seen[\s\S]*HINK_EPD_BUSY_START_POLL_LIMIT[\s\S]*app_easy_timer\(10, epd_wait_timer\)/);
+must('missing BUSY assertion fails instead of completing', /hink_epd_busy_start_polls\+\+[\s\S]*HINK_D2_RENDER_ERROR/);
+must('first completed waveform schedules one recovery retry', /if \(hink_epd_first_refresh_pending\)[\s\S]*app_easy_timer\(HINK_EPD_PRIME_RECOVERY_TICKS,[\s\S]*hink_d2_prime_retry_cb\)[\s\S]*hink_epd_first_refresh_pending = 0U;/);
+must('prime retry rebuilds before reusing the EPD engine', /static void hink_d2_prime_retry_cb\(void\)[\s\S]*hink_d2_draw_current_framebuffer\(\);[\s\S]*hink_d2_start_epd_refresh\(\)/);
+const primeRetryStart = source.lastIndexOf('static void hink_d2_prime_retry_cb(void)');
+const primeRetryEnd = source.indexOf('\nstatic void hink_d2_render_timer_cb', primeRetryStart);
+const primeRetryBlock = source.slice(primeRetryStart, primeRetryEnd);
+assert.ok(!/memset\(fb_bw|hink_bitmap_draw_clock/.test(primeRetryBlock), 'prime retry must rebuild through the shared renderer only');
 assert.ok(/hink_d2_render_notify\(HINK_D2_RESULT_OK, HINK_D2_RENDER_COMPLETE\);[\s\S]*HINK_AUTO_TRY_SCHEDULE\(\);/.test(source), 'COMPLETE must be emitted from EPD wait completion path');
 
 function isLeap(year) {
@@ -153,7 +167,8 @@ const changed = execFileSync('git', ['status', '--short', '--untracked-files=all
 const allowed = new Set([
   SRC,
   'scripts/task-d7a-autonomous-flagship-layout-smoke.mjs',
-  'docs/firmware/TASK_D7A_AUTONOMOUS_FLAGSHIP_LAYOUT.md'
+  'docs/firmware/TASK_D7A_AUTONOMOUS_FLAGSHIP_LAYOUT.md',
+  'docs/firmware/TASK_D7B_FIX5_FIRST_REFRESH_PRIME.md'
 ]);
 for (const file of changed) {
   assert.ok(allowed.has(file), `unexpected dirty file: ${file}`);
