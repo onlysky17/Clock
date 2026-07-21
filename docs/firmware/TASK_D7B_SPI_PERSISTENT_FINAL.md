@@ -11,25 +11,28 @@ No firmware logic, web UI, BLE protocol, scheduler, layout, packer, or SDK sourc
 
 ## Status
 
-`READY FOR OWNER SPI PHYSICAL GATE - NOT YET BURNED`
+`CLOSED / MERGED / SPI PHYSICAL PASS`
 
-This task is not a physical PASS until Owner completes:
+Owner completed all physical gates on `2026-07-21`:
 
-- SmartSnippets SPI Burn.
-- SmartSnippets Verify.
-- Full power-cycle/cold boot.
-- Canonical web D7A badge check.
-- D2 time sync.
-- FIX5 first-boot prime cycle, 20-second recovery, redraw cycle, and visible D7A layout.
-- BLE-disconnected five-minute scheduler refresh.
-- No blank panel, duplicate refresh, or second black refresh.
+- SmartSnippets SPI Burn: PASS.
+- SmartSnippets Verify: PASS.
+- Full power-cycle/cold boot from SPI: PASS.
+- Canonical web and BLE connection: PASS.
+- D2 time sync: PASS.
+- FIX5 first-boot prime cycle, 20-second recovery, redraw cycle, and visible D7A layout: PASS.
+- BLE-disconnected five-minute scheduler refresh: PASS.
+- BLE reconnect: PASS.
+- No blank panel, duplicate refresh, or second black refresh: PASS.
 
-Do not merge this task before Owner SPI Burn/Verify + cold-boot PASS.
+D7B FIX5 persistent SPI final is now the known-good firmware baseline.
 
 ## Lineage
 
 - Main HEAD used for this final package: `b861a8d3283ede751ffeae1de63cedcd561c653b`.
 - D7B FIX5 implementation: `e9a32950a7093ff31d0a06720fb74d9f9c5cff82`.
+- D7B package commit: `55b749f5efd201288ad5b36deb49087c3b7789ab`.
+- D7B package merge commit: `a9396797d3a7300093264722feed0b2578960b21`.
 - Firmware marker commit: `e9a32950`.
 - D7A implementation: `2308fce61388ef99126cc80a6c81fd9b353baed4`.
 - D7A calendar alignment FIX1: `68a47e5c4ce90c874f9c3c21bdb34754e4444600`.
@@ -176,7 +179,8 @@ Manifest records:
 - Packed size/SHA256.
 - Pack command.
 - Package creation timestamp.
-- Status: `READY FOR OWNER SPI PHYSICAL GATE - NOT YET BURNED`.
+- Package-time status: `READY FOR OWNER SPI PHYSICAL GATE - NOT YET BURNED`.
+- Final repository status after Owner gate: `CLOSED / MERGED / SPI PHYSICAL PASS`.
 
 ## Automated Verify
 
@@ -247,4 +251,4 @@ Smoke checks:
 - Tracked D7B scope is limited to:
   - `docs/firmware/TASK_D7B_SPI_PERSISTENT_FINAL.md`
   - `scripts/task-d7b-spi-final-smoke.ps1`
-- Do not merge before Owner SPI Burn/Verify + cold-boot PASS.
+- Do not commit the local package or any firmware artifact.
