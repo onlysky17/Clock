@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TASK D10B - Battery Telemetry</title>
+<title>TASK D11B - Clock Face Profiles</title>
 <style>
 :root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;--bg:#07101b;--card:#111c2c;--line:#2a3d59;--text:#f4f8ff;--muted:#9fb1c8;--ok:#45d99c;--warn:#ffd166;--bad:#ff6b86}
 *{box-sizing:border-box}body{margin:0;background:linear-gradient(#050a12,#101a2a);color:var(--text)}main{max-width:1040px;margin:auto;padding:20px}
@@ -14,7 +14,7 @@
 .productHeader p{max-width:680px;margin:.25rem 0 0}.productStatus{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:9px;margin-top:12px}
 .identityCard{display:grid;grid-template-columns:minmax(0,1fr);gap:9px;padding:12px;border-color:#315b80;background:#0b1726}.identityTitle{font-weight:900;letter-spacing:.02em}.identityGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}.identityNote{margin:0;color:#b8c7db;font-size:.86rem}.compatibilityState{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 12px;align-items:center;padding:11px;border:1px solid #36516f;border-radius:10px;background:#101e30}.compatibilityState span{color:var(--muted);font-size:.82rem}.compatibilityState strong{font-size:1.05rem}.compatibilityState small{grid-column:1/-1}
 .batteryValue{color:#8be8bd}
-.heroAction{font-size:1rem;min-width:160px}.presetRow button{min-width:160px}
+.heroAction{font-size:1rem;min-width:160px}.presetRow button{min-width:160px}.presetRow button.selected{border-color:#45d99c;background:#123d34}.profileStatus{margin-top:10px;color:var(--muted)}
 .advanced{margin:18px 0;border:1px solid var(--line);border-radius:12px;background:rgba(11,20,33,.96);overflow:hidden}
 .advanced>summary{cursor:pointer;list-style:none;padding:15px 16px;font-weight:850;color:#dbeafe}.advanced>summary::-webkit-details-marker{display:none}
 .advanced>summary:focus-visible{outline:2px solid #93c5fd;outline-offset:3px}.advancedBody{padding:0 16px 16px}.advancedBody .card{border-radius:10px;background:#0e1928}
@@ -172,12 +172,12 @@ const BATTERY_CHARACTERISTIC=0xFF02;
 const D2_STALE_PRESENT_FLAG=0x80;
 const D2_STALE_WARNING='Thiết bị đang giữ giờ cũ. Hãy đồng bộ giờ hiện tại để tiếp tục chạy đồng hồ.';
 const EINK_TEST_IDENTITY={
-  webBuild:'D10B-BATTERY-20260722',
+  webBuild:'D11B-PROFILES-20260722',
   expectedFirmware:'D8A00001',
   expectedRuntime:'D8A1',
   expectedSourceId:'D8A00001',
   expectedBin:'BUILD-SPECIFIC',
-  label:'D10B DEVICE HEALTH + BATTERY'
+  label:'D11B CLOCK FACE PROFILES'
 };
 window.EINK_TEST_IDENTITY=EINK_TEST_IDENTITY;
 
@@ -201,6 +201,7 @@ let identityProbePending=false;
 let identityCompatibility='disconnected';
 let identityRefreshPending=false;
 let batteryService=null,batteryChar=null,batteryRunning=false;
+let selectedClockProfile=0,activeClockProfile=0,persistedClockProfile=0xFF;
 
 function setupProductMode(){
   const main=document.querySelector('main');
@@ -238,6 +239,19 @@ function setupProductMode(){
   presetCard.className='card';
   presetCard.innerHTML='<h2>Chọn mặt đồng hồ</h2><div class="row presetRow" id="productPresetRow"></div>';
 
+  const profileApply=document.createElement('button');
+  profileApply.id='profileApply';
+  profileApply.type='button';
+  profileApply.className='good';
+  profileApply.textContent='\u00c1p d\u1ee5ng l\u00ean m\u00e0n';
+  const profileStatus=document.createElement('div');
+  profileStatus.id='profileStatus';
+  profileStatus.className='profileStatus';
+  profileStatus.setAttribute('role','status');
+  profileStatus.setAttribute('aria-live','polite');
+  profileStatus.textContent='Ch\u01b0a \u0111\u1ecdc profile t\u1eeb thi\u1ebft b\u1ecb.';
+  presetCard.append(profileStatus);
+
   const previewCard=document.createElement('section');
   previewCard.className='card';
   previewCard.innerHTML='<h2>Preview</h2><p><small>Preview dùng đúng khung 250×122 của màn.</small></p>';
@@ -248,7 +262,7 @@ function setupProductMode(){
   advanced.innerHTML='<summary>Kỹ thuật / Nâng cao</summary><div class="advancedBody"></div>';
 
   main.innerHTML='';
-  main.append(header,identityCard,statusCard,presetCard,previewCard,advanced);
+  main.append(header,statusCard,presetCard,identityCard,previewCard,advanced);
   $('identityActionRow').append(refs.d2GetIdentity);
 
   $('productConnectRow').append(refs.connect,refs.disconnect);
@@ -257,9 +271,10 @@ function setupProductMode(){
   $('productActionRow').append(refs.d2SetTime,refs.syncClock);
   refs.d2SetTime.textContent='Đồng bộ giờ';
   refs.syncClock.textContent='Gửi lên màn';
-  $('productPresetRow').append(refs.dailyCalendar,refs.updateClock);
+  $('productPresetRow').append(refs.dailyCalendar,refs.updateClock,profileApply);
   refs.dailyCalendar.textContent='Mặt lịch hằng ngày';
   refs.updateClock.textContent='Giờ đơn giản';
+  refs.updateClock.textContent='Gi\u1edd l\u1edbn';
   $('productSyncSlot').append(refs.syncStatus);
   statusCard.insertBefore(refs.d2StaleBox,$('productActionRow'));
   previewCard.insertBefore(refs.canvasWrap,previewCard.querySelector('p'));
@@ -288,7 +303,8 @@ const d2ResultName=value=>({
   0x03:'INVALID_TIME_RANGE',
   0x04:'NOT_INITIALIZED',
   0x05:'INTERNAL_ERROR',
-  0x06:'BUSY'
+  0x06:'BUSY',
+  0x07:'INVALID_PROFILE'
 }[value]||`UNKNOWN_${value}`);
 const d2StateName=value=>({
   0x00:'UNSET',
@@ -303,6 +319,24 @@ const d2RenderStateName=value=>({
   0x03:'COMPLETE',
   0x04:'ERROR'
 }[value]||`UNKNOWN_${value}`);
+const clockProfileName=value=>({0:'Lịch tháng',1:'Giờ lớn'}[value]||`Profile ${value}`);
+
+function renderClockProfileSelection(){
+  $('dailyCalendar').classList.toggle('selected',selectedClockProfile===0);
+  $('updateClock').classList.toggle('selected',selectedClockProfile===1);
+  $('dailyCalendar').setAttribute('aria-pressed',String(selectedClockProfile===0));
+  $('updateClock').setAttribute('aria-pressed',String(selectedClockProfile===1));
+  const stored=persistedClockProfile===0xFF?'mặc định':clockProfileName(persistedClockProfile);
+  $('profileStatus').textContent=`Đang chạy: ${clockProfileName(activeClockProfile)} · Lưu: ${stored}`;
+  document.documentElement.dataset.einkClockProfile=String(activeClockProfile);
+}
+
+function selectClockProfile(profile){
+  selectedClockProfile=profile;
+  if(profile===0)drawDailyCalendar();else drawCurrentClock();
+  renderClockProfileSelection();
+  controls();
+}
 
 function log(message,tag=''){
   $('log').value+=`${new Date().toLocaleTimeString('vi-VN',{hour12:false})} ${tag?`[${tag}] `:''}${message}\n`;
@@ -898,6 +932,7 @@ function controls(){
   $('d2GetIdentity').disabled=!connected||locked;
   $('batteryRefresh').disabled=!connected||locked;
   $('d2StaleRecover').disabled=!connected||locked||!d2StalePresent||identityBlocked;
+  $('profileApply').disabled=!connected||locked||identityBlocked||productD2State===null||productD2State===0;
   $('refresh').disabled=!connected||!token||!e5Complete||locked;
 
   $('clearWhite').disabled=locked;
@@ -1001,6 +1036,9 @@ function resetD2UiDisconnected(){
   batteryService=null;
   batteryChar=null;
   batteryRunning=false;
+  selectedClockProfile=0;
+  activeClockProfile=0;
+  persistedClockProfile=0xFF;
   setD2Status('DISCONNECTED','warn');
   $('d2Result').textContent='-';
   $('d2State').textContent='-';
@@ -1018,6 +1056,7 @@ function resetD2UiDisconnected(){
   $('batteryVoltage').textContent='Chưa đọc';
   $('batteryLevel').textContent='Ước tính -';
   $('batteryUpdatedAt').textContent='Chưa đọc';
+  renderClockProfileSelection();
   renderDeviceCompatibility(null,false);
   renderD2StaleRecovery();
 }
@@ -1102,6 +1141,14 @@ function buildD2RenderClockPacket(){
 
 function buildD2GetIdentityPacket(){
   return Uint8Array.of(0xD2,0x03);
+}
+
+function buildD2SetProfilePacket(profile){
+  return Uint8Array.of(0xD2,0x04,profile);
+}
+
+function buildD2GetProfilePacket(){
+  return Uint8Array.of(0xD2,0x05);
 }
 
 function estimateBatteryPercent(millivolts){
@@ -1193,6 +1240,27 @@ function parseD2Identity(bytes){
   };
 }
 
+function parseD2ProfileStatus(bytes){
+  if(bytes.length!==6||bytes[0]!==0xD2||bytes[1]!==0x84){
+    throw Error(`Unknown D2 profile response: ${hex(bytes)}`);
+  }
+  return{result:bytes[2],active:bytes[3],persisted:bytes[4],flags:bytes[5]};
+}
+
+function renderD2ProfileStatus(status){
+  if(status.result===0x00){
+    activeClockProfile=status.active;
+    persistedClockProfile=status.persisted;
+    selectedClockProfile=status.active;
+    clearProductError();
+  }else{
+    selectedClockProfile=activeClockProfile;
+    markProductError(`D2 profile ${d2ResultName(status.result)}`);
+  }
+  renderClockProfileSelection();
+  log(`D2 profile result=${d2ResultName(status.result)} active=${status.active} persisted=${status.persisted} flags=0x${status.flags.toString(16).padStart(2,'0').toUpperCase()}`,'D2');
+}
+
 function renderD2Identity(identity){
   deviceIdentity=identity;
   const sourceId=identity.sourceId.toString(16).padStart(8,'0').toUpperCase();
@@ -1282,6 +1350,8 @@ function handleD2Notify(bytes){
       const identity=parseD2Identity(bytes);
       renderD2Identity(identity);
       log(`D2 identity firmware=${identity.firmware} source=${identity.sourceId.toString(16).padStart(8,'0').toUpperCase()} health=0x${identity.health.toString(16).padStart(2,'0').toUpperCase()}`,'D2');
+    }else if(bytes[1]===0x84){
+      renderD2ProfileStatus(parseD2ProfileStatus(bytes));
     }else{
       log(`Unknown D2 response: ${hex(bytes)}`,'D2');
       markProductError('Unknown D2 response');
@@ -1341,6 +1411,12 @@ async function connect(){
     log(`D2 identity unavailable: ${error.message}`,'D2');
   }
   await refreshBatteryTelemetry();
+  try{
+    await d2GetTimeStatus();
+    await d2GetClockProfile();
+  }catch(error){
+    log(`Clock profile unavailable: ${error.message}`,'D2');
+  }
 }
 
 async function openE4(){
@@ -1412,6 +1488,29 @@ async function d2GetDeviceIdentity(){
   }finally{
     identityProbePending=false;
   }
+}
+
+async function d2GetClockProfile(){
+  const status=parseD2ProfileStatus(await request(
+    buildD2GetProfilePacket(),
+    a=>a[0]===0xD2&&a[1]===0x84,
+    {timeout:2500}
+  ));
+  renderD2ProfileStatus(status);
+  if(status.result!==0x00)throw Error(`D2 profile rejected: ${d2ResultName(status.result)}`);
+  return status;
+}
+
+async function d2ApplyClockProfile(){
+  const status=parseD2ProfileStatus(await request(
+    buildD2SetProfilePacket(selectedClockProfile),
+    a=>a[0]===0xD2&&a[1]===0x84,
+    {timeout:5000}
+  ));
+  renderD2ProfileStatus(status);
+  if(status.result!==0x00)throw Error(`D2 profile rejected: ${d2ResultName(status.result)}`);
+  await d2RenderClockFromDevice();
+  $('profileStatus').textContent=`Đã áp dụng: ${clockProfileName(activeClockProfile)}`;
 }
 
 function scheduleIdentityHealthRefresh(reason){
@@ -1779,8 +1878,8 @@ setupProductMode();
 $('clearWhite').onclick=clearWhite;
 $('fillBlack').onclick=fillBlack;
 $('invert').onclick=invertCanvas;
-$('updateClock').onclick=drawCurrentClock;
-$('dailyCalendar').onclick=()=>drawDailyCalendar();
+$('updateClock').onclick=()=>selectClockProfile(1);
+$('dailyCalendar').onclick=()=>selectClockProfile(0);
 $('sample').onclick=drawSample;
 $('addText').onclick=addSimpleText;
 $('repack').onclick=repack;
@@ -1794,6 +1893,7 @@ $('d2GetStatus').onclick=()=>runD2Flow(d2GetTimeStatus);
 $('d2RenderClock').onclick=()=>runD2Flow(d2RenderClockFromDevice);
 $('d2GetIdentity').onclick=()=>runD2Flow(d2GetDeviceIdentity);
 $('batteryRefresh').onclick=refreshBatteryTelemetry;
+$('profileApply').onclick=()=>runD2Flow(d2ApplyClockProfile);
 $('d2StaleRecover').onclick=()=>runD2Flow(d2RecoverStaleTime);
 $('autoSync').onchange=toggleAutoSync;
 $('clearLog').onclick=()=>{$('log').value=''};
@@ -1804,7 +1904,7 @@ resetD2UiDisconnected();
 controls();
 markLayoutHealth();
 window.addEventListener('resize',markLayoutHealth);
-log('TASK D10B ready. Battery voltage is read on demand from FF00/FF02.');
+log('TASK D11B ready. Clock face profile 0/1 uses D2 04/05.');
 </script>
 </body>
 </html>
