@@ -11,19 +11,23 @@
   - `docs/agent/AUTOMATION_MODE.md`
 - Canonical web URL: `https://onlysky17.github.io/Clock/test.html`
 
-D12B current implementation milestone:
-- `TASK D12B` clock display preferences is CLOSED / MERGED / OWNER PHYSICAL PASS.
+D12C current persistent firmware milestone:
+- `TASK D12C` clock display preferences SPI final is CLOSED / MERGED / SPI PHYSICAL PASS.
 - Implementation commit: `6a69ee2b24a8c0f77d59e490a19db5dbef49d4e2`.
 - Web publish merge commit: `1ea9364`.
 - Firmware merge commit: `1bbf42d22c108556ac9fbea4cd7558d895364a77`.
+- D12C package commit: `1c04965217eb9130324c991f6dcc3f335e287e4f`.
+- D12C package merge commit: `1107f80f822dac7fdcac73383443463997d3a625`.
 - Owner physical PASS date: `2026-07-22`.
 - D2 `06/07/86`, 24/12-hour display, AM/PM in both profiles, and 1/5/10-minute cadence: PASS.
 - Preference persistence in journal bytes `17..18`, immediate render, autonomous scheduler, BLE reconnect, and no duplicate/second-black refresh: PASS.
 - Build: Code `43568`, RO-data `3592`, RW-data `552`, ZI-data `22936`; raw BIN `48848` bytes.
-- Raw SHA256: `C066365A035F8B4AA3C5F1DADB40BF7A16DEB5E693B0AE992A5148B5CBB188A3`.
+- Final raw SHA256: `845ABEEED290B361C58C86CC0B4394A2F1FBAC2B62F9AF6AE92935B11C93B188`.
+- Packed BIN `262144` bytes; SHA256 `9519751A5875F58DE16EC0F0273AABB1F1F6C50A6941E65017DDCAE587412251`.
 - Keil `0 errors`, `0 warnings`; legacy font symbols absent.
-- D11C remains the latest known-good persistent SPI rollback baseline until D12C Burn/Verify PASS.
-- Next action: `TASK D12C - CLOCK PREFERENCES SPI PERSISTENT FINAL`.
+- SmartSnippets Burn/Verify, cold boot, preference restore, immediate render, scheduler, and BLE reconnect: PASS.
+- D12C supersedes D11C as the latest known-good persistent SPI baseline.
+- Next action: `TASK D13A - WEATHER AND DAILY AGENDA PROTOCOL DESIGN`.
 
 Firmware milestone cuối đã đóng:
 - `TASK D11C` clock profiles persistent SPI final is CLOSED / MERGED / PHYSICAL PASS.

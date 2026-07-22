@@ -12,19 +12,23 @@ E1A automatic foundation is merged into `main`.
   - `docs/agent/AUTOMATION_MODE.md`
 - Canonical web URL: `https://onlysky17.github.io/Clock/test.html`
 
-Current implementation milestone:
+Current persistent firmware milestone:
 
-- `TASK D12B` clock display preferences is CLOSED / MERGED / OWNER PHYSICAL PASS.
+- `TASK D12C` clock display preferences SPI final is CLOSED / MERGED / SPI PHYSICAL PASS.
 - Implementation commit: `6a69ee2b24a8c0f77d59e490a19db5dbef49d4e2`.
 - Web controls merge commit: `1ea9364`.
 - Firmware merge commit: `1bbf42d22c108556ac9fbea4cd7558d895364a77`.
+- D12C package commit: `1c04965217eb9130324c991f6dcc3f335e287e4f`.
+- D12C package merge commit: `1107f80f822dac7fdcac73383443463997d3a625`.
 - Owner physical PASS date: `2026-07-22`.
 - 24/12-hour display and AM/PM in Monthly Calendar and Large Time profiles: PASS.
 - Cadence 1/5/10 minutes, default five minutes, persistence across reset, immediate render, disconnected scheduling, and BLE reconnect: PASS.
 - No blank first render, duplicate refresh, or second black refresh.
 - Build: Code `43568`, RO `3592`, RW `552`, ZI `22936`; raw `48848` bytes; Keil 0 errors/0 warnings.
-- Raw SHA256: `C066365A035F8B4AA3C5F1DADB40BF7A16DEB5E693B0AE992A5148B5CBB188A3`.
-- D11C remains the persistent SPI rollback baseline until D12C completes.
+- Final raw SHA256: `845ABEEED290B361C58C86CC0B4394A2F1FBAC2B62F9AF6AE92935B11C93B188`.
+- Packed BIN `262144` bytes; SHA256 `9519751A5875F58DE16EC0F0273AABB1F1F6C50A6941E65017DDCAE587412251`.
+- SmartSnippets Burn/Verify, cold boot, restored preferences, both profiles, 24/12-hour modes, cadence 1/5/10, disconnected scheduler, and BLE reconnect: PASS.
+- D12C supersedes D11C as the latest known-good persistent SPI baseline.
 
 Firmware milestone cuối đã đóng:
 

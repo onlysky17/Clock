@@ -2,7 +2,7 @@
 
 ## Status
 
-`READY FOR OWNER SPI PHYSICAL GATE - NOT YET BURNED`
+`CLOSED / MERGED / SPI PHYSICAL PASS`
 
 ## Lineage
 
@@ -32,4 +32,17 @@
 
 Burn only `D12C_FINAL_PACKED_256KB.bin`, run SmartSnippets Verify, then test cold boot, SET_TIME/immediate render, both profiles, 24/12-hour modes, AM/PM, cadence 1/5/10, preference restore, disconnected scheduling, BLE reconnect, and absence of blank/duplicate/second-black refresh.
 
-D11C remains the rollback package until every D12C physical gate passes.
+## Owner Physical Evidence
+
+Owner completed the SPI gate on `2026-07-22`:
+
+- SmartSnippets Burn and Verify: PASS.
+- Full power-cycle and cold boot from SPI: PASS.
+- BLE connect, SET_TIME, immediate render, and COMPLETE: PASS.
+- Monthly Calendar and Large Time profiles: PASS.
+- 24-hour and 12-hour AM/PM modes: PASS.
+- Refresh cadence 1/5/10 minutes and persisted restore: PASS.
+- Disconnected scheduler and BLE reconnect: PASS.
+- No blank first render, duplicate refresh, or second black refresh: PASS.
+
+D12C is the latest known-good persistent SPI firmware baseline.
