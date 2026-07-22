@@ -120,6 +120,9 @@ static timer_hnd hink_e6_timer_hnd       __SECTION_ZERO("retention_mem_area0");
 #define HINK_D2_RENDER_STATUS_LEN   4U
 #define HINK_D2_IDENTITY_LEN        2U
 #define HINK_D2_IDENTITY_STATUS_LEN 16U
+#define HINK_D2_SET_PROFILE_LEN     3U
+#define HINK_D2_GET_PROFILE_LEN     2U
+#define HINK_D2_PROFILE_STATUS_LEN  6U
 #define HINK_D2_EPOCH_MIN           1704067200UL
 #define HINK_D2_EPOCH_MAX           4102444799UL
 #define HINK_D2_STALE_SECONDS       86400UL
@@ -133,6 +136,13 @@ static timer_hnd hink_e6_timer_hnd       __SECTION_ZERO("retention_mem_area0");
 #define HINK_D2_RESULT_NOT_INIT       0x04U
 #define HINK_D2_RESULT_INTERNAL       0x05U
 #define HINK_D2_RESULT_BUSY           0x06U
+#define HINK_D2_RESULT_INVALID_PROFILE 0x07U
+
+#define HINK_CLOCK_PROFILE_MONTHLY    0x00U
+#define HINK_CLOCK_PROFILE_LARGE_TIME 0x01U
+#define HINK_CLOCK_PROFILE_NONE       0xFFU
+#define HINK_PROFILE_FLAG_PERSISTED   0x01U
+#define HINK_PROFILE_FLAG_DEFAULTED   0x02U
 
 #define HINK_D2_STATE_UNSET   0x00U
 #define HINK_D2_STATE_SYNCED  0x01U
@@ -166,6 +176,8 @@ static uint32_t hink_d2_uptime_at_sync     __SECTION_ZERO("retention_mem_area0")
 static int16_t hink_d2_timezone_minutes    __SECTION_ZERO("retention_mem_area0");
 static uint8_t hink_d2_flags               __SECTION_ZERO("retention_mem_area0");
 static uint8_t hink_d2_render_state        __SECTION_ZERO("retention_mem_area0");
+static uint8_t hink_clock_profile          __SECTION_ZERO("retention_mem_area0");
+static uint8_t hink_clock_profile_persisted __SECTION_ZERO("retention_mem_area0");
 static timer_hnd epd_wait_hnd;
 static uint8_t hink_epd_busy_seen;
 static uint8_t hink_epd_busy_start_polls;
@@ -232,7 +244,7 @@ static uint32_t hink_auto_local_minute_key(void);
 static void hink_auto_note_minute(uint32_t auto_minute);
 static void hink_d2_minute_start_cb(void);
 static void hink_d2_minute_timer_cb(void);
-static void hink_d3d_store_last_known_time(uint32_t epoch, int16_t timezone, uint8_t flags);
+static uint8_t hink_d3d_store_last_known_time(uint32_t epoch, int16_t timezone, uint8_t flags);
 void hink_d3d_boot_load_last_known_time(void);
 static void hink_bitmap_draw_clock(uint8_t h, uint8_t m, uint16_t sy, uint8_t sm,
                                    uint8_t sd, uint8_t sw, uint8_t lunar_valid,
@@ -241,7 +253,7 @@ static void hink_d7a_draw_hhmm(uint8_t x, uint8_t y, uint8_t h, uint8_t m, uint8
 static void hink_d7a_draw_day(uint8_t x, uint8_t y, uint8_t day, uint8_t color);
 static void hink_d7a_box(int x1, int y1, int x2, int y2, uint8_t color);
 static void hink_d7a_draw_acute(uint8_t x, uint8_t y);
-static void hink_d7a_draw_text_al(uint8_t x, uint8_t y, char *text);
+static void hink_d2_profile_notify(uint8_t result);
 
 static void hink_e4_arm_timer(void);
 
@@ -1238,48 +1250,80 @@ static void hink_d7a_draw_acute(uint8_t x, uint8_t y)
 
 static void hink_d7a_draw_circumflex(uint8_t x, uint8_t y)
 {
-	hink_d7a_box(x + 1U, y + 2U, x + 2U, y + 3U, BLACK);
-	hink_d7a_box(x + 2U, y + 1U, x + 3U, y + 2U, BLACK);
-	hink_d7a_box(x + 3U, y, x + 4U, y + 1U, BLACK);
-	hink_d7a_box(x + 4U, y + 1U, x + 5U, y + 2U, BLACK);
-	hink_d7a_box(x + 5U, y + 2U, x + 6U, y + 3U, BLACK);
-}
-
-static void hink_d7a_draw_text_al(uint8_t x, uint8_t y, char *text)
-{
-	(void)text;
-	/* Medium bitmap A/L keeps the lunar row visually equal to the clock. */
-	hink_d7a_box(x, y + 2U, x + 1U, y + 11U, BLACK);
-	hink_d7a_box(x + 5U, y + 2U, x + 6U, y + 11U, BLACK);
-	hink_d7a_box(x + 2U, y, x + 4U, y + 1U, BLACK);
-	hink_d7a_box(x + 2U, y + 5U, x + 4U, y + 6U, BLACK);
-	hink_d7a_box(x + 10U, y, x + 11U, y + 11U, BLACK);
-	hink_d7a_box(x + 10U, y + 10U, x + 16U, y + 11U, BLACK);
-	hink_d7a_draw_circumflex(x, (uint8_t)(y - 4U));
+	hink_d7a_pixel(x + 1U, y + 1U, BLACK);
+	hink_d7a_pixel(x + 2U, y, BLACK);
+	hink_d7a_pixel(x + 3U, y + 1U, BLACK);
 }
 
 static void hink_d9a_draw_lunar(uint8_t x, uint8_t y, uint8_t valid,
                                 uint8_t lm, uint8_t ld)
 {
-	hink_d7a_draw_text_al(x, y, (char *)0);
+	char lunar_buf[9];
+
+	lunar_buf[0] = 'A';
+	lunar_buf[1] = 'L';
+	lunar_buf[2] = ' ';
 	if (valid)
 	{
-		hink_d7a_digit((uint8_t)(x + 24U), y, (uint8_t)(ld / 10U), 8U, 12U, 2U, BLACK);
-		hink_d7a_digit((uint8_t)(x + 33U), y, (uint8_t)(ld % 10U), 8U, 12U, 2U, BLACK);
-		hink_d7a_digit((uint8_t)(x + 48U), y, (uint8_t)(lm / 10U), 8U, 12U, 2U, BLACK);
-		hink_d7a_digit((uint8_t)(x + 57U), y, (uint8_t)(lm % 10U), 8U, 12U, 2U, BLACK);
+		hink_put_2(&lunar_buf[3], ld);
+		hink_put_2(&lunar_buf[6], lm);
 	}
 	else
 	{
-		hink_d7a_box(x + 24U, y + 5U, x + 30U, y + 6U, BLACK);
-		hink_d7a_box(x + 33U, y + 5U, x + 39U, y + 6U, BLACK);
-		hink_d7a_box(x + 48U, y + 5U, x + 54U, y + 6U, BLACK);
-		hink_d7a_box(x + 57U, y + 5U, x + 63U, y + 6U, BLACK);
+		lunar_buf[3] = '-';
+		lunar_buf[4] = '-';
+		lunar_buf[6] = '-';
+		lunar_buf[7] = '-';
 	}
-	hink_d7a_box(x + 44U, y + 1U, x + 45U, y + 2U, BLACK);
-	hink_d7a_box(x + 43U, y + 3U, x + 44U, y + 5U, BLACK);
-	hink_d7a_box(x + 42U, y + 6U, x + 43U, y + 8U, BLACK);
-	hink_d7a_box(x + 41U, y + 9U, x + 42U, y + 11U, BLACK);
+	lunar_buf[5] = '/';
+	lunar_buf[8] = 0;
+	draw_text(x, y, lunar_buf, BLACK);
+	hink_d7a_draw_circumflex(x, (uint8_t)(y - 3U));
+}
+
+static void hink_d11b_draw_large_time(uint8_t h, uint8_t m, uint16_t sy,
+                                      uint8_t sm, uint8_t sd, uint8_t sw,
+                                      uint8_t lunar_valid, uint8_t lm,
+                                      uint8_t ld)
+{
+	char date_buf[16];
+	uint8_t digits[4];
+	uint8_t widths[4];
+	uint8_t i;
+	uint8_t x;
+	uint8_t total = 31U;
+
+	hink_weekday(date_buf, sw);
+	date_buf[2] = ' ';
+	hink_put_2(&date_buf[3], sd);
+	date_buf[5] = '/';
+	hink_put_2(&date_buf[6], (uint8_t)(sm + 1U));
+	date_buf[8] = '/';
+	hink_put_4(&date_buf[9], sy);
+	date_buf[13] = 0;
+	draw_text(86, 5, date_buf, BLACK);
+
+	digits[0] = (uint8_t)(h / 10U);
+	digits[1] = (uint8_t)(h % 10U);
+	digits[2] = (uint8_t)(m / 10U);
+	digits[3] = (uint8_t)(m % 10U);
+	for (i = 0U; i < 4U; i++)
+	{
+		widths[i] = (digits[i] == 1U) ? 10U : 30U;
+		total = (uint8_t)(total + widths[i]);
+	}
+	x = (uint8_t)((250U - total) / 2U);
+	hink_d7a_digit(x, 31, digits[0], widths[0], 58U, 5U, BLACK);
+	x = (uint8_t)(x + widths[0] + 5U);
+	hink_d7a_digit(x, 31, digits[1], widths[1], 58U, 5U, BLACK);
+	x = (uint8_t)(x + widths[1] + 7U);
+	hink_d7a_box(x, 45, x + 5U, 51, BLACK);
+	hink_d7a_box(x, 68, x + 5U, 74, BLACK);
+	x = (uint8_t)(x + 14U);
+	hink_d7a_digit(x, 31, digits[2], widths[2], 58U, 5U, BLACK);
+	x = (uint8_t)(x + widths[2] + 5U);
+	hink_d7a_digit(x, 31, digits[3], widths[3], 58U, 5U, BLACK);
+	hink_d9a_draw_lunar(101, 102, lunar_valid, lm, ld);
 }
 
 static void hink_bitmap_draw_clock(uint8_t h, uint8_t m, uint16_t sy, uint8_t sm,
@@ -1321,7 +1365,7 @@ static void hink_bitmap_draw_clock(uint8_t h, uint8_t m, uint16_t sy, uint8_t sm
 
 	draw_text(4, 8, date_buf, BLACK);
 	hink_d7a_draw_hhmm(10, 38, h, m, BLACK);
-	hink_d9a_draw_lunar(11, 88, lunar_valid, lm, ld);
+	hink_d9a_draw_lunar(26, 91, lunar_valid, lm, ld);
 	hink_d7a_box(101, 6, 102, 116, BLACK);
 
 	draw_text(124, 6, month_buf, BLACK);
@@ -1846,6 +1890,81 @@ static void hink_d2_notify(uint8_t result, uint8_t state)
 }
 #endif
 
+static void hink_d2_profile_notify(uint8_t result)
+{
+    uint8_t msg[HINK_D2_PROFILE_STATUS_LEN];
+    uint8_t status_flags = 0U;
+
+    if (hink_clock_profile_persisted <= HINK_CLOCK_PROFILE_LARGE_TIME)
+    {
+        status_flags |= HINK_PROFILE_FLAG_PERSISTED;
+    }
+    else
+    {
+        status_flags |= HINK_PROFILE_FLAG_DEFAULTED;
+    }
+    msg[0] = 0xD2;
+    msg[1] = 0x84;
+    msg[2] = result;
+    msg[3] = hink_clock_profile;
+    msg[4] = hink_clock_profile_persisted;
+    msg[5] = status_flags;
+    hink_e4_notify_bytes(msg, HINK_D2_PROFILE_STATUS_LEN);
+}
+
+static uint8_t hink_d2_profile_handle(struct custs1_val_write_ind const *param)
+{
+    uint8_t profile;
+    uint8_t previous;
+
+    if (param->value[1] == 0x05U)
+    {
+        hink_d2_profile_notify((param->length == HINK_D2_GET_PROFILE_LEN) ?
+                               HINK_D2_RESULT_OK : HINK_D2_RESULT_INVALID_LENGTH);
+        return 1U;
+    }
+    if (param->length != HINK_D2_SET_PROFILE_LEN)
+    {
+        hink_d2_profile_notify(HINK_D2_RESULT_INVALID_LENGTH);
+        return 1U;
+    }
+    profile = param->value[2];
+    if (profile > HINK_CLOCK_PROFILE_LARGE_TIME)
+    {
+        hink_d2_profile_notify(HINK_D2_RESULT_INVALID_PROFILE);
+        return 1U;
+    }
+    if (hink_d2_synced_epoch == 0UL)
+    {
+        hink_d2_profile_notify(HINK_D2_RESULT_NOT_INIT);
+        return 1U;
+    }
+    if (!HINK_AUTO_IDLE())
+    {
+        hink_d2_profile_notify(HINK_D2_RESULT_BUSY);
+        return 1U;
+    }
+    if ((profile == hink_clock_profile) &&
+        (profile == hink_clock_profile_persisted))
+    {
+        hink_d2_profile_notify(HINK_D2_RESULT_OK);
+        return 1U;
+    }
+
+    previous = hink_clock_profile;
+    hink_clock_profile = profile;
+    if (!hink_d3d_store_last_known_time(hink_d2_current_epoch(),
+                                        hink_d2_timezone_minutes,
+                                        hink_d2_flags))
+    {
+        hink_clock_profile = previous;
+        hink_d2_profile_notify(HINK_D2_RESULT_INTERNAL);
+        return 1U;
+    }
+    hink_d2_profile_notify(HINK_D2_RESULT_OK);
+    return 1U;
+}
+
 static uint8_t hink_d2_time_handle(struct custs1_val_write_ind const *param)
 {
     uint8_t subcmd;
@@ -1895,7 +2014,7 @@ static uint8_t hink_d2_time_handle(struct custs1_val_write_ind const *param)
         hink_d2_flags = flags;
         hink_d2_uptime_at_sync = hink_d2_uptime_seconds;
         hink_d3d_stale_valid = 0U;
-        hink_d3d_store_last_known_time(epoch, timezone, flags);
+        (void)hink_d3d_store_last_known_time(epoch, timezone, flags);
         hink_d2_minute_cancel();
         hink_auto_last_rendered_minute = HINK_AUTO_SENTINEL;
         hink_auto_pending_minute = hink_auto_local_minute_key();
@@ -1925,6 +2044,11 @@ static uint8_t hink_d2_time_handle(struct custs1_val_write_ind const *param)
         hink_d2_identity_notify((param->length == HINK_D2_IDENTITY_LEN) ?
                                 HINK_D2_RESULT_OK : HINK_D2_RESULT_INVALID_LENGTH);
         return 1U;
+    }
+
+    if ((subcmd == 0x04U) || (subcmd == 0x05U))
+    {
+        return hink_d2_profile_handle(param);
     }
 
     if (subcmd == 0x01U)
@@ -2097,9 +2221,16 @@ static void hink_d2_draw_current_framebuffer(void)
     date = (int)sd - 1;
     wday = sw;
 
-    memset(fb_bw, 0xff, scr_h * line_bytes);
-    lunar_valid = hink_d3c_lunar_from_solar(sy, sm, sd, &lm, &ld);
-    hink_bitmap_draw_clock(h, m, sy, sm, sd, sw, lunar_valid, lm, ld);
+	memset(fb_bw, 0xff, scr_h * line_bytes);
+	lunar_valid = hink_d3c_lunar_from_solar(sy, sm, sd, &lm, &ld);
+	if (hink_clock_profile == HINK_CLOCK_PROFILE_LARGE_TIME)
+	{
+		hink_d11b_draw_large_time(h, m, sy, sm, sd, sw, lunar_valid, lm, ld);
+	}
+	else
+	{
+		hink_bitmap_draw_clock(h, m, sy, sm, sd, sw, lunar_valid, lm, ld);
+	}
 }
 
 static void hink_d2_prime_retry_cb(void)
@@ -2276,6 +2407,7 @@ static void hink_d3d_build_record(uint8_t *rec,
     hink_put_u16_le(&rec[6], (uint16_t)timezone);
     hink_put_u32_le(&rec[8], seq);
     hink_put_u32_le(&rec[12], epoch);
+    rec[16] = hink_clock_profile;
     crc = hink_e5_crc16_ccitt_update(0xFFFFU, rec, HINK_D3D_CRC_OFFSET);
     hink_put_u16_le(&rec[HINK_D3D_CRC_OFFSET], crc);
 }
@@ -2296,6 +2428,8 @@ void hink_d3d_boot_load_last_known_time(void)
     uint8_t valid_b;
 
     hink_d3d_stale_valid = 0U;
+    hink_clock_profile = HINK_CLOCK_PROFILE_MONTHLY;
+    hink_clock_profile_persisted = HINK_CLOCK_PROFILE_NONE;
     fspi_init();
     sf_read(HINK_D3D_STORE_SLOT_A, HINK_D3D_STORE_SIZE, a);
     sf_read(HINK_D3D_STORE_SLOT_B, HINK_D3D_STORE_SIZE, b);
@@ -2309,6 +2443,11 @@ void hink_d3d_boot_load_last_known_time(void)
         hink_d3d_stale_timezone = tz_a;
         hink_d3d_stale_flags = flags_a;
         hink_d3d_stale_valid = 1U;
+        if (a[16] <= HINK_CLOCK_PROFILE_LARGE_TIME)
+        {
+            hink_clock_profile = a[16];
+            hink_clock_profile_persisted = a[16];
+        }
     }
     else if (valid_b)
     {
@@ -2316,10 +2455,15 @@ void hink_d3d_boot_load_last_known_time(void)
         hink_d3d_stale_timezone = tz_b;
         hink_d3d_stale_flags = flags_b;
         hink_d3d_stale_valid = 1U;
+        if (b[16] <= HINK_CLOCK_PROFILE_LARGE_TIME)
+        {
+            hink_clock_profile = b[16];
+            hink_clock_profile_persisted = b[16];
+        }
     }
 }
 
-static void hink_d3d_store_last_known_time(uint32_t epoch, int16_t timezone, uint8_t flags)
+static uint8_t hink_d3d_store_last_known_time(uint32_t epoch, int16_t timezone, uint8_t flags)
 {
     uint8_t a[HINK_D3D_STORE_SIZE];
     uint8_t b[HINK_D3D_STORE_SIZE];
@@ -2381,7 +2525,10 @@ static void hink_d3d_store_last_known_time(uint32_t epoch, int16_t timezone, uin
     if (hink_d3d_record_valid(verify, &seq_a, &old_epoch, &old_tz, &old_flags))
     {
         hink_d3d_stale_valid = 0U;
+        hink_clock_profile_persisted = hink_clock_profile;
+        return 1U;
     }
+    return 0U;
 }
 
 static void hink_e5_reset_state(void)
