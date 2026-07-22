@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TASK D11B - Clock Face Profiles</title>
+<title>TASK D12B - Clock Preferences</title>
 <style>
 :root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;--bg:#07101b;--card:#111c2c;--line:#2a3d59;--text:#f4f8ff;--muted:#9fb1c8;--ok:#45d99c;--warn:#ffd166;--bad:#ff6b86}
 *{box-sizing:border-box}body{margin:0;background:linear-gradient(#050a12,#101a2a);color:var(--text)}main{max-width:1040px;margin:auto;padding:20px}
@@ -14,7 +14,8 @@
 .productHeader p{max-width:680px;margin:.25rem 0 0}.productStatus{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:9px;margin-top:12px}
 .identityCard{display:grid;grid-template-columns:minmax(0,1fr);gap:9px;padding:12px;border-color:#315b80;background:#0b1726}.identityTitle{font-weight:900;letter-spacing:.02em}.identityGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}.identityNote{margin:0;color:#b8c7db;font-size:.86rem}.compatibilityState{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 12px;align-items:center;padding:11px;border:1px solid #36516f;border-radius:10px;background:#101e30}.compatibilityState span{color:var(--muted);font-size:.82rem}.compatibilityState strong{font-size:1.05rem}.compatibilityState small{grid-column:1/-1}
 .batteryValue{color:#8be8bd}
-.heroAction{font-size:1rem;min-width:160px}.presetRow button{min-width:160px}.presetRow button.selected{border-color:#45d99c;background:#123d34}.profileStatus{margin-top:10px;color:var(--muted)}
+.heroAction{font-size:1rem;min-width:160px}.presetRow button{min-width:160px}.presetRow button.selected,.preferenceRow button.selected{border-color:#45d99c;background:#123d34}.profileStatus{margin-top:10px;color:var(--muted)}
+.preferencePanel{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}.preferencePanel h3{margin:0 0 9px;font-size:1rem}.preferenceRow{margin-bottom:9px}.preferenceRow button{min-width:92px}.preferenceHint{margin:4px 0 9px;font-size:.85rem}
 .advanced{margin:18px 0;border:1px solid var(--line);border-radius:12px;background:rgba(11,20,33,.96);overflow:hidden}
 .advanced>summary{cursor:pointer;list-style:none;padding:15px 16px;font-weight:850;color:#dbeafe}.advanced>summary::-webkit-details-marker{display:none}
 .advanced>summary:focus-visible{outline:2px solid #93c5fd;outline-offset:3px}.advancedBody{padding:0 16px 16px}.advancedBody .card{border-radius:10px;background:#0e1928}
@@ -172,12 +173,12 @@ const BATTERY_CHARACTERISTIC=0xFF02;
 const D2_STALE_PRESENT_FLAG=0x80;
 const D2_STALE_WARNING='Thiết bị đang giữ giờ cũ. Hãy đồng bộ giờ hiện tại để tiếp tục chạy đồng hồ.';
 const EINK_TEST_IDENTITY={
-  webBuild:'D11B-PROFILES-20260722',
+  webBuild:'D12B-PREFERENCES-20260722',
   expectedFirmware:'D8A00001',
   expectedRuntime:'D8A1',
   expectedSourceId:'D8A00001',
   expectedBin:'BUILD-SPECIFIC',
-  label:'D11B CLOCK FACE PROFILES'
+  label:'D12B CLOCK PREFERENCES'
 };
 window.EINK_TEST_IDENTITY=EINK_TEST_IDENTITY;
 
@@ -202,6 +203,8 @@ let identityCompatibility='disconnected';
 let identityRefreshPending=false;
 let batteryService=null,batteryChar=null,batteryRunning=false;
 let selectedClockProfile=0,activeClockProfile=0,persistedClockProfile=0xFF;
+let selectedHourMode=0,activeHourMode=0,persistedHourMode=0xFF;
+let selectedRefreshMinutes=5,activeRefreshMinutes=5,persistedRefreshMinutes=0xFF;
 
 function setupProductMode(){
   const main=document.querySelector('main');
@@ -251,6 +254,11 @@ function setupProductMode(){
   profileStatus.setAttribute('aria-live','polite');
   profileStatus.textContent='Ch\u01b0a \u0111\u1ecdc profile t\u1eeb thi\u1ebft b\u1ecb.';
   presetCard.append(profileStatus);
+
+  const preferencePanel=document.createElement('div');
+  preferencePanel.className='preferencePanel';
+  preferencePanel.innerHTML='<h3>T\u00f9y ch\u1ecdn hi\u1ec3n th\u1ecb</h3><div class="row preferenceRow" id="hourModeRow"><button id="hour24" type="button">24 gi\u1edd</button><button id="hour12" type="button">12 gi\u1edd</button></div><div class="row preferenceRow" id="cadenceRow"><button id="cadence5" type="button">5 ph\u00fat</button><button id="cadence10" type="button">10 ph\u00fat</button><button id="cadence1" type="button">1 ph\u00fat</button></div><p class="preferenceHint">1 ph\u00fat s\u1ebd t\u0103ng m\u1ee9c d\u00f9ng pin v\u00e0 s\u1ed1 l\u1ea7n refresh panel.</p><div class="row"><button id="preferenceApply" class="good" type="button">\u00c1p d\u1ee5ng t\u00f9y ch\u1ecdn</button></div><div id="preferenceStatus" class="profileStatus" role="status" aria-live="polite">Ch\u01b0a \u0111\u1ecdc t\u00f9y ch\u1ecdn t\u1eeb thi\u1ebft b\u1ecb.</div>';
+  presetCard.append(preferencePanel);
 
   const previewCard=document.createElement('section');
   previewCard.className='card';
@@ -304,7 +312,8 @@ const d2ResultName=value=>({
   0x04:'NOT_INITIALIZED',
   0x05:'INTERNAL_ERROR',
   0x06:'BUSY',
-  0x07:'INVALID_PROFILE'
+  0x07:'INVALID_PROFILE',
+  0x08:'INVALID_PREFERENCE'
 }[value]||`UNKNOWN_${value}`);
 const d2StateName=value=>({
   0x00:'UNSET',
@@ -336,6 +345,32 @@ function selectClockProfile(profile){
   if(profile===0)drawDailyCalendar();else drawCurrentClock();
   renderClockProfileSelection();
   controls();
+}
+
+function renderClockPreferenceSelection(){
+  $('hour24').classList.toggle('selected',selectedHourMode===0);
+  $('hour12').classList.toggle('selected',selectedHourMode===1);
+  $('hour24').setAttribute('aria-pressed',String(selectedHourMode===0));
+  $('hour12').setAttribute('aria-pressed',String(selectedHourMode===1));
+  for(const value of [1,5,10]){
+    const button=$(`cadence${value}`);
+    button.classList.toggle('selected',selectedRefreshMinutes===value);
+    button.setAttribute('aria-pressed',String(selectedRefreshMinutes===value));
+  }
+  const stored=(persistedHourMode===0xFF||persistedRefreshMinutes===0xFF)?'m\u1eb7c \u0111\u1ecbnh':`${persistedHourMode===1?'12':'24'} gi\u1edd / ${persistedRefreshMinutes} ph\u00fat`;
+  $('preferenceStatus').textContent=`\u0110ang ch\u1ea1y: ${activeHourMode===1?'12':'24'} gi\u1edd / ${activeRefreshMinutes} ph\u00fat \u00b7 L\u01b0u: ${stored}`;
+  document.documentElement.dataset.einkHourMode=String(activeHourMode);
+  document.documentElement.dataset.einkRefreshMinutes=String(activeRefreshMinutes);
+}
+
+function selectHourMode(value){
+  selectedHourMode=value;
+  renderClockPreferenceSelection();
+}
+
+function selectRefreshMinutes(value){
+  selectedRefreshMinutes=value;
+  renderClockPreferenceSelection();
 }
 
 function log(message,tag=''){
@@ -934,6 +969,7 @@ function controls(){
   $('batteryRefresh').disabled=!connected||locked;
   $('d2StaleRecover').disabled=!connected||locked||!d2StalePresent||identityBlocked;
   $('profileApply').disabled=!connected||locked||identityBlocked||productD2State===null||productD2State===0;
+  $('preferenceApply').disabled=!connected||locked||identityBlocked||productD2State===null||productD2State===0;
   $('refresh').disabled=!connected||!token||!e5Complete||locked;
 
   $('clearWhite').disabled=locked;
@@ -1040,6 +1076,12 @@ function resetD2UiDisconnected(){
   selectedClockProfile=0;
   activeClockProfile=0;
   persistedClockProfile=0xFF;
+  selectedHourMode=0;
+  activeHourMode=0;
+  persistedHourMode=0xFF;
+  selectedRefreshMinutes=5;
+  activeRefreshMinutes=5;
+  persistedRefreshMinutes=0xFF;
   setD2Status('DISCONNECTED','warn');
   $('d2Result').textContent='-';
   $('d2State').textContent='-';
@@ -1058,6 +1100,7 @@ function resetD2UiDisconnected(){
   $('batteryLevel').textContent='Ước tính -';
   $('batteryUpdatedAt').textContent='Chưa đọc';
   renderClockProfileSelection();
+  renderClockPreferenceSelection();
   renderDeviceCompatibility(null,false);
   renderD2StaleRecovery();
 }
@@ -1150,6 +1193,14 @@ function buildD2SetProfilePacket(profile){
 
 function buildD2GetProfilePacket(){
   return Uint8Array.of(0xD2,0x05);
+}
+
+function buildD2SetPreferencePacket(hourMode,refreshMinutes){
+  return Uint8Array.of(0xD2,0x06,hourMode,refreshMinutes);
+}
+
+function buildD2GetPreferencePacket(){
+  return Uint8Array.of(0xD2,0x07);
 }
 
 function estimateBatteryPercent(millivolts){
@@ -1246,6 +1297,33 @@ function parseD2ProfileStatus(bytes){
     throw Error(`Unknown D2 profile response: ${hex(bytes)}`);
   }
   return{result:bytes[2],active:bytes[3],persisted:bytes[4],flags:bytes[5]};
+}
+
+function parseD2PreferenceStatus(bytes){
+  if(bytes.length!==8||bytes[0]!==0xD2||bytes[1]!==0x86){
+    throw Error(`Unknown D2 preference response: ${hex(bytes)}`);
+  }
+  return{result:bytes[2],activeHour:bytes[3],activeRefresh:bytes[4],persistedHour:bytes[5],persistedRefresh:bytes[6],flags:bytes[7]};
+}
+
+function renderD2PreferenceStatus(status){
+  if(status.result===0x00){
+    activeHourMode=status.activeHour;
+    activeRefreshMinutes=status.activeRefresh;
+    persistedHourMode=status.persistedHour;
+    persistedRefreshMinutes=status.persistedRefresh;
+    selectedHourMode=status.activeHour;
+    selectedRefreshMinutes=status.activeRefresh;
+    clearProductError();
+  }else if(status.result===0x06){
+    $('preferenceStatus').textContent='Panel \u0111ang render, s\u1ebd th\u1eed l\u1ea1i sau khi ho\u00e0n t\u1ea5t.';
+  }else{
+    selectedHourMode=activeHourMode;
+    selectedRefreshMinutes=activeRefreshMinutes;
+    markProductError(`D2 preference ${d2ResultName(status.result)}`);
+  }
+  renderClockPreferenceSelection();
+  log(`D2 preference result=${d2ResultName(status.result)} active=${status.activeHour}/${status.activeRefresh} persisted=${status.persistedHour}/${status.persistedRefresh} flags=0x${status.flags.toString(16).padStart(2,'0').toUpperCase()}`,'D2');
 }
 
 function renderD2ProfileStatus(status){
@@ -1355,6 +1433,8 @@ function handleD2Notify(bytes){
       log(`D2 identity firmware=${identity.firmware} source=${identity.sourceId.toString(16).padStart(8,'0').toUpperCase()} health=0x${identity.health.toString(16).padStart(2,'0').toUpperCase()}`,'D2');
     }else if(bytes[1]===0x84){
       renderD2ProfileStatus(parseD2ProfileStatus(bytes));
+    }else if(bytes[1]===0x86){
+      renderD2PreferenceStatus(parseD2PreferenceStatus(bytes));
     }else{
       log(`Unknown D2 response: ${hex(bytes)}`,'D2');
       markProductError('Unknown D2 response');
@@ -1417,6 +1497,7 @@ async function connect(){
   try{
     await d2GetTimeStatus();
     await d2GetClockProfile();
+    await d2GetClockPreferences();
   }catch(error){
     log(`Clock profile unavailable: ${error.message}`,'D2');
   }
@@ -1528,6 +1609,43 @@ async function d2ApplyClockProfile(){
   if(status.result!==0x00)throw Error(`D2 profile rejected: ${d2ResultName(status.result)}`);
   await d2RenderClockFromDevice();
   $('profileStatus').textContent=`Đã áp dụng: ${clockProfileName(activeClockProfile)}`;
+}
+
+async function d2GetClockPreferences(){
+  const status=parseD2PreferenceStatus(await request(
+    buildD2GetPreferencePacket(),
+    a=>a[0]===0xD2&&a[1]===0x86,
+    {timeout:2500}
+  ));
+  renderD2PreferenceStatus(status);
+  if(status.result!==0x00)throw Error(`D2 preference rejected: ${d2ResultName(status.result)}`);
+  return status;
+}
+
+async function d2ApplyClockPreferences(){
+  let status=parseD2PreferenceStatus(await request(
+    buildD2SetPreferencePacket(selectedHourMode,selectedRefreshMinutes),
+    a=>a[0]===0xD2&&a[1]===0x86,
+    {timeout:5000}
+  ));
+  if(status.result===0x06){
+    if(productD2RenderState!==0x03){
+      const completed=parseD2RenderStatus(await waitFor(
+        a=>a[0]===0xD2&&a[1]===0x82&&a[3]===0x03,
+        35000
+      ));
+      if(completed.result!==0x00)throw Error(`D2 render ${d2ResultName(completed.result)}`);
+    }
+    status=parseD2PreferenceStatus(await request(
+      buildD2SetPreferencePacket(selectedHourMode,selectedRefreshMinutes),
+      a=>a[0]===0xD2&&a[1]===0x86,
+      {timeout:5000}
+    ));
+  }
+  renderD2PreferenceStatus(status);
+  if(status.result!==0x00)throw Error(`D2 preference rejected: ${d2ResultName(status.result)}`);
+  await d2RenderClockFromDevice();
+  $('preferenceStatus').textContent=`\u0110\u00e3 \u00e1p d\u1ee5ng: ${activeHourMode===1?'12':'24'} gi\u1edd / ${activeRefreshMinutes} ph\u00fat`;
 }
 
 function scheduleIdentityHealthRefresh(reason){
@@ -1911,6 +2029,12 @@ $('d2RenderClock').onclick=()=>runD2Flow(d2RenderClockFromDevice);
 $('d2GetIdentity').onclick=()=>runD2Flow(d2GetDeviceIdentity);
 $('batteryRefresh').onclick=refreshBatteryTelemetry;
 $('profileApply').onclick=()=>runD2Flow(d2ApplyClockProfile);
+$('hour24').onclick=()=>selectHourMode(0);
+$('hour12').onclick=()=>selectHourMode(1);
+$('cadence1').onclick=()=>selectRefreshMinutes(1);
+$('cadence5').onclick=()=>selectRefreshMinutes(5);
+$('cadence10').onclick=()=>selectRefreshMinutes(10);
+$('preferenceApply').onclick=()=>runD2Flow(d2ApplyClockPreferences);
 $('d2StaleRecover').onclick=()=>runD2Flow(d2RecoverStaleTime);
 $('autoSync').onchange=toggleAutoSync;
 $('clearLog').onclick=()=>{$('log').value=''};
@@ -1921,7 +2045,7 @@ resetD2UiDisconnected();
 controls();
 markLayoutHealth();
 window.addEventListener('resize',markLayoutHealth);
-log('TASK D11B ready. Clock face profile 0/1 uses D2 04/05.');
+log('TASK D12B ready. Clock preferences use D2 06/07/86.');
 </script>
 </body>
 </html>
