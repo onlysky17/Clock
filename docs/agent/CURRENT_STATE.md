@@ -95,9 +95,10 @@ Product and web milestones:
 
 Next canonical action:
 
-- `TASK D12A - Clock preference policy design`.
-- Define 12/24-hour mode and selectable autonomous refresh cadence without changing runtime yet.
-- Preserve D11C as the rollback baseline.
+- `TASK D12A - Clock preference policy design` is complete on its task branch.
+- Policy defines 24-hour default, optional 12-hour display, and 1/5/10-minute cadence with five minutes recommended.
+- D2 `06/07/86` and persistence bytes `17..18` are reserved for implementation; D11C runtime is unchanged.
+- Next implementation gate: `TASK D12B - IMPLEMENT CLOCK PREFERENCES`.
 
 ## Historical Project State
 

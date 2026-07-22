@@ -63,12 +63,13 @@ Web/layout milestone cuoi da dong:
 
 ## Next Canonical Action
 
-`TASK D12A - Clock preference policy design`
+`TASK D12B - IMPLEMENT CLOCK PREFERENCES`
 
-- Design 12/24-hour display mode.
-- Design selectable autonomous refresh cadence while keeping five minutes as the safe default.
-- Define persistence, protocol, web controls, migration, and rollback behavior.
-- D12A is design/audit only; firmware implementation follows only after the size and compatibility gate.
+- Add D2 `06/07/86` preference commands/status.
+- Persist hour mode in byte `17` and refresh cadence in byte `18` of the existing CRC-covered journal.
+- Add 24/12-hour rendering and selectable 1/5/10-minute cadence, with 24-hour/five-minute defaults.
+- Add Product Mode controls and preserve the profile BUSY retry guard.
+- Keep D11C as the rollback baseline and require raw BIN at most `50000` bytes.
 
 ## Guardrails For The Next Task
 
