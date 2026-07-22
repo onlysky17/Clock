@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TASK D8A - Device Identity and Health</title>
+<title>TASK D8B - Device Compatibility Guard</title>
 <style>
 :root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;--bg:#07101b;--card:#111c2c;--line:#2a3d59;--text:#f4f8ff;--muted:#9fb1c8;--ok:#45d99c;--warn:#ffd166;--bad:#ff6b86}
 *{box-sizing:border-box}body{margin:0;background:linear-gradient(#050a12,#101a2a);color:var(--text)}main{max-width:1040px;margin:auto;padding:20px}
@@ -12,7 +12,7 @@
 .productHeader{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:14px}
 .productHeader h1{margin:.2rem 0 .35rem;font-size:clamp(1.55rem,4vw,2.25rem);line-height:1.1}
 .productHeader p{max-width:680px;margin:.25rem 0 0}.productStatus{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:9px;margin-top:12px}
-.identityCard{display:grid;grid-template-columns:minmax(0,1fr);gap:9px;padding:12px;border-color:#315b80;background:#0b1726}.identityTitle{font-weight:900;letter-spacing:.02em}.identityGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}.identityNote{margin:0;color:#b8c7db;font-size:.86rem}
+.identityCard{display:grid;grid-template-columns:minmax(0,1fr);gap:9px;padding:12px;border-color:#315b80;background:#0b1726}.identityTitle{font-weight:900;letter-spacing:.02em}.identityGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}.identityNote{margin:0;color:#b8c7db;font-size:.86rem}.compatibilityState{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 12px;align-items:center;padding:11px;border:1px solid #36516f;border-radius:10px;background:#101e30}.compatibilityState span{color:var(--muted);font-size:.82rem}.compatibilityState strong{font-size:1.05rem}.compatibilityState small{grid-column:1/-1}
 .heroAction{font-size:1rem;min-width:160px}.presetRow button{min-width:160px}
 .advanced{margin:18px 0;border:1px solid var(--line);border-radius:12px;background:rgba(11,20,33,.96);overflow:hidden}
 .advanced>summary{cursor:pointer;list-style:none;padding:15px 16px;font-weight:850;color:#dbeafe}.advanced>summary::-webkit-details-marker{display:none}
@@ -27,6 +27,7 @@ button{cursor:pointer}button.primary{background:#1d4ed8}button.good{background:#
 canvas{display:block;width:min(100%,500px);height:auto;image-rendering:pixelated;background:#fff;touch-action:none;border:1px solid #62708a}
 progress{width:100%;height:17px;margin-top:12px}textarea{width:100%;min-height:260px;padding:12px;border:1px solid var(--line);border-radius:10px;background:#050910;color:#cfe2ff;font:12px/1.5 ui-monospace,Consolas,monospace}
 small{color:var(--muted)}
+@media(max-width:420px){main{padding:12px}.identityCard{min-width:0}.identityGrid,.compatibilityState{grid-template-columns:minmax(0,1fr)}.compatibilityState small{grid-column:auto}.stat strong{overflow-wrap:anywhere}}
 </style>
 </head>
 <body><main>
@@ -168,10 +169,12 @@ const NOTIFY='15005991-b131-3396-014c-664c9867b917';
 const D2_STALE_PRESENT_FLAG=0x80;
 const D2_STALE_WARNING='Thiết bị đang giữ giờ cũ. Hãy đồng bộ giờ hiện tại để tiếp tục chạy đồng hồ.';
 const EINK_TEST_IDENTITY={
-  webBuild:'D8A-IDENTITY-20260721',
+  webBuild:'D8B-COMPAT-20260722',
   expectedFirmware:'D8A00001',
+  expectedRuntime:'D8A1',
+  expectedSourceId:'D8A00001',
   expectedBin:'BUILD-SPECIFIC',
-  label:'D8A DEVICE IDENTITY'
+  label:'D8B DEVICE COMPATIBILITY'
 };
 window.EINK_TEST_IDENTITY=EINK_TEST_IDENTITY;
 
@@ -192,6 +195,7 @@ let productErrorReason='';
 let productD2Result=null,productD2State=null,productD2RenderResult=null,productD2RenderState=null;
 let deviceIdentity=null;
 let identityProbePending=false;
+let identityCompatibility='disconnected';
 
 function setupProductMode(){
   const main=document.querySelector('main');
@@ -216,8 +220,10 @@ function setupProductMode(){
   identityCard.className='card identityCard';
   identityCard.dataset.einkWebBuild=EINK_TEST_IDENTITY.webBuild;
   identityCard.dataset.expectedFirmware=EINK_TEST_IDENTITY.expectedFirmware;
+  identityCard.dataset.expectedRuntime=EINK_TEST_IDENTITY.expectedRuntime;
+  identityCard.dataset.expectedSourceId=EINK_TEST_IDENTITY.expectedSourceId;
   identityCard.dataset.expectedBin=EINK_TEST_IDENTITY.expectedBin;
-  identityCard.innerHTML=`<div class="identityTitle">${EINK_TEST_IDENTITY.label}</div><div class="identityGrid"><div class="stat"><span>Expected firmware</span><strong>${EINK_TEST_IDENTITY.expectedFirmware}</strong></div><div class="stat"><span>Firmware thực tế</span><strong id="actualFirmware">Chưa đọc</strong></div><div class="stat"><span>Source ID</span><strong id="actualSourceId">-</strong></div><div class="stat"><span>Health</span><strong id="actualHealth">-</strong></div><div class="stat"><span>Web build</span><strong>${EINK_TEST_IDENTITY.webBuild}</strong></div></div><div class="row" id="identityActionRow"></div><p class="identityNote">Firmware thực tế được đọc trực tiếp từ thiết bị qua D2; BIN SHA256 vẫn là thông tin của từng gói build.</p>`;
+  identityCard.innerHTML=`<div class="identityTitle">${EINK_TEST_IDENTITY.label}</div><div class="compatibilityState" role="status" aria-live="polite"><span>Tương thích thiết bị</span><strong id="identityCompatibility" class="warn">Chưa kết nối</strong><small id="identityCompatibilityDetail">Kết nối để kiểm tra firmware thực tế.</small></div><div class="identityGrid"><div class="stat"><span>Firmware yêu cầu</span><strong>${EINK_TEST_IDENTITY.expectedRuntime}</strong></div><div class="stat"><span>Firmware thực tế</span><strong id="actualFirmware">Chưa đọc</strong></div><div class="stat"><span>Source ID yêu cầu</span><strong>${EINK_TEST_IDENTITY.expectedSourceId}</strong></div><div class="stat"><span>Source ID thực tế</span><strong id="actualSourceId">-</strong></div><div class="stat"><span>Health</span><strong id="actualHealth">-</strong></div><div class="stat"><span>Web build</span><strong>${EINK_TEST_IDENTITY.webBuild}</strong></div></div><div class="row" id="identityActionRow"></div><p class="identityNote">Web chỉ mở thao tác chính khi identity khớp baseline. Công cụ kỹ thuật vẫn có trong mục nâng cao.</p>`;
 
   const statusCard=document.createElement('section');
   statusCard.className='card';
@@ -338,6 +344,9 @@ function resolveProductState(input){
   if(!input.connected){
     return{text:'Chưa kết nối',cls:'warn'};
   }
+  if(input.compatibilityMismatch){
+    return{text:'Có lỗi',cls:'bad'};
+  }
   if(input.hasError){
     return{text:'Có lỗi',cls:'bad'};
   }
@@ -352,6 +361,35 @@ function resolveProductState(input){
 }
 
 window.__resolveEinkProductState=resolveProductState;
+
+function resolveDeviceCompatibility(identity,connected=true){
+  if(!connected){
+    return{state:'disconnected',text:'Chưa kết nối',cls:'warn',detail:'Kết nối để kiểm tra firmware thực tế.'};
+  }
+  if(!identity){
+    return{state:'checking',text:'Đang kiểm tra',cls:'warn',detail:'Đang đọc identity trực tiếp từ thiết bị.'};
+  }
+  if(identity.result!==0x00){
+    return{state:'unsupported',text:'Không hỗ trợ',cls:'bad',detail:'Firmware không trả identity D8A hợp lệ.'};
+  }
+  const sourceId=identity.sourceId.toString(16).padStart(8,'0').toUpperCase();
+  if(identity.firmware===EINK_TEST_IDENTITY.expectedRuntime && sourceId===EINK_TEST_IDENTITY.expectedSourceId){
+    return{state:'compatible',text:'Tương thích',cls:'ok',detail:`Đúng ${identity.firmware} / ${sourceId}.`};
+  }
+  return{state:'mismatch',text:'Sai firmware',cls:'bad',detail:`Nhận ${identity.firmware} / ${sourceId}; cần ${EINK_TEST_IDENTITY.expectedRuntime} / ${EINK_TEST_IDENTITY.expectedSourceId}.`};
+}
+
+window.__resolveEinkDeviceCompatibility=resolveDeviceCompatibility;
+
+function renderDeviceCompatibility(identity=deviceIdentity,connected=!!server?.connected){
+  const result=resolveDeviceCompatibility(identity,connected);
+  identityCompatibility=result.state;
+  $('identityCompatibility').textContent=result.text;
+  $('identityCompatibility').className=result.cls;
+  $('identityCompatibilityDetail').textContent=result.detail;
+  controls();
+  return result;
+}
 
 function clearWhite(){
   ctx.save();
@@ -843,16 +881,17 @@ function controls(){
   const connected=!!server?.connected;
   const e5Complete=e5Success && (browserCrc === latestFwCrc);
   const locked=busy||e6Running||oneTapRunning||d2Running;
+  const identityBlocked=connected&&identityCompatibility!=='compatible';
   $('connect').disabled=connected||locked;
   $('disconnect').disabled=!connected||locked;
   $('send').disabled=!connected||locked;
-  $('syncClock').disabled=!connected||locked;
-  $('autoSync').disabled=locked;
-  $('d2SetTime').disabled=!connected||locked;
+  $('syncClock').disabled=!connected||locked||identityBlocked;
+  $('autoSync').disabled=locked||identityBlocked;
+  $('d2SetTime').disabled=!connected||locked||identityBlocked;
   $('d2GetStatus').disabled=!connected||locked;
-  $('d2RenderClock').disabled=!connected||locked||d2StalePresent;
+  $('d2RenderClock').disabled=!connected||locked||d2StalePresent||identityBlocked;
   $('d2GetIdentity').disabled=!connected||locked;
-  $('d2StaleRecover').disabled=!connected||locked||!d2StalePresent;
+  $('d2StaleRecover').disabled=!connected||locked||!d2StalePresent||identityBlocked;
   $('refresh').disabled=!connected||!token||!e5Complete||locked;
 
   $('clearWhite').disabled=locked;
@@ -878,7 +917,8 @@ function updateProductState(){
     d2Result:productD2Result,
     d2State:productD2State,
     d2RenderResult:productD2RenderResult,
-    d2RenderState:productD2RenderState
+    d2RenderState:productD2RenderState,
+    compatibilityMismatch:identityCompatibility==='mismatch'||identityCompatibility==='unsupported'
   });
   productState.textContent=state.text;
   productState.className=state.cls;
@@ -950,6 +990,7 @@ function resetD2UiDisconnected(){
   productD2RenderState=null;
   deviceIdentity=null;
   identityProbePending=false;
+  identityCompatibility='disconnected';
   setD2Status('DISCONNECTED','warn');
   $('d2Result').textContent='-';
   $('d2State').textContent='-';
@@ -963,6 +1004,7 @@ function resetD2UiDisconnected(){
   $('actualFirmware').textContent='Chưa đọc';
   $('actualSourceId').textContent='-';
   $('actualHealth').textContent='-';
+  renderDeviceCompatibility(null,false);
   renderD2StaleRecovery();
 }
 
@@ -1105,6 +1147,7 @@ function renderD2Identity(identity){
   if(identity.health&0x20)flags.push('STORE');
   $('actualHealth').textContent=flags.join(' · ')||'IDLE';
   if(identity.result===0)clearProductError();
+  renderDeviceCompatibility(identity,true);
 }
 
 function renderDeviceLocalTime(epoch,timezone){
@@ -1154,6 +1197,7 @@ function handleD2Notify(bytes){
         $('actualFirmware').textContent='Không hỗ trợ';
         $('actualSourceId').textContent='-';
         $('actualHealth').textContent='Firmware cũ';
+        renderDeviceCompatibility({result:0x01,firmware:'----',sourceId:0},true);
         log('D2 identity is not supported by this firmware','D2');
       }else{
         renderD2Status(status);
@@ -1224,12 +1268,14 @@ async function connect(){
   notifyChar.addEventListener('characteristicvaluechanged',onNotify);
   $('ble').textContent=`Connected: ${device.name||'device'}`;
   setD2Status('READY','ok');
+  renderDeviceCompatibility(null,true);
   controls();
   log(`Connected: ${device.name||'unnamed'}`,'PASS');
   try{
     await d2GetDeviceIdentity();
   }catch(error){
     $('actualFirmware').textContent='Không hỗ trợ';
+    renderDeviceCompatibility({result:0x01,firmware:'----',sourceId:0},true);
     log(`D2 identity unavailable: ${error.message}`,'D2');
   }
 }
@@ -1671,7 +1717,7 @@ resetD2UiDisconnected();
 controls();
 markLayoutHealth();
 window.addEventListener('resize',markLayoutHealth);
-log('TASK D8A ready. Device identity and health are read directly from firmware through D2 03.');
+log('TASK D8B ready. Product actions require a matching D8A device identity.');
 </script>
 </body>
 </html>
