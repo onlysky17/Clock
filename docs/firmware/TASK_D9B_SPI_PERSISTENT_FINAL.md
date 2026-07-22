@@ -2,7 +2,7 @@
 
 ## Status
 
-`READY FOR OWNER SPI PHYSICAL GATE - NOT YET BURNED`
+`CLOSED / MERGED / SPI PHYSICAL PASS`
 
 ## Lineage
 
@@ -45,8 +45,20 @@ Packed image:
 - Package verify: PASS.
 - Package smoke: PASS.
 
-## Owner SPI Gate
+## Owner SPI Physical Evidence
 
-The package is not yet a persistent physical PASS. The Owner must burn and verify the packed image, cold boot from SPI, sync time, confirm the balanced left pane and bold lunar row, then verify the disconnected five-minute scheduler, BLE reconnect, and absence of duplicate or black refreshes.
+Owner completed the physical gate on `2026-07-22`:
+
+- SmartSnippets SPI Burn: PASS.
+- SmartSnippets Verify: PASS.
+- Full power-cycle and cold boot from SPI: PASS.
+- Canonical web and BLE connection: PASS.
+- Firmware `D8A1` and Source ID `D8A00001`: PASS.
+- D2 time sync and immediate render COMPLETE: PASS.
+- Balanced left clock pane and uniformly bold `ÂL dd/MM`: PASS.
+- Right monthly calendar remains correct: PASS.
+- BLE-disconnected five-minute scheduler: PASS.
+- BLE reconnect: PASS.
+- No blank panel, duplicate refresh, or second black refresh: PASS.
 
 Package artifacts remain local under `_incoming` and are not committed.
