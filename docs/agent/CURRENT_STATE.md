@@ -14,17 +14,17 @@ E1A automatic foundation is merged into `main`.
 
 Firmware milestone cuối đã đóng:
 
-- `TASK D8A` device identity and health persistent SPI final is CLOSED / MERGED / PHYSICAL PASS.
-- D8A implementation commit: `bb9ddb67012462c349bb64bf8b57674b802bc2df`.
-- D8A Product Mode fix commit: `f84d94e8b331c2816ed0507ba485be637f60c33b`.
-- D8A package commit: `ea5d7026c5d649b7c45ee342fcee8bc14c667e20`.
-- D8A package merge commit: `c4f1657eae836e9b27d327553caf9d6401cbfea4`.
+- `TASK D9B` balanced flagship layout persistent SPI final is CLOSED / MERGED / PHYSICAL PASS.
+- D9A layout implementation commit: `63936eb8a9e2324fac9447319f5e789e1fdd85f7`.
+- D9A merge commit: `246dab2603e4ff9c407b439dd04da9ef82b007e4`.
+- D9B package commit: `0ff2eb7be98fdb5e63074a5828ca66ef8de44c55`.
+- D9B package merge commit: `66625a6d0cb214e0de5184445d8d25a7833d1650`.
 - Owner SPI Physical PASS date: `2026-07-22`.
 - Final build evidence:
   - Keil `0 errors`, `0 warnings`.
-  - Code `42340`, RO-data `3592`, RW-data `552`, ZI-data `22928`.
-  - Raw BIN `47620` bytes, SHA256 `D0466BA329FFAF81B8278FA25239B8A7ACCF78072E7B688E5F1182438B0CA75F`.
-  - Packed BIN `262144` bytes, SHA256 `CDDB3BFE79B49564119D6936597D0D8CBE70D21E67A4CAF9A3D58DED62125ADE`.
+  - Code `42644`, RO-data `3592`, RW-data `552`, ZI-data `22928`.
+  - Raw BIN `47924` bytes, SHA256 `212911C6C68E8EC2060A63B8ADCE65BD44E055B6822B5B6B236AC694F326F824`.
+  - Packed BIN `262144` bytes, SHA256 `51D90603363B9660CC43686E68E93FCAA9668ECB3985FF1CE292A58DB55DD8B2`.
   - Legacy font symbols absent.
 - Final physical evidence:
   - SmartSnippets SPI Burn/Verify and cold boot from SPI: PASS.
@@ -32,12 +32,13 @@ Firmware milestone cuối đã đóng:
   - Firmware `D8A1` and Source ID `D8A00001`: PASS.
   - Cold-boot `STALE / PRIME / STORE`: PASS.
   - Running `TIME / TIMER / STORE`: PASS.
-  - Visible D7A layout and clock output: PASS.
+  - Balanced left clock pane and uniformly bold `ÂL dd/MM`: PASS.
+  - Right monthly calendar remains correct: PASS.
   - BLE-disconnected five-minute scheduler: PASS.
   - BLE reconnect: PASS.
   - No blank panel, duplicate refresh, or second black refresh: PASS.
-- Package: `D:\EINK\Clock\_incoming\D8A_SPI_FINAL_2026-07-21`.
-- D8A is now the latest closed firmware milestone.
+- Package: `D:\EINK\Clock\_incoming\D9B_SPI_FINAL_2026-07-22`.
+- D9B is now the latest closed firmware milestone.
 
 Product and web milestones:
 
@@ -80,7 +81,7 @@ Product and web milestones:
 Next canonical action:
 
 - No new implementation task is authorized yet.
-- Preserve D8A as the current known-good persistent SPI baseline.
+- Preserve D9B as the current known-good persistent SPI baseline.
 - Wait for Owner to name the next milestone.
 
 ## Historical Project State
