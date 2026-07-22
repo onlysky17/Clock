@@ -55,19 +55,24 @@ Web/layout milestone cuoi da dong:
 
 ## Current Finding
 
-- D9B is the current known-good persistent SPI baseline.
-- Package path: `D:\EINK\Clock\_incoming\D9B_SPI_FINAL_2026-07-22`.
+- D11C is the current known-good persistent SPI baseline.
+- D11B implementation and web profile controls are merged.
+- Owner Burn/Verify, cold boot, both profiles, profile persistence, scheduler, and BLE reconnect are PASS.
+- Package path: `D:\EINK\Clock\_incoming\D11C_SPI_FINAL_2026-07-22`.
+- Packed SHA256: `0A8C78B071FA5F16775F34D3643BE2644EE0274287FA82DFA3D859F113D43197`.
 
 ## Next Canonical Action
 
-No new implementation task is authorized yet.
+`TASK D12A - Clock preference policy design`
 
-- Preserve D9B without firmware, web, protocol, or layout changes.
-- Wait for Owner to name the next milestone.
+- Design 12/24-hour display mode.
+- Design selectable autonomous refresh cadence while keeping five minutes as the safe default.
+- Define persistence, protocol, web controls, migration, and rollback behavior.
+- D12A is design/audit only; firmware implementation follows only after the size and compatibility gate.
 
 ## Guardrails For The Next Task
 
-1. Start from `main`.
+1. Start from `main` and preserve D11C as the rollback baseline.
 2. Preserve the final geometry contract: logical `250 x 122`, controller RAM `122 x 250`, stride `16`, payload `4000` bytes.
 3. Keep the canonical web URL as `https://onlysky17.github.io/Clock/test.html`.
 4. Do not use the old `104 x 212` golden geometry for this physical panel.

@@ -2,7 +2,7 @@
 
 ## Status
 
-`READY FOR OWNER SPI PHYSICAL GATE - NOT YET BURNED`
+`CLOSED / MERGED / SPI PHYSICAL PASS`
 
 ## Lineage
 
@@ -31,6 +31,17 @@
 - Layout: `7050@00000 7051@04000 PAYLOAD@04040 7052@38000`.
 - Package artifacts stay under `_incoming` and are not committed.
 
-## Owner Gate
+## Owner Physical Evidence
 
-Burn/Verify and cold boot must pass before closeout. Validate immediate render, Monthly Calendar, Large Time, persisted profile restore, disconnected five-minute refresh, BLE reconnect, and no duplicate/second-black refresh.
+Owner completed the SPI gate on `2026-07-22`:
+
+- SmartSnippets Burn and Verify: PASS.
+- Full power-cycle and cold boot from SPI: PASS.
+- BLE connection, D2 time sync, immediate render, and COMPLETE: PASS.
+- Monthly Calendar profile: PASS.
+- Large Time profile and final visual balance: PASS.
+- Persisted profile restore after power-cycle: PASS.
+- Disconnected five-minute scheduler and BLE reconnect: PASS.
+- No blank first render, duplicate refresh, or second black refresh: PASS.
+
+D11C is the latest known-good persistent SPI firmware baseline.

@@ -14,6 +14,21 @@ E1A automatic foundation is merged into `main`.
 
 Firmware milestone cuối đã đóng:
 
+- `TASK D11C` clock profiles persistent SPI final is CLOSED / MERGED / PHYSICAL PASS.
+- D11B implementation commit: `a355d5f398e9acd9ca631dd78e69fbe930b6e58d`.
+- D11B merge commit: `63d6063a33d7b4905a0114fbaa7f1aa8909001ed`.
+- D11C package commit: `13cd620106dec5d3abd63897789f46bc89dfa637`.
+- D11C package merge commit: `5fe026ef5203e53c8264171933b63359b7aa8c48`.
+- Owner SPI Physical PASS date: `2026-07-22`.
+- Build: Code `43100`, RO `3592`, RW `552`, ZI `22932`; raw `48380` bytes; Keil 0 errors/0 warnings.
+- Raw SHA256: `6ACDE0EED8728C8F16B0D92F7DB14502B36069459D5D99B8FAEE5F93B4EA22CE`.
+- Packed SHA256: `0A8C78B071FA5F16775F34D3643BE2644EE0274287FA82DFA3D859F113D43197`.
+- Burn/Verify, cold boot, immediate render, both clock profiles, profile restore, five-minute scheduler, BLE reconnect, and no duplicate/second-black refresh: PASS.
+- Package: `D:\EINK\Clock\_incoming\D11C_SPI_FINAL_2026-07-22`.
+- D11C supersedes D9B as the latest known-good persistent SPI baseline.
+
+Historical firmware milestone:
+
 - `TASK D9B` balanced flagship layout persistent SPI final is CLOSED / MERGED / PHYSICAL PASS.
 - D9A layout implementation commit: `63936eb8a9e2324fac9447319f5e789e1fdd85f7`.
 - D9A merge commit: `246dab2603e4ff9c407b439dd04da9ef82b007e4`.
@@ -80,9 +95,9 @@ Product and web milestones:
 
 Next canonical action:
 
-- No new implementation task is authorized yet.
-- Preserve D9B as the current known-good persistent SPI baseline.
-- Wait for Owner to name the next milestone.
+- `TASK D12A - Clock preference policy design`.
+- Define 12/24-hour mode and selectable autonomous refresh cadence without changing runtime yet.
+- Preserve D11C as the rollback baseline.
 
 ## Historical Project State
 
