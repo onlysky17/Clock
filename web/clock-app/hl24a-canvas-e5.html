@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TASK D8C - Live Device Health</title>
+<title>TASK D10B - Battery Telemetry</title>
 <style>
 :root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;--bg:#07101b;--card:#111c2c;--line:#2a3d59;--text:#f4f8ff;--muted:#9fb1c8;--ok:#45d99c;--warn:#ffd166;--bad:#ff6b86}
 *{box-sizing:border-box}body{margin:0;background:linear-gradient(#050a12,#101a2a);color:var(--text)}main{max-width:1040px;margin:auto;padding:20px}
@@ -13,6 +13,7 @@
 .productHeader h1{margin:.2rem 0 .35rem;font-size:clamp(1.55rem,4vw,2.25rem);line-height:1.1}
 .productHeader p{max-width:680px;margin:.25rem 0 0}.productStatus{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:9px;margin-top:12px}
 .identityCard{display:grid;grid-template-columns:minmax(0,1fr);gap:9px;padding:12px;border-color:#315b80;background:#0b1726}.identityTitle{font-weight:900;letter-spacing:.02em}.identityGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}.identityNote{margin:0;color:#b8c7db;font-size:.86rem}.compatibilityState{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 12px;align-items:center;padding:11px;border:1px solid #36516f;border-radius:10px;background:#101e30}.compatibilityState span{color:var(--muted);font-size:.82rem}.compatibilityState strong{font-size:1.05rem}.compatibilityState small{grid-column:1/-1}
+.batteryValue{color:#8be8bd}
 .heroAction{font-size:1rem;min-width:160px}.presetRow button{min-width:160px}
 .advanced{margin:18px 0;border:1px solid var(--line);border-radius:12px;background:rgba(11,20,33,.96);overflow:hidden}
 .advanced>summary{cursor:pointer;list-style:none;padding:15px 16px;font-weight:850;color:#dbeafe}.advanced>summary::-webkit-details-marker{display:none}
@@ -166,15 +167,17 @@ const EXPECTED_CHUNKS=286;
 const SERVICE='18424398-7cbc-11e9-8f9e-2a86e4085a59';
 const WRITE='2d86686a-53dc-25b3-0c4a-f0e10c8dee20';
 const NOTIFY='15005991-b131-3396-014c-664c9867b917';
+const BATTERY_SERVICE=0xFF00;
+const BATTERY_CHARACTERISTIC=0xFF02;
 const D2_STALE_PRESENT_FLAG=0x80;
 const D2_STALE_WARNING='Thiết bị đang giữ giờ cũ. Hãy đồng bộ giờ hiện tại để tiếp tục chạy đồng hồ.';
 const EINK_TEST_IDENTITY={
-  webBuild:'D8C-HEALTH-20260722',
+  webBuild:'D10B-BATTERY-20260722',
   expectedFirmware:'D8A00001',
   expectedRuntime:'D8A1',
   expectedSourceId:'D8A00001',
   expectedBin:'BUILD-SPECIFIC',
-  label:'D8C LIVE DEVICE HEALTH'
+  label:'D10B DEVICE HEALTH + BATTERY'
 };
 window.EINK_TEST_IDENTITY=EINK_TEST_IDENTITY;
 
@@ -197,6 +200,7 @@ let deviceIdentity=null;
 let identityProbePending=false;
 let identityCompatibility='disconnected';
 let identityRefreshPending=false;
+let batteryService=null,batteryChar=null,batteryRunning=false;
 
 function setupProductMode(){
   const main=document.querySelector('main');
@@ -224,7 +228,7 @@ function setupProductMode(){
   identityCard.dataset.expectedRuntime=EINK_TEST_IDENTITY.expectedRuntime;
   identityCard.dataset.expectedSourceId=EINK_TEST_IDENTITY.expectedSourceId;
   identityCard.dataset.expectedBin=EINK_TEST_IDENTITY.expectedBin;
-  identityCard.innerHTML=`<div class="identityTitle">${EINK_TEST_IDENTITY.label}</div><div class="compatibilityState" role="status" aria-live="polite"><span>Tương thích thiết bị</span><strong id="identityCompatibility" class="warn">Chưa kết nối</strong><small id="identityCompatibilityDetail">Kết nối để kiểm tra firmware thực tế.</small></div><div class="identityGrid"><div class="stat"><span>Firmware yêu cầu</span><strong>${EINK_TEST_IDENTITY.expectedRuntime}</strong></div><div class="stat"><span>Firmware thực tế</span><strong id="actualFirmware">Chưa đọc</strong></div><div class="stat"><span>Source ID yêu cầu</span><strong>${EINK_TEST_IDENTITY.expectedSourceId}</strong></div><div class="stat"><span>Source ID thực tế</span><strong id="actualSourceId">-</strong></div><div class="stat"><span>Health</span><strong id="actualHealth">-</strong></div><div class="stat"><span>Health cập nhật</span><strong id="identityUpdatedAt">Chưa đọc</strong></div><div class="stat"><span>Web build</span><strong>${EINK_TEST_IDENTITY.webBuild}</strong></div></div><div class="row" id="identityActionRow"></div><p class="identityNote">Health tự đọc lại sau đồng bộ giờ và render hoàn tất. Web vẫn chỉ mở thao tác chính khi identity khớp baseline.</p>`;
+  identityCard.innerHTML=`<div class="identityTitle">${EINK_TEST_IDENTITY.label}</div><div class="compatibilityState" role="status" aria-live="polite"><span>Tương thích thiết bị</span><strong id="identityCompatibility" class="warn">Chưa kết nối</strong><small id="identityCompatibilityDetail">Kết nối để kiểm tra firmware thực tế.</small></div><div class="identityGrid"><div class="stat"><span>Firmware yêu cầu</span><strong>${EINK_TEST_IDENTITY.expectedRuntime}</strong></div><div class="stat"><span>Firmware thực tế</span><strong id="actualFirmware">Chưa đọc</strong></div><div class="stat"><span>Source ID yêu cầu</span><strong>${EINK_TEST_IDENTITY.expectedSourceId}</strong></div><div class="stat"><span>Source ID thực tế</span><strong id="actualSourceId">-</strong></div><div class="stat"><span>Health</span><strong id="actualHealth">-</strong></div><div class="stat"><span>Health cập nhật</span><strong id="identityUpdatedAt">Chưa đọc</strong></div><div class="stat"><span>Điện áp pin</span><strong id="batteryVoltage" class="batteryValue" aria-live="polite">Chưa đọc</strong></div><div class="stat"><span>Mức pin</span><strong id="batteryLevel">Ước tính -</strong></div><div class="stat"><span>Pin cập nhật</span><strong id="batteryUpdatedAt">Chưa đọc</strong></div><div class="stat"><span>Web build</span><strong>${EINK_TEST_IDENTITY.webBuild}</strong></div></div><div class="row" id="identityActionRow"><button id="batteryRefresh" type="button">Đọc pin</button></div><p class="identityNote">Điện áp được đọc trực tiếp từ thiết bị. Phần trăm chỉ là ước tính theo đường cong CR2032.</p>`;
 
   const statusCard=document.createElement('section');
   statusCard.className='card';
@@ -881,7 +885,7 @@ function addSimpleText(){
 function controls(){
   const connected=!!server?.connected;
   const e5Complete=e5Success && (browserCrc === latestFwCrc);
-  const locked=busy||e6Running||oneTapRunning||d2Running;
+  const locked=busy||e6Running||oneTapRunning||d2Running||batteryRunning;
   const identityBlocked=connected&&identityCompatibility!=='compatible';
   $('connect').disabled=connected||locked;
   $('disconnect').disabled=!connected||locked;
@@ -892,6 +896,7 @@ function controls(){
   $('d2GetStatus').disabled=!connected||locked;
   $('d2RenderClock').disabled=!connected||locked||d2StalePresent||identityBlocked;
   $('d2GetIdentity').disabled=!connected||locked;
+  $('batteryRefresh').disabled=!connected||locked;
   $('d2StaleRecover').disabled=!connected||locked||!d2StalePresent||identityBlocked;
   $('refresh').disabled=!connected||!token||!e5Complete||locked;
 
@@ -993,6 +998,9 @@ function resetD2UiDisconnected(){
   identityProbePending=false;
   identityCompatibility='disconnected';
   identityRefreshPending=false;
+  batteryService=null;
+  batteryChar=null;
+  batteryRunning=false;
   setD2Status('DISCONNECTED','warn');
   $('d2Result').textContent='-';
   $('d2State').textContent='-';
@@ -1007,6 +1015,9 @@ function resetD2UiDisconnected(){
   $('actualSourceId').textContent='-';
   $('actualHealth').textContent='-';
   $('identityUpdatedAt').textContent='Chưa đọc';
+  $('batteryVoltage').textContent='Chưa đọc';
+  $('batteryLevel').textContent='Ước tính -';
+  $('batteryUpdatedAt').textContent='Chưa đọc';
   renderDeviceCompatibility(null,false);
   renderD2StaleRecovery();
 }
@@ -1091,6 +1102,52 @@ function buildD2RenderClockPacket(){
 
 function buildD2GetIdentityPacket(){
   return Uint8Array.of(0xD2,0x03);
+}
+
+function estimateBatteryPercent(millivolts){
+  const sample=Math.round((millivolts*128)/225);
+  if(sample>1705)return 100;
+  if(sample>1584)return Math.round(28+((sample-1584)*72)/(1705-1584));
+  if(sample>1360)return Math.round(4+((sample-1360)*24)/(1584-1360));
+  if(sample>1136)return Math.round(((sample-1136)*4)/(1360-1136));
+  return 0;
+}
+
+function renderBatteryTelemetry(millivolts){
+  const percent=estimateBatteryPercent(millivolts);
+  $('batteryVoltage').textContent=`${(millivolts/1000).toFixed(2)} V`;
+  $('batteryLevel').textContent=`Ước tính ${percent}%`;
+  $('batteryUpdatedAt').textContent=new Date().toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  document.documentElement.dataset.einkBatteryMillivolts=String(millivolts);
+  return percent;
+}
+
+async function refreshBatteryTelemetry(){
+  if(batteryRunning)return;
+  if(!server?.connected)throw Error('BLE chưa kết nối.');
+  batteryRunning=true;
+  controls();
+  $('batteryVoltage').textContent='Đang đọc';
+  try{
+    batteryService=batteryService||await server.getPrimaryService(BATTERY_SERVICE);
+    batteryChar=batteryChar||await batteryService.getCharacteristic(BATTERY_CHARACTERISTIC);
+    const value=await batteryChar.readValue();
+    if(value.byteLength!==2)throw Error(`Battery length ${value.byteLength}, expected 2`);
+    const millivolts=value.getUint16(0,true);
+    if(millivolts<1000||millivolts>4000)throw Error(`Battery value out of range: ${millivolts} mV`);
+    const percent=renderBatteryTelemetry(millivolts);
+    log(`Battery ${millivolts} mV, estimated ${percent}%`,'BATTERY');
+  }catch(error){
+    batteryService=null;
+    batteryChar=null;
+    $('batteryVoltage').textContent='Không hỗ trợ';
+    $('batteryLevel').textContent='Ước tính -';
+    $('batteryUpdatedAt').textContent='Không đọc được';
+    log(`Battery unavailable: ${error.message}`,'BATTERY');
+  }finally{
+    batteryRunning=false;
+    controls();
+  }
 }
 
 function parseD2Status(bytes){
@@ -1252,7 +1309,7 @@ function onNotify(event){
 async function connect(){
   device=await navigator.bluetooth.requestDevice({
     filters:[{namePrefix:'EINK'},{namePrefix:'HINK'}],
-    optionalServices:[SERVICE]
+    optionalServices:[SERVICE,BATTERY_SERVICE]
   });
   device.addEventListener('gattserverdisconnected',()=>{
     server=null;
@@ -1283,6 +1340,7 @@ async function connect(){
     renderDeviceCompatibility({result:0x01,firmware:'----',sourceId:0},true);
     log(`D2 identity unavailable: ${error.message}`,'D2');
   }
+  await refreshBatteryTelemetry();
 }
 
 async function openE4(){
@@ -1735,6 +1793,7 @@ $('d2SetTime').onclick=()=>runD2Flow(d2SetCurrentTime);
 $('d2GetStatus').onclick=()=>runD2Flow(d2GetTimeStatus);
 $('d2RenderClock').onclick=()=>runD2Flow(d2RenderClockFromDevice);
 $('d2GetIdentity').onclick=()=>runD2Flow(d2GetDeviceIdentity);
+$('batteryRefresh').onclick=refreshBatteryTelemetry;
 $('d2StaleRecover').onclick=()=>runD2Flow(d2RecoverStaleTime);
 $('autoSync').onchange=toggleAutoSync;
 $('clearLog').onclick=()=>{$('log').value=''};
@@ -1745,7 +1804,7 @@ resetD2UiDisconnected();
 controls();
 markLayoutHealth();
 window.addEventListener('resize',markLayoutHealth);
-log('TASK D8C ready. Device health refreshes after successful time sync and render completion.');
+log('TASK D10B ready. Battery voltage is read on demand from FF00/FF02.');
 </script>
 </body>
 </html>
