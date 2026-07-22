@@ -9,11 +9,12 @@ E1A automatic foundation is merged into `main`.
 
 Firmware milestone cuoi da dong:
 
-- `TASK D7B FIX5` flagship layout persistent SPI final is CLOSED, MERGED, and PHYSICAL PASS.
-- D7B FIX5 implementation commit: `e9a32950a7093ff31d0a06720fb74d9f9c5cff82`.
-- D7B package merge commit: `a9396797d3a7300093264722feed0b2578960b21`.
-- Final packed SHA256: `048D916521B6B0A54D2192409340D1D2EB270C8A72CD98147C66ADE9928843FF`.
-- SPI Burn/Verify, cold boot, D2 sync, FIX5 first-boot redraw, five-minute scheduler, and BLE reconnect: PASS.
+- `TASK D8A` device identity and health persistent SPI final is CLOSED, MERGED, and PHYSICAL PASS.
+- D8A implementation commit: `bb9ddb67012462c349bb64bf8b57674b802bc2df`.
+- D8A Product Mode fix commit: `f84d94e8b331c2816ed0507ba485be637f60c33b`.
+- D8A package merge commit: `c4f1657eae836e9b27d327553caf9d6401cbfea4`.
+- Final packed SHA256: `CDDB3BFE79B49564119D6936597D0D8CBE70D21E67A4CAF9A3D58DED62125ADE`.
+- SPI Burn/Verify, cold boot, D8A identity, D2 sync/render, five-minute scheduler, and BLE reconnect: PASS.
 - No blank panel, duplicate refresh, or second black refresh.
 
 Historical D7A lineage:
@@ -54,14 +55,14 @@ Web/layout milestone cuoi da dong:
 
 ## Current Finding
 
-- D7B FIX5 is the current known-good persistent SPI baseline.
-- Package path: `D:\EINK\Clock\_incoming\D7B_FIX5_SPI_FINAL_2026-07-21`.
+- D8A is the current known-good persistent SPI baseline.
+- Package path: `D:\EINK\Clock\_incoming\D8A_SPI_FINAL_2026-07-21`.
 
 ## Next Canonical Action
 
 No new implementation task is authorized yet.
 
-- Preserve D7B FIX5 without firmware, web, protocol, or layout changes.
+- Preserve D8A without firmware, web, protocol, or layout changes.
 - Wait for Owner to name the next milestone.
 
 ## Guardrails For The Next Task
