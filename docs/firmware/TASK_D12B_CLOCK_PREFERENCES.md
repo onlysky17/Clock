@@ -2,7 +2,7 @@
 
 ## Status
 
-`IMPLEMENTED - AUTOMATED VALIDATION PENDING PHYSICAL GATE`
+`CLOSED - MERGED - OWNER PHYSICAL PASS`
 
 D12B implements the D12A policy without changing the framebuffer geometry, EPD worker, BLE service, or existing D2/E5/E6 command IDs.
 
@@ -40,6 +40,16 @@ Old or invalid `FF` fields default independently to 24-hour and five-minute beha
 - Logical `250 x 122`, RAM `122 x 250`, stride `16`, payload `4000` bytes remain fixed.
 - D11C remains the rollback baseline until Owner physical validation passes.
 - Physical gate must verify 12-hour AM/PM in both profiles, 1/5/10-minute cadence, persistence after reboot, immediate render, BLE reconnect, and no duplicate or second black refresh.
+
+## Owner Physical Result
+
+- PASS date: `2026-07-22`.
+- Implementation commit: `6a69ee2b24a8c0f77d59e490a19db5dbef49d4e2`.
+- Firmware merge commit: `1bbf42d22c108556ac9fbea4cd7558d895364a77`.
+- 24-hour and 12-hour display, AM/PM in both profiles, and cadence 1/5/10 minutes: PASS.
+- Preference persistence, immediate render, autonomous refresh, and BLE reconnect: PASS.
+- No blank first render, same-minute duplicate, or second black refresh.
+- D12B is ready for D12C SPI persistent-final packaging; D11C remains the rollback baseline until that gate passes.
 
 ## Validation
 

@@ -55,25 +55,24 @@ Web/layout milestone cuoi da dong:
 
 ## Current Finding
 
-- D11C is the current known-good persistent SPI baseline.
-- D11B implementation and web profile controls are merged.
-- Owner Burn/Verify, cold boot, both profiles, profile persistence, scheduler, and BLE reconnect are PASS.
-- Package path: `D:\EINK\Clock\_incoming\D11C_SPI_FINAL_2026-07-22`.
-- Packed SHA256: `0A8C78B071FA5F16775F34D3643BE2644EE0274287FA82DFA3D859F113D43197`.
+- D12B implementation and web controls are merged at main commit `1bbf42d22c108556ac9fbea4cd7558d895364a77`.
+- Owner physical validation of 24/12-hour modes, both profiles, AM/PM, 1/5/10-minute cadence, persistence, immediate render, scheduler, and reconnect is PASS.
+- D12B raw BIN is `48848` bytes with SHA256 `C066365A035F8B4AA3C5F1DADB40BF7A16DEB5E693B0AE992A5148B5CBB188A3`.
+- D11C remains the current known-good persistent SPI rollback baseline until D12C.
 
 ## Next Canonical Action
 
-`TASK D12B - IMPLEMENT CLOCK PREFERENCES`
+`TASK D12C - CLOCK PREFERENCES SPI PERSISTENT FINAL`
 
-- Add D2 `06/07/86` preference commands/status.
-- Persist hour mode in byte `17` and refresh cadence in byte `18` of the existing CRC-covered journal.
-- Add 24/12-hour rendering and selectable 1/5/10-minute cadence, with 24-hour/five-minute defaults.
-- Add Product Mode controls and preserve the profile BUSY retry guard.
-- Keep D11C as the rollback baseline and require raw BIN at most `50000` bytes.
+- Fresh rebuild merged D12B from canonical source.
+- Pack a 256KB SPI image from the verified golden base without changing firmware source.
+- Verify raw/AXF/packed hashes, package manifest, and package smoke.
+- Owner performs SPI Burn/Verify, cold boot, restored clock preferences, both profiles, scheduler, and BLE reconnect gate.
+- D11C remains the rollback package until D12C physical PASS.
 
 ## Guardrails For The Next Task
 
-1. Start from `main` and preserve D11C as the rollback baseline.
+1. Start from `main` commit `1bbf42d22c108556ac9fbea4cd7558d895364a77` and preserve D11C as the rollback baseline.
 2. Preserve the final geometry contract: logical `250 x 122`, controller RAM `122 x 250`, stride `16`, payload `4000` bytes.
 3. Keep the canonical web URL as `https://onlysky17.github.io/Clock/test.html`.
 4. Do not use the old `104 x 212` golden geometry for this physical panel.
