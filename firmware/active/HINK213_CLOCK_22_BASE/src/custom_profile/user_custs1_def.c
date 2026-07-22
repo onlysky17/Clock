@@ -111,7 +111,7 @@ const struct attm_desc_128 custs1_att_db[CUSTS1_IDX_NB] =
     [SVC1_IDX_ADC_VAL_1_CHAR]          = {(uint8_t*)&att_decl_char, ATT_UUID_16_LEN, PERM(RD, ENABLE), 0, 0, NULL},
     // ADC Value 1 Characteristic Value
     [SVC1_IDX_ADC_VAL_1_VAL]           = {(uint8_t*)&svc1_adc_val1, ATT_UUID_16_LEN, PERM(RD, ENABLE),
-											DEF_SVC1_ADC_VAL_1_CHAR_LEN, 0, 0},
+											PERM(RI, ENABLE) | DEF_SVC1_ADC_VAL_1_CHAR_LEN, 0, 0},
 
     // Long Value Characteristic Declaration
     [SVC1_IDX_LONG_VALUE_CHAR]         = {(uint8_t*)&att_decl_char, ATT_UUID_16_LEN, PERM(RD, ENABLE), 0, 0, NULL},

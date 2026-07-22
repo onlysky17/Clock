@@ -269,7 +269,9 @@ extern int sf_wait(void);
  */
 int adc1_update(void)
 {
-    return 0;
+    adc_offset_calibrate(ADC_INPUT_MODE_SINGLE_ENDED);
+    adcval = (int)adc_get_vbat_sample(false);
+    return (adcval * 225) >> 7;
 }
 
 
