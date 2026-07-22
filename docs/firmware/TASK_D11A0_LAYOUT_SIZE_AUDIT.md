@@ -67,9 +67,11 @@ Exact current symbols:
 | `app_clock_timer_stop` | 20 | Used when the dedicated D2 minute timer takes ownership |
 | `font_bt` | 20 RO | Used only by the legacy Bluetooth icon path folded into `clock_draw` |
 
-The gross mapped opportunity is `1152` bytes. Allowing up to `352` bytes for small compatibility stubs and ownership cleanup gives a conservative recovery target of at least `800` raw bytes.
+The gross mapped opportunity appeared to be `1152` bytes, but map reachability alone did not prove runtime independence.
 
-This recovery is not implemented in D11A-0. D11A implementation must first prove that advertising restart, cold-boot stale behavior, D2 SET/GET, D2 immediate render, five-minute scheduling, E5/E6, and disconnect behavior remain independent of the legacy visual timer. If that proof fails, the legacy path stays unchanged.
+Physical validation on `2026-07-22` rejected this recovery candidate. A SysRAM build that compile-disabled `clock_draw` reduced raw BIN from `48012` to `47500` bytes, but D2 reported COMPLETE while the panel remained white. The expected prime redraw after about 20 seconds also disappeared; only the later five-minute scheduler refresh made the layout visible. The change was rolled back without commit or push.
+
+Conclusion: the legacy visual path still participates in first-refresh priming. `clock_draw`, the legacy clock timer, and related EPD ownership must remain unchanged throughout D11. This candidate is **REJECTED BY PHYSICAL TEST** and must not be retried as a size trim.
 
 ## Additional Dead-Code Observation
 
@@ -103,10 +105,10 @@ Initial face set:
 - RAM increase for the selector: at most `4` bytes.
 - No second framebuffer or dynamic allocation.
 - No new font or lunar table.
-- New layout code target: at most `1200` raw bytes per face before recovery.
-- Conservative legacy recovery target: at least `800` bytes before the second new face.
-- D11 raw target after two added faces: at most `56000` bytes.
-- Permanent reserve below the packer limit: at least `9000` bytes.
+- New layout code target: at most `1200` raw bytes per face without legacy recovery.
+- D11 raw target after two added faces and profile control: at most `52000` bytes.
+- Permanent reserve below the packer limit: at least `13000` bytes.
+- No first-refresh, prime, legacy clock timer, or EPD lifecycle trim is allowed.
 
 ## Next Canonical Action
 
