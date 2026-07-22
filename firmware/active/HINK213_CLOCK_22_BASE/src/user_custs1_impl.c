@@ -1236,17 +1236,48 @@ static void hink_d7a_draw_acute(uint8_t x, uint8_t y)
 
 static void hink_d7a_draw_circumflex(uint8_t x, uint8_t y)
 {
-	hink_d7a_pixel(x + 1U, y + 2U, BLACK);
-	hink_d7a_pixel(x + 2U, y + 1U, BLACK);
-	hink_d7a_pixel(x + 3U, y, BLACK);
-	hink_d7a_pixel(x + 4U, y + 1U, BLACK);
-	hink_d7a_pixel(x + 5U, y + 2U, BLACK);
+	hink_d7a_box(x + 1U, y + 2U, x + 2U, y + 3U, BLACK);
+	hink_d7a_box(x + 2U, y + 1U, x + 3U, y + 2U, BLACK);
+	hink_d7a_box(x + 3U, y, x + 4U, y + 1U, BLACK);
+	hink_d7a_box(x + 4U, y + 1U, x + 5U, y + 2U, BLACK);
+	hink_d7a_box(x + 5U, y + 2U, x + 6U, y + 3U, BLACK);
 }
 
 static void hink_d7a_draw_text_al(uint8_t x, uint8_t y, char *text)
 {
-	draw_text(x, y, text, BLACK);
+	(void)text;
+	/* Medium bitmap A/L keeps the lunar row visually equal to the clock. */
+	hink_d7a_box(x, y + 2U, x + 1U, y + 11U, BLACK);
+	hink_d7a_box(x + 5U, y + 2U, x + 6U, y + 11U, BLACK);
+	hink_d7a_box(x + 2U, y, x + 4U, y + 1U, BLACK);
+	hink_d7a_box(x + 2U, y + 5U, x + 4U, y + 6U, BLACK);
+	hink_d7a_box(x + 10U, y, x + 11U, y + 11U, BLACK);
+	hink_d7a_box(x + 10U, y + 10U, x + 16U, y + 11U, BLACK);
 	hink_d7a_draw_circumflex(x, (uint8_t)(y - 4U));
+}
+
+static void hink_d9a_draw_lunar(uint8_t x, uint8_t y, uint8_t valid,
+                                uint8_t lm, uint8_t ld)
+{
+	hink_d7a_draw_text_al(x, y, (char *)0);
+	if (valid)
+	{
+		hink_d7a_digit((uint8_t)(x + 24U), y, (uint8_t)(ld / 10U), 8U, 12U, 2U, BLACK);
+		hink_d7a_digit((uint8_t)(x + 33U), y, (uint8_t)(ld % 10U), 8U, 12U, 2U, BLACK);
+		hink_d7a_digit((uint8_t)(x + 48U), y, (uint8_t)(lm / 10U), 8U, 12U, 2U, BLACK);
+		hink_d7a_digit((uint8_t)(x + 57U), y, (uint8_t)(lm % 10U), 8U, 12U, 2U, BLACK);
+	}
+	else
+	{
+		hink_d7a_box(x + 24U, y + 5U, x + 30U, y + 6U, BLACK);
+		hink_d7a_box(x + 33U, y + 5U, x + 39U, y + 6U, BLACK);
+		hink_d7a_box(x + 48U, y + 5U, x + 54U, y + 6U, BLACK);
+		hink_d7a_box(x + 57U, y + 5U, x + 63U, y + 6U, BLACK);
+	}
+	hink_d7a_box(x + 44U, y + 1U, x + 45U, y + 2U, BLACK);
+	hink_d7a_box(x + 43U, y + 3U, x + 44U, y + 5U, BLACK);
+	hink_d7a_box(x + 42U, y + 6U, x + 43U, y + 8U, BLACK);
+	hink_d7a_box(x + 41U, y + 9U, x + 42U, y + 11U, BLACK);
 }
 
 static void hink_bitmap_draw_clock(uint8_t h, uint8_t m, uint16_t sy, uint8_t sm,
@@ -1254,7 +1285,6 @@ static void hink_bitmap_draw_clock(uint8_t h, uint8_t m, uint16_t sy, uint8_t sm
                                    uint8_t lm, uint8_t ld)
 {
 	char date_buf[16];
-	char lunar_buf[10];
 	char month_buf[14];
 	char weekday_buf[3];
 	uint8_t mdays;
@@ -1276,25 +1306,6 @@ static void hink_bitmap_draw_clock(uint8_t h, uint8_t m, uint16_t sy, uint8_t sm
 	hink_put_4(&date_buf[9], sy);
 	date_buf[13] = 0;
 
-	lunar_buf[0] = 'A';
-	lunar_buf[1] = 'L';
-	lunar_buf[2] = ' ';
-	if (lunar_valid)
-	{
-		hink_put_2(&lunar_buf[3], ld);
-		lunar_buf[5] = '/';
-		hink_put_2(&lunar_buf[6], lm);
-	}
-	else
-	{
-		lunar_buf[3] = '-';
-		lunar_buf[4] = '-';
-		lunar_buf[5] = '/';
-		lunar_buf[6] = '-';
-		lunar_buf[7] = '-';
-	}
-	lunar_buf[8] = 0;
-
 	month_buf[0] = 'T';
 	month_buf[1] = 'H';
 	month_buf[2] = 'A';
@@ -1307,8 +1318,8 @@ static void hink_bitmap_draw_clock(uint8_t h, uint8_t m, uint16_t sy, uint8_t sm
 	month_buf[13] = 0;
 
 	draw_text(4, 8, date_buf, BLACK);
-	hink_d7a_draw_hhmm(6, 32, h, m, BLACK);
-	hink_d7a_draw_text_al(4, 104, lunar_buf);
+	hink_d7a_draw_hhmm(10, 38, h, m, BLACK);
+	hink_d9a_draw_lunar(11, 88, lunar_valid, lm, ld);
 	hink_d7a_box(101, 6, 102, 116, BLACK);
 
 	draw_text(124, 6, month_buf, BLACK);
