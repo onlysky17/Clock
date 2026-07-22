@@ -55,24 +55,23 @@ Web/layout milestone cuoi da dong:
 
 ## Current Finding
 
-- D12B implementation and web controls are merged at main commit `1bbf42d22c108556ac9fbea4cd7558d895364a77`.
-- Owner physical validation of 24/12-hour modes, both profiles, AM/PM, 1/5/10-minute cadence, persistence, immediate render, scheduler, and reconnect is PASS.
-- D12B raw BIN is `48848` bytes with SHA256 `C066365A035F8B4AA3C5F1DADB40BF7A16DEB5E693B0AE992A5148B5CBB188A3`.
-- D11C remains the current known-good persistent SPI rollback baseline until D12C.
+- D12C package is merged at main commit `1107f80f822dac7fdcac73383443463997d3a625`.
+- Owner SPI Burn/Verify, cold boot, 24/12-hour modes, both profiles, AM/PM, 1/5/10-minute cadence, preference restore, scheduler, and reconnect are PASS.
+- Final packed SHA256: `9519751A5875F58DE16EC0F0273AABB1F1F6C50A6941E65017DDCAE587412251`.
+- D12C is the current known-good persistent SPI baseline.
 
 ## Next Canonical Action
 
-`TASK D12C - CLOCK PREFERENCES SPI PERSISTENT FINAL`
+`TASK D13A - WEATHER AND DAILY AGENDA PROTOCOL DESIGN`
 
-- Fresh rebuild merged D12B from canonical source.
-- Pack a 256KB SPI image from the verified golden base without changing firmware source.
-- Verify raw/AXF/packed hashes, package manifest, and package smoke.
-- Owner performs SPI Burn/Verify, cold boot, restored clock preferences, both profiles, scheduler, and BLE reconnect gate.
-- D11C remains the rollback package until D12C physical PASS.
+- Design a bounded web-to-device payload for daily weather summary and agenda entries.
+- Define exact field sizes, character policy, freshness/expiry, persistence, malformed-input behavior, and reconnect behavior.
+- Keep D13A design-only: no firmware/web implementation, no new font, no framebuffer, and no EPD change.
+- Audit opcode space, SPI journal capacity, firmware size budget, and layout space before D13B implementation.
 
 ## Guardrails For The Next Task
 
-1. Start from `main` commit `1bbf42d22c108556ac9fbea4cd7558d895364a77` and preserve D11C as the rollback baseline.
+1. Start from `main` after D12C closeout and preserve D12C as the rollback baseline.
 2. Preserve the final geometry contract: logical `250 x 122`, controller RAM `122 x 250`, stride `16`, payload `4000` bytes.
 3. Keep the canonical web URL as `https://onlysky17.github.io/Clock/test.html`.
 4. Do not use the old `104 x 212` golden geometry for this physical panel.
