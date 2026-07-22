@@ -11,6 +11,20 @@
   - `docs/agent/AUTOMATION_MODE.md`
 - Canonical web URL: `https://onlysky17.github.io/Clock/test.html`
 
+D12B current implementation milestone:
+- `TASK D12B` clock display preferences is CLOSED / MERGED / OWNER PHYSICAL PASS.
+- Implementation commit: `6a69ee2b24a8c0f77d59e490a19db5dbef49d4e2`.
+- Web publish merge commit: `1ea9364`.
+- Firmware merge commit: `1bbf42d22c108556ac9fbea4cd7558d895364a77`.
+- Owner physical PASS date: `2026-07-22`.
+- D2 `06/07/86`, 24/12-hour display, AM/PM in both profiles, and 1/5/10-minute cadence: PASS.
+- Preference persistence in journal bytes `17..18`, immediate render, autonomous scheduler, BLE reconnect, and no duplicate/second-black refresh: PASS.
+- Build: Code `43568`, RO-data `3592`, RW-data `552`, ZI-data `22936`; raw BIN `48848` bytes.
+- Raw SHA256: `C066365A035F8B4AA3C5F1DADB40BF7A16DEB5E693B0AE992A5148B5CBB188A3`.
+- Keil `0 errors`, `0 warnings`; legacy font symbols absent.
+- D11C remains the latest known-good persistent SPI rollback baseline until D12C Burn/Verify PASS.
+- Next action: `TASK D12C - CLOCK PREFERENCES SPI PERSISTENT FINAL`.
+
 Firmware milestone cuối đã đóng:
 - `TASK D11C` clock profiles persistent SPI final is CLOSED / MERGED / PHYSICAL PASS.
 - D11B implementation commit: `a355d5f398e9acd9ca631dd78e69fbe930b6e58d`.

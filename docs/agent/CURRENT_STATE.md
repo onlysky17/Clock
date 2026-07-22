@@ -12,6 +12,20 @@ E1A automatic foundation is merged into `main`.
   - `docs/agent/AUTOMATION_MODE.md`
 - Canonical web URL: `https://onlysky17.github.io/Clock/test.html`
 
+Current implementation milestone:
+
+- `TASK D12B` clock display preferences is CLOSED / MERGED / OWNER PHYSICAL PASS.
+- Implementation commit: `6a69ee2b24a8c0f77d59e490a19db5dbef49d4e2`.
+- Web controls merge commit: `1ea9364`.
+- Firmware merge commit: `1bbf42d22c108556ac9fbea4cd7558d895364a77`.
+- Owner physical PASS date: `2026-07-22`.
+- 24/12-hour display and AM/PM in Monthly Calendar and Large Time profiles: PASS.
+- Cadence 1/5/10 minutes, default five minutes, persistence across reset, immediate render, disconnected scheduling, and BLE reconnect: PASS.
+- No blank first render, duplicate refresh, or second black refresh.
+- Build: Code `43568`, RO `3592`, RW `552`, ZI `22936`; raw `48848` bytes; Keil 0 errors/0 warnings.
+- Raw SHA256: `C066365A035F8B4AA3C5F1DADB40BF7A16DEB5E693B0AE992A5148B5CBB188A3`.
+- D11C remains the persistent SPI rollback baseline until D12C completes.
+
 Firmware milestone cuối đã đóng:
 
 - `TASK D11C` clock profiles persistent SPI final is CLOSED / MERGED / PHYSICAL PASS.
