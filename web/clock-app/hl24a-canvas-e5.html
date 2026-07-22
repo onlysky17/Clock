@@ -919,7 +919,8 @@ function addSimpleText(){
 function controls(){
   const connected=!!server?.connected;
   const e5Complete=e5Success && (browserCrc === latestFwCrc);
-  const locked=busy||e6Running||oneTapRunning||d2Running||batteryRunning;
+  const renderInProgress=productD2RenderState===0x01||productD2RenderState===0x02;
+  const locked=busy||e6Running||oneTapRunning||d2Running||batteryRunning||renderInProgress;
   const identityBlocked=connected&&identityCompatibility!=='compatible';
   $('connect').disabled=connected||locked;
   $('disconnect').disabled=!connected||locked;
@@ -1253,6 +1254,8 @@ function renderD2ProfileStatus(status){
     persistedClockProfile=status.persisted;
     selectedClockProfile=status.active;
     clearProductError();
+  }else if(status.result===0x06){
+    $('profileStatus').textContent='Panel đang render, sẽ tự áp dụng sau khi hoàn tất.';
   }else{
     selectedClockProfile=activeClockProfile;
     markProductError(`D2 profile ${d2ResultName(status.result)}`);
@@ -1502,11 +1505,25 @@ async function d2GetClockProfile(){
 }
 
 async function d2ApplyClockProfile(){
-  const status=parseD2ProfileStatus(await request(
+  let status=parseD2ProfileStatus(await request(
     buildD2SetProfilePacket(selectedClockProfile),
     a=>a[0]===0xD2&&a[1]===0x84,
     {timeout:5000}
   ));
+  if(status.result===0x06){
+    if(productD2RenderState!==0x03){
+      const completed=parseD2RenderStatus(await waitFor(
+        a=>a[0]===0xD2&&a[1]===0x82&&a[3]===0x03,
+        35000
+      ));
+      if(completed.result!==0x00)throw Error(`D2 render ${d2ResultName(completed.result)}`);
+    }
+    status=parseD2ProfileStatus(await request(
+      buildD2SetProfilePacket(selectedClockProfile),
+      a=>a[0]===0xD2&&a[1]===0x84,
+      {timeout:5000}
+    ));
+  }
   renderD2ProfileStatus(status);
   if(status.result!==0x00)throw Error(`D2 profile rejected: ${d2ResultName(status.result)}`);
   await d2RenderClockFromDevice();

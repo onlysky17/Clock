@@ -22,6 +22,8 @@ includes('Uint8Array.of(0xD2,0x05)', 'D2 05 GET profile packet missing');
 includes('bytes.length!==6||bytes[0]!==0xD2||bytes[1]!==0x84', 'D2 84 parser missing');
 includes('await d2RenderClockFromDevice()', 'Apply must wait for existing D2 render flow');
 includes("$('profileApply').onclick=()=>runD2Flow(d2ApplyClockProfile)", 'guarded Apply action missing');
+includes('renderInProgress=productD2RenderState===0x01||productD2RenderState===0x02', 'render busy lock missing');
+assert.match(html, /status\.result===0x06[\s\S]*waitFor\([\s\S]*a\[3\]===0x03[\s\S]*buildD2SetProfilePacket\(selectedClockProfile\)/, 'BUSY must wait for COMPLETE and retry');
 includes("advanced.id='advancedPanel'", 'Advanced section missing');
 includes("identityCompatibility!=='compatible'", 'device compatibility guard missing');
 assert.ok(testHtml.includes('./web/clock-app/hl24a-canvas-e5.html'), 'canonical test.html target changed');
