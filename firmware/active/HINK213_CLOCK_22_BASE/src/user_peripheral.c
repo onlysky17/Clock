@@ -645,6 +645,24 @@ void user_catch_rest_hndl(ke_msg_id_t const msgid,
             // å¤„ç†æœªå®šä¹‰çš„è¯»å–è¯·æ±‚ï¼Œè¿”å›žé”™è¯¯
             switch (msg_param->att_idx)
             {
+                case SVC1_IDX_ADC_VAL_1_VAL:
+                {
+                    int millivolts = adc1_update();
+                    struct custs1_value_req_rsp *rsp = KE_MSG_ALLOC_DYN(CUSTS1_VALUE_REQ_RSP,
+                                                                        src_id,
+                                                                        dest_id,
+                                                                        custs1_value_req_rsp,
+                                                                        DEF_SVC1_ADC_VAL_1_CHAR_LEN);
+
+                    rsp->conidx = app_env[msg_param->conidx].conidx;
+                    rsp->att_idx = msg_param->att_idx;
+                    rsp->length = DEF_SVC1_ADC_VAL_1_CHAR_LEN;
+                    rsp->status = ATT_ERR_NO_ERROR;
+                    rsp->value[0] = (uint8_t)(millivolts & 0xFF);
+                    rsp->value[1] = (uint8_t)((millivolts >> 8) & 0xFF);
+                    KE_MSG_SEND(rsp);
+                } break;
+
                 default:
                 {
                     struct custs1_value_req_rsp *rsp = KE_MSG_ALLOC(CUSTS1_VALUE_REQ_RSP,
