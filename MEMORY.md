@@ -12,19 +12,19 @@
 - Canonical web URL: `https://onlysky17.github.io/Clock/test.html`
 
 Firmware milestone cuối đã đóng:
-- `TASK D9B` balanced flagship layout persistent SPI final is CLOSED / MERGED / PHYSICAL PASS.
-- D9A layout implementation commit: `63936eb8a9e2324fac9447319f5e789e1fdd85f7`.
-- D9A merge commit: `246dab2603e4ff9c407b439dd04da9ef82b007e4`.
-- D9B package commit: `0ff2eb7be98fdb5e63074a5828ca66ef8de44c55`.
-- D9B package merge commit: `66625a6d0cb214e0de5184445d8d25a7833d1650`.
+- `TASK D11C` clock profiles persistent SPI final is CLOSED / MERGED / PHYSICAL PASS.
+- D11B implementation commit: `a355d5f398e9acd9ca631dd78e69fbe930b6e58d`.
+- D11B merge commit: `63d6063a33d7b4905a0114fbaa7f1aa8909001ed`.
+- D11C package commit: `13cd620106dec5d3abd63897789f46bc89dfa637`.
+- D11C package merge commit: `5fe026ef5203e53c8264171933b63359b7aa8c48`.
 - Owner SPI Physical PASS date: `2026-07-22`.
 - Final build evidence:
   - Keil `0 errors`, `0 warnings`.
-  - Code `42644`, RO-data `3592`, RW-data `552`, ZI-data `22928`.
-  - Raw BIN `47924` bytes.
-  - Raw BIN SHA256: `212911C6C68E8EC2060A63B8ADCE65BD44E055B6822B5B6B236AC694F326F824`.
+  - Code `43100`, RO-data `3592`, RW-data `552`, ZI-data `22932`.
+  - Raw BIN `48380` bytes.
+  - Raw BIN SHA256: `6ACDE0EED8728C8F16B0D92F7DB14502B36069459D5D99B8FAEE5F93B4EA22CE`.
   - Packed BIN `262144` bytes.
-  - Packed BIN SHA256: `51D90603363B9660CC43686E68E93FCAA9668ECB3985FF1CE292A58DB55DD8B2`.
+  - Packed BIN SHA256: `0A8C78B071FA5F16775F34D3643BE2644EE0274287FA82DFA3D859F113D43197`.
   - Legacy font symbols absent.
 - Final physical evidence:
   - SmartSnippets SPI Burn and Verify: PASS.
@@ -33,13 +33,15 @@ Firmware milestone cuối đã đóng:
   - Device identity reports firmware `D8A1` and Source ID `D8A00001`: PASS.
   - Cold-boot health reports `STALE / PRIME / STORE`: PASS.
   - Running health reports `TIME / TIMER / STORE`: PASS.
-  - Balanced left clock pane and uniformly bold `ÂL dd/MM`: PASS.
-  - Right monthly calendar remains correct: PASS.
+  - Monthly Calendar profile and aligned `T2..CN` columns: PASS.
+  - Large Time profile with optically centered `HH:mm`: PASS.
+  - Regular-weight lunar row on both profiles: PASS.
+  - Profile persistence and restore after power-cycle: PASS.
   - BLE-disconnected five-minute scheduler: PASS.
   - BLE reconnect: PASS.
   - No blank panel, duplicate refresh, or second black refresh: PASS.
-- Package remains local only under `D:\EINK\Clock\_incoming\D9B_SPI_FINAL_2026-07-22`.
-- D7B FIX5 remains the renderer foundation; D9B is now the latest closed firmware milestone.
+- Package remains local only under `D:\EINK\Clock\_incoming\D11C_SPI_FINAL_2026-07-22`.
+- D11C is now the latest known-good persistent SPI firmware baseline.
 
 Product and web milestones:
 - `TASK D4A` stale recovery UX decision is CLOSED and approved by Owner.
@@ -90,9 +92,9 @@ Product and web milestones:
 - Separate finding: Web Product Mode can show `Có lỗi` even when the D2 log reports OK/SYNCED/COMPLETE; this did not block D6C firmware merge or physical PASS.
 
 Next canonical action:
-- No new implementation task is authorized yet.
-- Preserve the D9B persistent SPI final as the current known-good baseline.
-- Wait for Owner to name the next milestone before changing firmware, web, protocol, or layout.
+- `TASK D12A - Clock preference policy design`.
+- Design 12/24-hour mode and selectable autonomous refresh cadence before implementation.
+- Preserve D11C as the rollback baseline while D12A is design-only.
 
 ## Historical Milestones
 
