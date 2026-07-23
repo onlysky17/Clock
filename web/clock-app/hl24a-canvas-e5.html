@@ -1259,58 +1259,139 @@ function buildD2GetPreferencePacket(){
   return Uint8Array.of(0xD2,0x07);
 }
 
-function mapOpenMeteoWeatherCode(wmoCode,temperature,windSpeed){
+function mapOpenMeteoWeatherCode(
+  wmoCode,
+  temperature,
+  windSpeed,
+  currentPrecipitation,
+  currentRain,
+  currentShowers
+){
   if([95,96,99].includes(wmoCode))return 3;
   if([45,48].includes(wmoCode))return 4;
-  if([51,53,55,56,57,61,63,65,66,67,71,73,75,77,80,81,82,85,86].includes(wmoCode))return 2;
+
+  const precipitationNow=Math.max(
+    0,
+    currentPrecipitation,
+    currentRain,
+    currentShowers
+  );
+
+  const rainCodes=[
+    51,53,55,56,57,
+    61,63,65,66,67,
+    71,73,75,77,
+    80,81,82,85,86
+  ];
+
+  /*
+   * A WMO rain code alone may describe the model condition even when
+   * no measurable rain is present at the current model time-step.
+   */
+  if(rainCodes.includes(wmoCode)&&precipitationNow>=0.1)return 2;
   if(windSpeed>=35)return 5;
   if(temperature>=35)return 6;
   return wmoCode===0?0:1;
 }
-
 function getPhoneWeatherPosition(){
   return new Promise((resolve,reject)=>{
     if(!navigator.geolocation){reject(Error('Tr\u00ecnh duy\u1ec7t kh\u00f4ng h\u1ed7 tr\u1ee3 v\u1ecb tr\u00ed.'));return;}
     navigator.geolocation.getCurrentPosition(resolve,error=>{
       const reason=error.code===1?'Ch\u01b0a \u0111\u01b0\u1ee3c c\u1ea5p quy\u1ec1n v\u1ecb tr\u00ed.':'Kh\u00f4ng l\u1ea5y \u0111\u01b0\u1ee3c v\u1ecb tr\u00ed \u0111i\u1ec7n tho\u1ea1i.';
       reject(Error(reason));
-    },{enableHighAccuracy:false,timeout:10000,maximumAge:900000});
+    },{enableHighAccuracy:true,timeout:15000,maximumAge:0});
   });
 }
 
 async function fetchPhoneWeather(latitude,longitude){
   const url=new URL('https://api.open-meteo.com/v1/forecast');
-  url.searchParams.set('latitude',latitude.toFixed(4));
-  url.searchParams.set('longitude',longitude.toFixed(4));
-  url.searchParams.set('current','temperature_2m,weather_code,wind_speed_10m');
+  url.searchParams.set('latitude',latitude.toFixed(5));
+  url.searchParams.set('longitude',longitude.toFixed(5));
+  url.searchParams.set(
+    'current',
+    'temperature_2m,weather_code,wind_speed_10m,precipitation,rain,showers'
+  );
   url.searchParams.set('daily','precipitation_probability_max');
   url.searchParams.set('timezone','auto');
   url.searchParams.set('forecast_days','1');
+
   const controller=new AbortController();
   const timeout=setTimeout(()=>controller.abort(),12000);
+
   try{
-    const response=await fetch(url,{signal:controller.signal,cache:'no-store'});
-    if(!response.ok)throw Error(`D\u1ecbch v\u1ee5 th\u1eddi ti\u1ebft tr\u1ea3 m\u00e3 ${response.status}.`);
+    const response=await fetch(url,{
+      signal:controller.signal,
+      cache:'no-store'
+    });
+
+    if(!response.ok){
+      throw Error(`D\u1ecbch v\u1ee5 th\u1eddi ti\u1ebft tr\u1ea3 m\u00e3 ${response.status}.`);
+    }
+
     const data=await response.json();
+
     const rawTemperature=Number(data.current?.temperature_2m);
     const wmoCode=Number(data.current?.weather_code);
-    const windSpeed=Number(data.current?.wind_speed_10m||0);
-    const rawPrecipitation=Number(data.daily?.precipitation_probability_max?.[0]??0);
-    if(!Number.isFinite(rawTemperature)||!Number.isInteger(wmoCode)||!Number.isFinite(rawPrecipitation)){
+    const windSpeed=Number(data.current?.wind_speed_10m??0);
+    const currentPrecipitation=Number(data.current?.precipitation??0);
+    const currentRain=Number(data.current?.rain??0);
+    const currentShowers=Number(data.current?.showers??0);
+    const rawPrecipitation=Number(
+      data.daily?.precipitation_probability_max?.[0]??0
+    );
+
+    const numericValues=[
+      rawTemperature,
+      windSpeed,
+      currentPrecipitation,
+      currentRain,
+      currentShowers,
+      rawPrecipitation
+    ];
+
+    if(
+      !numericValues.every(Number.isFinite)||
+      !Number.isInteger(wmoCode)
+    ){
       throw Error('D\u1eef li\u1ec7u th\u1eddi ti\u1ebft kh\u00f4ng h\u1ee3p l\u1ec7.');
     }
-    const temperature=Math.max(-40,Math.min(80,Math.round(rawTemperature)));
-    const precipitation=Math.max(0,Math.min(100,Math.round(rawPrecipitation)));
-    return{
-      weatherCode:mapOpenMeteoWeatherCode(wmoCode,temperature,windSpeed),
+
+    const temperature=Math.max(
+      -40,
+      Math.min(80,Math.round(rawTemperature))
+    );
+
+    const precipitation=Math.max(
+      0,
+      Math.min(100,Math.round(rawPrecipitation))
+    );
+
+    const weatherCode=mapOpenMeteoWeatherCode(
+      wmoCode,
       temperature,
-      precipitation
+      windSpeed,
+      currentPrecipitation,
+      currentRain,
+      currentShowers
+    );
+
+    return{
+      weatherCode,
+      temperature,
+      precipitation,
+      wmoCode,
+      windSpeed,
+      currentPrecipitation,
+      currentRain,
+      currentShowers,
+      modelLatitude:Number(data.latitude),
+      modelLongitude:Number(data.longitude),
+      modelTime:String(data.current?.time||'')
     };
   }finally{
     clearTimeout(timeout);
   }
 }
-
 function setDailyWeatherStatus(text,kind=''){
   const status=$('dailyWeatherStatus');
   status.textContent=text;
@@ -1318,29 +1399,85 @@ function setDailyWeatherStatus(text,kind=''){
 }
 
 async function refreshDailyWeatherFromPhone(){
-  if(dailyWeatherRunning)throw Error('Th\u1eddi ti\u1ebft \u0111ang \u0111\u01b0\u1ee3c c\u1eadp nh\u1eadt.');
+  if(dailyWeatherRunning){
+    throw Error('Th\u1eddi ti\u1ebft \u0111ang \u0111\u01b0\u1ee3c c\u1eadp nh\u1eadt.');
+  }
+
   dailyWeatherRunning=true;
-  setDailyWeatherStatus('\u0110ang l\u1ea5y v\u1ecb tr\u00ed v\u00e0 th\u1eddi ti\u1ebft...');
+  setDailyWeatherStatus(
+    '\u0110ang l\u1ea5y v\u1ecb tr\u00ed v\u00e0 th\u1eddi ti\u1ebft...'
+  );
   controls();
+
   try{
     const position=await getPhoneWeatherPosition();
-    const weather=await fetchPhoneWeather(position.coords.latitude,position.coords.longitude);
+    const latitude=position.coords.latitude;
+    const longitude=position.coords.longitude;
+    const accuracy=Math.round(position.coords.accuracy||0);
+
+    const weather=await fetchPhoneWeather(latitude,longitude);
+
     $('dailyWeatherEnabled').checked=true;
     $('dailyWeatherCode').value=String(weather.weatherCode);
     $('dailyTemperature').value=String(weather.temperature);
     $('dailyPrecipitation').value=String(weather.precipitation);
-    setDailyWeatherStatus(`\u0110\u00e3 c\u1eadp nh\u1eadt ${weather.temperature} C, m\u01b0a ${weather.precipitation}%.`,'ok');
-    if(selectedClockProfile===2)drawDailyBriefingPreview();
+
+    const weatherLabels=[
+      'N\u1eafng',
+      'M\u00e2y',
+      'M\u01b0a',
+      'Gi\u00f4ng',
+      'S\u01b0\u01a1ng m\u00f9',
+      'Gi\u00f3',
+      'N\u00f3ng'
+    ];
+
+    const weatherLabel=
+      weatherLabels[weather.weatherCode]||
+      'M\u00e2y';
+
+    setDailyWeatherStatus(
+      `\u0110\u00e3 c\u1eadp nh\u1eadt ${weatherLabel}, `+
+      `${weather.temperature} C, `+
+      `kh\u1ea3 n\u0103ng m\u01b0a ${weather.precipitation}%.`,
+      'ok'
+    );
+
+    log(
+      `Weather GPS ${latitude.toFixed(5)},${longitude.toFixed(5)} `+
+      `accuracy=${accuracy}m | `+
+      `model=${weather.modelLatitude.toFixed(4)},`+
+      `${weather.modelLongitude.toFixed(4)} `+
+      `time=${weather.modelTime} | `+
+      `WMO=${weather.wmoCode} `+
+      `precip=${weather.currentPrecipitation.toFixed(2)}mm `+
+      `rain=${weather.currentRain.toFixed(2)}mm `+
+      `showers=${weather.currentShowers.toFixed(2)}mm `+
+      `wind=${weather.windSpeed.toFixed(1)}km/h | `+
+      `mapped=${weatherLabel}(${weather.weatherCode}) `+
+      `temp=${weather.temperature}C `+
+      `dailyPoP=${weather.precipitation}%`,
+      'WEATHER'
+    );
+
+    if(selectedClockProfile===2){
+      drawDailyBriefingPreview();
+    }
+
     return weather;
   }catch(error){
-    setDailyWeatherStatus(error.name==='AbortError'?'H\u1ebft th\u1eddi gian l\u1ea5y th\u1eddi ti\u1ebft.':error.message,'bad');
+    setDailyWeatherStatus(
+      error.name==='AbortError'
+        ?'H\u1ebft th\u1eddi gian l\u1ea5y th\u1eddi ti\u1ebft.'
+        :error.message,
+      'bad'
+    );
     throw error;
   }finally{
     dailyWeatherRunning=false;
     controls();
   }
 }
-
 async function runDailyWeatherRefresh(){
   try{
     await refreshDailyWeatherFromPhone();
