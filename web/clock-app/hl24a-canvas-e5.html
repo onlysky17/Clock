@@ -1784,48 +1784,6 @@ async function d2SetCurrentTime(options={}){
   return status;
 }
 
-async function d2SyncTimeAndEnsureVisible(){
-  /*
-   * First render after a fresh time sync primes this panel/controller.
-   * Wait for that prime cycle to complete, then perform exactly one
-   * normal D2 redraw so the physical panel becomes visible immediately.
-   */
-  productD2RenderResult=null;
-  productD2RenderState=null;
-
-  const status=await d2SetCurrentTime();
-  if(status.result!==0x00){
-    throw Error(`D2 time sync rejected: ${d2ResultName(status.result)}`);
-  }
-
-  const deadline=Date.now()+35000;
-
-  while(productD2RenderState!==0x03){
-    const remaining=deadline-Date.now();
-    if(remaining<=0){
-      throw Error('D2 prime render timeout');
-    }
-
-    const prime=parseD2RenderStatus(await waitFor(
-      a=>a[0]===0xD2 &&
-         a[1]===0x82 &&
-         (a[3]===0x03 || a[3]===0x04),
-      remaining
-    ));
-
-    productD2RenderResult=prime.result;
-    productD2RenderState=prime.state;
-
-    if(prime.result!==0x00 || prime.state===0x04){
-      throw Error(`D2 prime render failed: ${d2ResultName(prime.result)} / ${d2RenderStateName(prime.state)}`);
-    }
-  }
-
-  log('Prime render COMPLETE; starting one visible redraw','D2');
-  await sleep(250);
-  await d2RenderClockFromDevice();
-}
-
 async function d2GetTimeStatus(options={}){
   const response=await request(
     buildD2GetStatusPacket(),
@@ -2353,7 +2311,7 @@ $('disconnect').onclick=()=>device?.gatt?.disconnect();
 $('send').onclick=()=>safe(sendFramebuffer);
 $('refresh').onclick=()=>safe(refreshPanel);
 $('syncClock').onclick=()=>safe(syncClockToPanel);
-$('d2SetTime').onclick=()=>runD2Flow(d2SyncTimeAndEnsureVisible);
+$('d2SetTime').onclick=()=>runD2Flow(d2SetCurrentTime);
 $('d2GetStatus').onclick=()=>runD2Flow(d2GetTimeStatus);
 $('d2RenderClock').onclick=()=>runD2Flow(d2RenderClockFromDevice);
 $('d2GetIdentity').onclick=()=>runD2Flow(d2GetDeviceIdentity);
