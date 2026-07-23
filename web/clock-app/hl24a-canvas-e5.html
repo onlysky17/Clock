@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TASK D13C - Automatic Phone Weather</title>
+<title>TASK D13D - Lá»‹ch thĂ¡ng vĂ  thá»i tiáº¿t tiáº¿ng Viá»‡t</title>
 <style>
 :root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;--bg:#07101b;--card:#111c2c;--line:#2a3d59;--text:#f4f8ff;--muted:#9fb1c8;--ok:#45d99c;--warn:#ffd166;--bad:#ff6b86}
 *{box-sizing:border-box}body{margin:0;background:linear-gradient(#050a12,#101a2a);color:var(--text)}main{max-width:1040px;margin:auto;padding:20px}
@@ -35,18 +35,18 @@ small{color:var(--muted)}
 </style>
 </head>
 <body><main>
-<div class="badge">TASK D8A • DEVICE IDENTITY + HEALTH • HINK213 BW</div>
-<h1>250×122 Clock → Verified Device Identity + Health</h1>
-<p>Preview hiển thị theo hướng panel thật. Payload gửi RAM controller 122×250, 16 byte/dòng, 4000 byte.</p>
+<div class="badge">TASK D8A â€¢ DEVICE IDENTITY + HEALTH â€¢ HINK213 BW</div>
+<h1>250Ă—122 Clock â†’ Verified Device Identity + Health</h1>
+<p>Preview hiá»ƒn thá»‹ theo hÆ°á»›ng panel tháº­t. Payload gá»­i RAM controller 122Ă—250, 16 byte/dĂ²ng, 4000 byte.</p>
 
 <section class="card">
-<h2>Canvas 250×122</h2>
+<h2>Canvas 250Ă—122</h2>
 <div class="row">
 <button id="clearWhite">Clear white</button>
 <button id="fillBlack">Fill black</button>
 <button id="invert">Invert</button>
-<button id="updateClock" class="primary">Cập nhật giờ hiện tại</button>
-<button id="dailyCalendar" class="primary">Mặt lịch hằng ngày</button>
+<button id="updateClock" class="primary">Cáº­p nháº­t giá» hiá»‡n táº¡i</button>
+<button id="dailyCalendar" class="primary">Máº·t lá»‹ch háº±ng ngĂ y</button>
 <button id="sample">Draw sample</button>
 <label>Brush
 <select id="brush">
@@ -62,14 +62,14 @@ small{color:var(--muted)}
 <div class="canvasWrap" style="margin-top:12px">
 <canvas id="canvas" width="250" height="122"></canvas>
 </div>
-<p><small>Preview landscape 250×122 được pack theo ROTATE_3 vào RAM 122×250, MSB-first, bit 1 = trắng. Sáu padding bit cuối mỗi RAM row giữ trắng.</small></p>
+<p><small>Preview landscape 250Ă—122 Ä‘Æ°á»£c pack theo ROTATE_3 vĂ o RAM 122Ă—250, MSB-first, bit 1 = tráº¯ng. SĂ¡u padding bit cuá»‘i má»—i RAM row giá»¯ tráº¯ng.</small></p>
 </section>
 
 <section class="card">
 <h2>Payload</h2>
 <div class="grid">
-<div class="stat"><span>Preview</span><strong>250 × 122</strong></div>
-<div class="stat"><span>RAM</span><strong>122 × 250</strong></div>
+<div class="stat"><span>Preview</span><strong>250 Ă— 122</strong></div>
+<div class="stat"><span>RAM</span><strong>122 Ă— 250</strong></div>
 <div class="stat"><span>Stride</span><strong>16 bytes</strong></div>
 <div class="stat"><span>Bytes</span><strong id="byteCount">4000</strong></div>
 <div class="stat"><span>Chunks</span><strong id="chunkCount">286</strong></div>
@@ -83,43 +83,43 @@ small{color:var(--muted)}
 <section class="card">
 <h2>One-Tap Clock Sync</h2>
 <div class="row">
-<button id="syncClock" class="good">Đồng bộ giờ lên màn</button>
+<button id="syncClock" class="good">Äá»“ng bá»™ giá» lĂªn mĂ n</button>
 </div>
-<p>Trạng thái đồng bộ: <strong id="syncStatus" class="warn">SẴN SÀNG</strong></p>
-<p><small>Bấm một lần để vẽ giờ hiện tại, gửi E5, đợi E5 COMPLETE rồi refresh E6. Trang không tự chạy khi mở và không tự refresh theo phút.</small></p>
+<p>Tráº¡ng thĂ¡i Ä‘á»“ng bá»™: <strong id="syncStatus" class="warn">Sáº´N SĂ€NG</strong></p>
+<p><small>Báº¥m má»™t láº§n Ä‘á»ƒ váº½ giá» hiá»‡n táº¡i, gá»­i E5, Ä‘á»£i E5 COMPLETE rá»“i refresh E6. Trang khĂ´ng tá»± cháº¡y khi má»Ÿ vĂ  khĂ´ng tá»± refresh theo phĂºt.</small></p>
 </section>
 
 <section class="card">
 <h2>Auto Minute Sync</h2>
-<label class="row"><input id="autoSync" type="checkbox"> Tự đồng bộ khi phút đổi</label>
-<p>Auto sync: <strong id="autoStatus" class="warn" aria-live="polite">Auto sync đang tắt</strong></p>
-<p><small>Mặc định tắt. Khi bật, trang chỉ đồng bộ nếu BLE đã kết nối và phút local của browser đổi sang phút mới.</small></p>
+<label class="row"><input id="autoSync" type="checkbox"> Tá»± Ä‘á»“ng bá»™ khi phĂºt Ä‘á»•i</label>
+<p>Auto sync: <strong id="autoStatus" class="warn" aria-live="polite">Auto sync Ä‘ang táº¯t</strong></p>
+<p><small>Máº·c Ä‘á»‹nh táº¯t. Khi báº­t, trang chá»‰ Ä‘á»“ng bá»™ náº¿u BLE Ä‘Ă£ káº¿t ná»‘i vĂ  phĂºt local cá»§a browser Ä‘á»•i sang phĂºt má»›i.</small></p>
 </section>
 
 <section class="card">
-<h2>DEVICE TIME SYNC — D2</h2>
+<h2>DEVICE TIME SYNC â€” D2</h2>
 <div class="row">
-<button id="d2SetTime" class="primary">Gửi giờ xuống thiết bị</button>
-<button id="d2GetStatus">Đọc trạng thái giờ</button>
-<button id="d2RenderClock" class="good">Vẽ giờ từ thiết bị lên màn</button>
-<button id="d2GetIdentity">Đọc danh tính thiết bị</button>
+<button id="d2SetTime" class="primary">Gá»­i giá» xuá»‘ng thiáº¿t bá»‹</button>
+<button id="d2GetStatus">Äá»c tráº¡ng thĂ¡i giá»</button>
+<button id="d2RenderClock" class="good">Váº½ giá» tá»« thiáº¿t bá»‹ lĂªn mĂ n</button>
+<button id="d2GetIdentity">Äá»c danh tĂ­nh thiáº¿t bá»‹</button>
 </div>
 <p>D2: <strong id="d2StatusText" class="warn" aria-live="polite">DISCONNECTED</strong></p>
 <p>D2 render: <strong id="d2RenderStatus" class="warn" aria-live="polite">NOT RUN</strong></p>
 <div id="d2StaleBox" class="staleBox" role="alert" aria-live="assertive" hidden>
-<p id="d2StaleWarning">Thiết bị đang giữ giờ cũ. Hãy đồng bộ giờ hiện tại để tiếp tục chạy đồng hồ.</p>
-<button id="d2StaleRecover" class="primary" type="button">Đồng bộ giờ hiện tại</button>
+<p id="d2StaleWarning">Thiáº¿t bá»‹ Ä‘ang giá»¯ giá» cÅ©. HĂ£y Ä‘á»“ng bá»™ giá» hiá»‡n táº¡i Ä‘á»ƒ tiáº¿p tá»¥c cháº¡y Ä‘á»“ng há»“.</p>
+<button id="d2StaleRecover" class="primary" type="button">Äá»“ng bá»™ giá» hiá»‡n táº¡i</button>
 </div>
 <div class="grid" style="margin-top:12px">
 <div class="stat"><span>Result</span><strong id="d2Result">-</strong></div>
 <div class="stat"><span>State</span><strong id="d2State">-</strong></div>
 <div class="stat"><span>Device epoch UTC</span><strong id="d2Epoch">-</strong></div>
 <div class="stat"><span>Local time</span><strong id="d2LocalTime">-</strong></div>
-<div class="stat"><span>Timezone offset phút</span><strong id="d2Timezone">-</strong></div>
+<div class="stat"><span>Timezone offset phĂºt</span><strong id="d2Timezone">-</strong></div>
 <div class="stat"><span>Flags</span><strong id="d2Flags">-</strong></div>
 <div class="stat"><span>Uptime seconds</span><strong id="d2Uptime">-</strong></div>
 </div>
-<p><small>D2 SET/GET chỉ đồng bộ state giờ RAM trong firmware. D2 render yêu cầu firmware tự vẽ từ giờ RAM và refresh panel, không gửi E5 và không vẽ lại preview.</small></p>
+<p><small>D2 SET/GET chá»‰ Ä‘á»“ng bá»™ state giá» RAM trong firmware. D2 render yĂªu cáº§u firmware tá»± váº½ tá»« giá» RAM vĂ  refresh panel, khĂ´ng gá»­i E5 vĂ  khĂ´ng váº½ láº¡i preview.</small></p>
 </section>
 
 <section class="card">
@@ -130,7 +130,7 @@ small{color:var(--muted)}
 <button id="send" class="good" disabled>Open E4 + Send E5</button>
 <button id="clearLog">Clear log</button>
 </div>
-<p>BLE: <strong id="ble">Disconnected</strong> · Result: <strong id="result" class="warn">NOT RUN</strong></p>
+<p>BLE: <strong id="ble">Disconnected</strong> Â· Result: <strong id="result" class="warn">NOT RUN</strong></p>
 <progress id="progress" max="4000" value="0"></progress>
 <div class="grid" style="margin-top:12px">
 <div class="stat"><span>Transfer ID</span><strong id="transferId">-</strong></div>
@@ -139,7 +139,7 @@ small{color:var(--muted)}
 <div class="stat"><span>Bytes</span><strong id="fwBytes">0</strong></div>
 <div class="stat"><span>Firmware CRC</span><strong id="fwCrc">----</strong></div>
 </div>
-<p>Expected PASS: <code>state=COMPLETE · chunks=286 · bytes=4000 · browser CRC = firmware CRC</code></p>
+<p>Expected PASS: <code>state=COMPLETE Â· chunks=286 Â· bytes=4000 Â· browser CRC = firmware CRC</code></p>
 </section>
 
 <section class="card">
@@ -173,14 +173,14 @@ const NOTIFY='15005991-b131-3396-014c-664c9867b917';
 const BATTERY_SERVICE=0xFF00;
 const BATTERY_CHARACTERISTIC=0xFF02;
 const D2_STALE_PRESENT_FLAG=0x80;
-const D2_STALE_WARNING='Thiết bị đang giữ giờ cũ. Hãy đồng bộ giờ hiện tại để tiếp tục chạy đồng hồ.';
+const D2_STALE_WARNING='Thiáº¿t bá»‹ Ä‘ang giá»¯ giá» cÅ©. HĂ£y Ä‘á»“ng bá»™ giá» hiá»‡n táº¡i Ä‘á»ƒ tiáº¿p tá»¥c cháº¡y Ä‘á»“ng há»“.';
 const EINK_TEST_IDENTITY={
-  webBuild:'D13C-AUTO-WEATHER-20260723',
+  webBuild:'D13D-VI-WEATHER-20260723',
   expectedFirmware:'D8A00001',
   expectedRuntime:'D8A1',
   expectedSourceId:'D8A00001',
   expectedBin:'BUILD-SPECIFIC',
-  label:'D13C AUTO WEATHER'
+  label:'D13D Lá»CH THĂNG VĂ€ THá»œI TIáº¾T'
 };
 window.EINK_TEST_IDENTITY=EINK_TEST_IDENTITY;
 
@@ -227,7 +227,7 @@ function setupProductMode(){
   };
   const header=document.createElement('div');
   header.className='productHeader';
-  header.innerHTML='<div><div class="badge">EINK Clock</div><h1>Đồng hồ lịch hằng ngày</h1><p>Chọn mặt đồng hồ, xem preview và gửi lên màn e-ink. Các thông số kỹ thuật vẫn có sẵn trong mục nâng cao.</p></div><div class="row" id="productConnectRow"></div>';
+  header.innerHTML='<div><div class="badge">EINK Clock</div><h1>Äá»“ng há»“ lá»‹ch háº±ng ngĂ y</h1><p>Chá»n máº·t Ä‘á»“ng há»“, xem preview vĂ  gá»­i lĂªn mĂ n e-ink. CĂ¡c thĂ´ng sá»‘ ká»¹ thuáº­t váº«n cĂ³ sáºµn trong má»¥c nĂ¢ng cao.</p></div><div class="row" id="productConnectRow"></div>';
 
   const identityCard=document.createElement('section');
   identityCard.className='card identityCard';
@@ -236,15 +236,15 @@ function setupProductMode(){
   identityCard.dataset.expectedRuntime=EINK_TEST_IDENTITY.expectedRuntime;
   identityCard.dataset.expectedSourceId=EINK_TEST_IDENTITY.expectedSourceId;
   identityCard.dataset.expectedBin=EINK_TEST_IDENTITY.expectedBin;
-  identityCard.innerHTML=`<div class="identityTitle">${EINK_TEST_IDENTITY.label}</div><div class="compatibilityState" role="status" aria-live="polite"><span>Tương thích thiết bị</span><strong id="identityCompatibility" class="warn">Chưa kết nối</strong><small id="identityCompatibilityDetail">Kết nối để kiểm tra firmware thực tế.</small></div><div class="identityGrid"><div class="stat"><span>Firmware yêu cầu</span><strong>${EINK_TEST_IDENTITY.expectedRuntime}</strong></div><div class="stat"><span>Firmware thực tế</span><strong id="actualFirmware">Chưa đọc</strong></div><div class="stat"><span>Source ID yêu cầu</span><strong>${EINK_TEST_IDENTITY.expectedSourceId}</strong></div><div class="stat"><span>Source ID thực tế</span><strong id="actualSourceId">-</strong></div><div class="stat"><span>Health</span><strong id="actualHealth">-</strong></div><div class="stat"><span>Health cập nhật</span><strong id="identityUpdatedAt">Chưa đọc</strong></div><div class="stat"><span>Điện áp pin</span><strong id="batteryVoltage" class="batteryValue" aria-live="polite">Chưa đọc</strong></div><div class="stat"><span>Mức pin</span><strong id="batteryLevel">Ước tính -</strong></div><div class="stat"><span>Pin cập nhật</span><strong id="batteryUpdatedAt">Chưa đọc</strong></div><div class="stat"><span>Web build</span><strong>${EINK_TEST_IDENTITY.webBuild}</strong></div></div><div class="row" id="identityActionRow"><button id="batteryRefresh" type="button">Đọc pin</button></div><p class="identityNote">Điện áp được đọc trực tiếp từ thiết bị. Phần trăm chỉ là ước tính theo đường cong CR2032.</p>`;
+  identityCard.innerHTML=`<div class="identityTitle">${EINK_TEST_IDENTITY.label}</div><div class="compatibilityState" role="status" aria-live="polite"><span>TÆ°Æ¡ng thĂ­ch thiáº¿t bá»‹</span><strong id="identityCompatibility" class="warn">ChÆ°a káº¿t ná»‘i</strong><small id="identityCompatibilityDetail">Káº¿t ná»‘i Ä‘á»ƒ kiá»ƒm tra firmware thá»±c táº¿.</small></div><div class="identityGrid"><div class="stat"><span>Firmware yĂªu cáº§u</span><strong>${EINK_TEST_IDENTITY.expectedRuntime}</strong></div><div class="stat"><span>Firmware thá»±c táº¿</span><strong id="actualFirmware">ChÆ°a Ä‘á»c</strong></div><div class="stat"><span>Source ID yĂªu cáº§u</span><strong>${EINK_TEST_IDENTITY.expectedSourceId}</strong></div><div class="stat"><span>Source ID thá»±c táº¿</span><strong id="actualSourceId">-</strong></div><div class="stat"><span>Health</span><strong id="actualHealth">-</strong></div><div class="stat"><span>Health cáº­p nháº­t</span><strong id="identityUpdatedAt">ChÆ°a Ä‘á»c</strong></div><div class="stat"><span>Äiá»‡n Ă¡p pin</span><strong id="batteryVoltage" class="batteryValue" aria-live="polite">ChÆ°a Ä‘á»c</strong></div><div class="stat"><span>Má»©c pin</span><strong id="batteryLevel">Æ¯á»›c tĂ­nh -</strong></div><div class="stat"><span>Pin cáº­p nháº­t</span><strong id="batteryUpdatedAt">ChÆ°a Ä‘á»c</strong></div><div class="stat"><span>Web build</span><strong>${EINK_TEST_IDENTITY.webBuild}</strong></div></div><div class="row" id="identityActionRow"><button id="batteryRefresh" type="button">Äá»c pin</button></div><p class="identityNote">Äiá»‡n Ă¡p Ä‘Æ°á»£c Ä‘á»c trá»±c tiáº¿p tá»« thiáº¿t bá»‹. Pháº§n trÄƒm chá»‰ lĂ  Æ°á»›c tĂ­nh theo Ä‘Æ°á»ng cong CR2032.</p>`;
 
   const statusCard=document.createElement('section');
   statusCard.className='card';
-  statusCard.innerHTML='<h2>Trạng thái</h2><div class="productStatus"><div class="stat"><span>Thiết bị</span><strong id="productState" class="warn">Chưa kết nối</strong></div><div class="stat"><span>Tiến trình</span><span id="productSyncSlot"></span></div></div><div class="row" id="productActionRow"></div>';
+  statusCard.innerHTML='<h2>Tráº¡ng thĂ¡i</h2><div class="productStatus"><div class="stat"><span>Thiáº¿t bá»‹</span><strong id="productState" class="warn">ChÆ°a káº¿t ná»‘i</strong></div><div class="stat"><span>Tiáº¿n trĂ¬nh</span><span id="productSyncSlot"></span></div></div><div class="row" id="productActionRow"></div>';
 
   const presetCard=document.createElement('section');
   presetCard.className='card';
-  presetCard.innerHTML='<h2>Chọn mặt đồng hồ</h2><div class="row presetRow" id="productPresetRow"></div>';
+  presetCard.innerHTML='<h2>Chá»n máº·t Ä‘á»“ng há»“</h2><div class="row presetRow" id="productPresetRow"></div>';
 
   const profileApply=document.createElement('button');
   profileApply.id='profileApply';
@@ -267,7 +267,7 @@ function setupProductMode(){
   dailyContextPanel.id='dailyContextPanel';
   dailyContextPanel.className='dailyContextPanel';
   dailyContextPanel.hidden=true;
-  dailyContextPanel.innerHTML='<h3>Th\u1eddi ti\u1ebft t\u1ef1 \u0111\u1ed9ng v\u00e0 l\u1ecbch t\u00f9y ch\u1ecdn</h3><div class="row weatherAutoRow"><label><input id="dailyAutoWeather" type="checkbox" checked> T\u1ef1 l\u1ea5y theo v\u1ecb tr\u00ed \u0111i\u1ec7n tho\u1ea1i</label><button id="dailyWeatherRefresh" type="button">L\u1ea5y th\u1eddi ti\u1ebft ngay</button></div><div id="dailyWeatherStatus" class="weatherAutoStatus" role="status" aria-live="polite">Ch\u01b0a l\u1ea5y v\u1ecb tr\u00ed.</div><div class="dailyContextGrid"><label><span><input id="dailyWeatherEnabled" type="checkbox"> C\u00f3 th\u1eddi ti\u1ebft</span></label><label>Tr\u1ea1ng th\u00e1i<select id="dailyWeatherCode"><option value="0">N\u1eafng</option><option value="1">Nhi\u1ec1u m\u00e2y</option><option value="2">M\u01b0a</option><option value="3">Gi\u00f4ng</option><option value="4">S\u01b0\u01a1ng m\u00f9</option><option value="5">Gi\u00f3</option><option value="6">N\u00f3ng</option></select></label><label>Nhi\u1ec7t \u0111\u1ed9 C<input id="dailyTemperature" type="number" min="-40" max="80" inputmode="numeric" placeholder="27"></label><label>M\u01b0a %<input id="dailyPrecipitation" type="number" min="0" max="100" inputmode="numeric" placeholder="0"></label><label>Gi\u1edd 1 (t\u00f9y ch\u1ecdn)<input id="dailyAgendaTime0" type="time"></label><label>M\u00e3 1<input id="dailyAgendaLabel0" maxlength="3" autocomplete="off" placeholder="HOP"></label><label>Gi\u1edd 2 (t\u00f9y ch\u1ecdn)<input id="dailyAgendaTime1" type="time"></label><label>M\u00e3 2<input id="dailyAgendaLabel1" maxlength="3" autocomplete="off" placeholder="GYM"></label></div><p class="preferenceHint">Hai d\u00f2ng l\u1ecbch c\u00f3 th\u1ec3 \u0111\u1ec3 tr\u1ed1ng. V\u1ecb tr\u00ed ch\u1ec9 d\u00f9ng \u0111\u1ec3 l\u1ea5y th\u1eddi ti\u1ebft, kh\u00f4ng l\u01b0u tr\u00ean web.</p><p class="preferenceHint">D\u1eef li\u1ec7u th\u1eddi ti\u1ebft: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>.</p><div id="dailyContextStatus" class="profileStatus" role="status" aria-live="polite">Ch\u01b0a g\u1eedi d\u1eef li\u1ec7u trong ng\u00e0y.</div>';
+  dailyContextPanel.innerHTML='<h3>Th\u1eddi ti\u1ebft t\u1ef1 \u0111\u1ed9ng v\u00e0 l\u1ecbch th\u00e1ng</h3><div class="row weatherAutoRow"><label><input id="dailyAutoWeather" type="checkbox" checked> T\u1ef1 l\u1ea5y theo v\u1ecb tr\u00ed \u0111i\u1ec7n tho\u1ea1i</label><button id="dailyWeatherRefresh" type="button">L\u1ea5y th\u1eddi ti\u1ebft ngay</button></div><div id="dailyWeatherStatus" class="weatherAutoStatus" role="status" aria-live="polite">Ch\u01b0a l\u1ea5y v\u1ecb tr\u00ed.</div><div class="dailyContextGrid"><label><span><input id="dailyWeatherEnabled" type="checkbox"> Hi\u1ec3n th\u1eddi ti\u1ebft</span></label><label>Th\u1eddi ti\u1ebft<select id="dailyWeatherCode"><option value="0">N\u1eafng</option><option value="1">Nhi\u1ec1u m\u00e2y</option><option value="2">M\u01b0a</option><option value="3">Gi\u00f4ng</option><option value="4">S\u01b0\u01a1ng m\u00f9</option><option value="5">Gi\u00f3</option><option value="6">N\u00f3ng</option></select></label><label>Nhi\u1ec7t \u0111\u1ed9 (C)<input id="dailyTemperature" type="number" min="-40" max="80" inputmode="numeric" placeholder="27"></label><label>Kh\u1ea3 n\u0103ng m\u01b0a (%)<input id="dailyPrecipitation" type="number" min="0" max="100" inputmode="numeric" placeholder="0"></label></div><input id="dailyAgendaTime0" type="hidden"><input id="dailyAgendaLabel0" type="hidden"><input id="dailyAgendaTime1" type="hidden"><input id="dailyAgendaLabel1" type="hidden"><p class="preferenceHint">M\u00e0n h\u00ecnh gi\u1eef nguy\u00ean l\u1ecbch th\u00e1ng v\u00e0 th\u00eam th\u1eddi ti\u1ebft b\u1eb1ng ti\u1ebfng Vi\u1ec7t. V\u1ecb tr\u00ed ch\u1ec9 d\u00f9ng \u0111\u1ec3 l\u1ea5y th\u1eddi ti\u1ebft, kh\u00f4ng l\u01b0u tr\u00ean web.</p><p class="preferenceHint">D\u1eef li\u1ec7u th\u1eddi ti\u1ebft: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>.</p><div id="dailyContextStatus" class="profileStatus" role="status" aria-live="polite">Ch\u01b0a g\u1eedi th\u1eddi ti\u1ebft h\u00f4m nay.</div>';
   presetCard.append(dailyContextPanel);
 
   const preferencePanel=document.createElement('div');
@@ -277,26 +277,26 @@ function setupProductMode(){
 
   const previewCard=document.createElement('section');
   previewCard.className='card';
-  previewCard.innerHTML='<h2>Preview</h2><p><small>Preview dùng đúng khung 250×122 của màn.</small></p>';
+  previewCard.innerHTML='<h2>Preview</h2><p><small>Preview dĂ¹ng Ä‘Ăºng khung 250Ă—122 cá»§a mĂ n.</small></p>';
 
   const advanced=document.createElement('details');
   advanced.className='advanced';
   advanced.id='advancedPanel';
-  advanced.innerHTML='<summary>Kỹ thuật / Nâng cao</summary><div class="advancedBody"></div>';
+  advanced.innerHTML='<summary>Ká»¹ thuáº­t / NĂ¢ng cao</summary><div class="advancedBody"></div>';
 
   main.innerHTML='';
   main.append(header,statusCard,presetCard,identityCard,previewCard,advanced);
   $('identityActionRow').append(refs.d2GetIdentity);
 
   $('productConnectRow').append(refs.connect,refs.disconnect);
-  refs.connect.textContent='Kết nối';
-  refs.disconnect.textContent='Ngắt kết nối';
+  refs.connect.textContent='Káº¿t ná»‘i';
+  refs.disconnect.textContent='Ngáº¯t káº¿t ná»‘i';
   $('productActionRow').append(refs.d2SetTime,refs.syncClock);
-  refs.d2SetTime.textContent='Đồng bộ giờ';
-  refs.syncClock.textContent='Gửi lên màn';
+  refs.d2SetTime.textContent='Äá»“ng bá»™ giá»';
+  refs.syncClock.textContent='Gá»­i lĂªn mĂ n';
   $('productPresetRow').append(refs.dailyCalendar,refs.updateClock,dailyBriefing,profileApply);
-  refs.dailyCalendar.textContent='Mặt lịch hằng ngày';
-  refs.updateClock.textContent='Giờ đơn giản';
+  refs.dailyCalendar.textContent='Máº·t lá»‹ch háº±ng ngĂ y';
+  refs.updateClock.textContent='Giá» Ä‘Æ¡n giáº£n';
   refs.updateClock.textContent='Gi\u1edd l\u1edbn';
   $('productSyncSlot').append(refs.syncStatus);
   statusCard.insertBefore(refs.d2StaleBox,$('productActionRow'));
@@ -344,7 +344,7 @@ const d2RenderStateName=value=>({
   0x03:'COMPLETE',
   0x04:'ERROR'
 }[value]||`UNKNOWN_${value}`);
-const clockProfileName=value=>({0:'Lịch tháng',1:'Giờ lớn',2:'Tóm tắt trong ngày'}[value]||`Profile ${value}`);
+const clockProfileName=value=>({0:'Lá»‹ch thĂ¡ng',1:'Giá» lá»›n',2:'TĂ³m táº¯t trong ngĂ y'}[value]||`Profile ${value}`);
 
 function renderClockProfileSelection(){
   $('dailyCalendar').classList.toggle('selected',selectedClockProfile===0);
@@ -354,8 +354,8 @@ function renderClockProfileSelection(){
   $('updateClock').setAttribute('aria-pressed',String(selectedClockProfile===1));
   $('dailyBriefing').setAttribute('aria-pressed',String(selectedClockProfile===2));
   $('dailyContextPanel').hidden=selectedClockProfile!==2;
-  const stored=persistedClockProfile===0xFF?'mặc định':clockProfileName(persistedClockProfile);
-  $('profileStatus').textContent=`Đang chạy: ${clockProfileName(activeClockProfile)} · Lưu: ${stored}`;
+  const stored=persistedClockProfile===0xFF?'máº·c Ä‘á»‹nh':clockProfileName(persistedClockProfile);
+  $('profileStatus').textContent=`Äang cháº¡y: ${clockProfileName(activeClockProfile)} Â· LÆ°u: ${stored}`;
   document.documentElement.dataset.einkClockProfile=String(activeClockProfile);
 }
 
@@ -437,41 +437,41 @@ function productD2RenderIsRunning(result,state){
 
 function resolveProductState(input){
   if(!input.connected){
-    return{text:'Chưa kết nối',cls:'warn'};
+    return{text:'ChÆ°a káº¿t ná»‘i',cls:'warn'};
   }
   if(input.compatibilityMismatch){
-    return{text:'Có lỗi',cls:'bad'};
+    return{text:'CĂ³ lá»—i',cls:'bad'};
   }
   if(input.hasError){
-    return{text:'Có lỗi',cls:'bad'};
+    return{text:'CĂ³ lá»—i',cls:'bad'};
   }
   if(input.stalePresent){
-    return{text:'Cần đồng bộ giờ',cls:'warn'};
+    return{text:'Cáº§n Ä‘á»“ng bá»™ giá»',cls:'warn'};
   }
   if(productD2StatusIsRunning(input.d2Result,input.d2State) ||
      productD2RenderIsRunning(input.d2RenderResult,input.d2RenderState)){
-    return{text:'Đang chạy',cls:'ok'};
+    return{text:'Äang cháº¡y',cls:'ok'};
   }
-  return{text:'Cần đồng bộ giờ',cls:'warn'};
+  return{text:'Cáº§n Ä‘á»“ng bá»™ giá»',cls:'warn'};
 }
 
 window.__resolveEinkProductState=resolveProductState;
 
 function resolveDeviceCompatibility(identity,connected=true){
   if(!connected){
-    return{state:'disconnected',text:'Chưa kết nối',cls:'warn',detail:'Kết nối để kiểm tra firmware thực tế.'};
+    return{state:'disconnected',text:'ChÆ°a káº¿t ná»‘i',cls:'warn',detail:'Káº¿t ná»‘i Ä‘á»ƒ kiá»ƒm tra firmware thá»±c táº¿.'};
   }
   if(!identity){
-    return{state:'checking',text:'Đang kiểm tra',cls:'warn',detail:'Đang đọc identity trực tiếp từ thiết bị.'};
+    return{state:'checking',text:'Äang kiá»ƒm tra',cls:'warn',detail:'Äang Ä‘á»c identity trá»±c tiáº¿p tá»« thiáº¿t bá»‹.'};
   }
   if(identity.result!==0x00){
-    return{state:'unsupported',text:'Không hỗ trợ',cls:'bad',detail:'Firmware không trả identity D8A hợp lệ.'};
+    return{state:'unsupported',text:'KhĂ´ng há»— trá»£',cls:'bad',detail:'Firmware khĂ´ng tráº£ identity D8A há»£p lá»‡.'};
   }
   const sourceId=identity.sourceId.toString(16).padStart(8,'0').toUpperCase();
   if(identity.firmware===EINK_TEST_IDENTITY.expectedRuntime && sourceId===EINK_TEST_IDENTITY.expectedSourceId){
-    return{state:'compatible',text:'Tương thích',cls:'ok',detail:`Đúng ${identity.firmware} / ${sourceId}.`};
+    return{state:'compatible',text:'TÆ°Æ¡ng thĂ­ch',cls:'ok',detail:`ÄĂºng ${identity.firmware} / ${sourceId}.`};
   }
-  return{state:'mismatch',text:'Sai firmware',cls:'bad',detail:`Nhận ${identity.firmware} / ${sourceId}; cần ${EINK_TEST_IDENTITY.expectedRuntime} / ${EINK_TEST_IDENTITY.expectedSourceId}.`};
+  return{state:'mismatch',text:'Sai firmware',cls:'bad',detail:`Nháº­n ${identity.firmware} / ${sourceId}; cáº§n ${EINK_TEST_IDENTITY.expectedRuntime} / ${EINK_TEST_IDENTITY.expectedSourceId}.`};
 }
 
 window.__resolveEinkDeviceCompatibility=resolveDeviceCompatibility;
@@ -931,7 +931,7 @@ function drawDailyCalendar(sourceDate=new Date()){
   };
   ctx.restore();
   repack();
-  log(`Daily calendar updated: ${time} · ${solar} · ${lunarText}`);
+  log(`Daily calendar updated: ${time} Â· ${solar} Â· ${lunarText}`);
 }
 function drawCurrentClock(){
   const now=new Date();
@@ -957,35 +957,30 @@ function drawCurrentClock(){
   ctx.fillText(dateText,WIDTH/2,94);
   ctx.restore();
   repack();
-  log(`Preview clock updated: ${timeText} · ${dateText}`);
+  log(`Preview clock updated: ${timeText} Â· ${dateText}`);
 }
 
 function drawDailyBriefingPreview(){
   const now=new Date();
-  const time=new Intl.DateTimeFormat('vi-VN',{hour:'2-digit',minute:'2-digit',hour12:false}).format(now);
-  const date=new Intl.DateTimeFormat('vi-VN',{weekday:'short',day:'2-digit',month:'2-digit',year:'numeric'}).format(now).replace(',','');
   const weatherEnabled=$('dailyWeatherEnabled').checked;
-  const weather=['SUN','CLD','RAN','STM','FOG','WND','HOT'][Number($('dailyWeatherCode').value)]||'SUN';
+  const weather=['N\u1eafng','M\u00e2y','M\u01b0a','Gi\u00f4ng','S\u01b0\u01a1ng','Gi\u00f3','N\u00f3ng'][Number($('dailyWeatherCode').value)]||'N\u1eafng';
   const temperature=$('dailyTemperature').value;
   const precipitation=$('dailyPrecipitation').value;
-  const rows=[0,1].map(index=>({time:$(`dailyAgendaTime${index}`).value,label:$(`dailyAgendaLabel${index}`).value.trim().toUpperCase()})).filter(row=>row.time&&row.label);
 
-  clearWhite();
+  drawDailyCalendar(now);
   ctx.save();
   ctx.fillStyle='#000';
-  ctx.font='bold 10px ui-monospace,monospace';
+  ctx.font='bold 9px ui-monospace,monospace';
   ctx.textAlign='left';
-  ctx.fillText(date,4,14);
-  ctx.font='bold 32px ui-monospace,monospace';
-  ctx.fillText(time,7,58);
-  ctx.fillRect(104,6,2,110);
-  ctx.font='bold 11px ui-monospace,monospace';
-  if(weatherEnabled&&temperature!=='')ctx.fillText(`${weather} ${temperature}C`,116,16);
-  if(weatherEnabled&&precipitation!=='')ctx.fillText(`POP ${precipitation}`,116,31);
-  rows.forEach((row,index)=>ctx.fillText(`${row.time} ${row.label}`,116,59+(index*19)));
+  if(weatherEnabled&&temperature!==''&&precipitation!==''){
+    ctx.fillStyle='#fff';
+    ctx.fillRect(4,78,137,13);
+    ctx.fillStyle='#000';
+    ctx.fillText(`${weather} ${temperature} C \u00b7 M\u01b0a ${precipitation}%`,5,88);
+  }
   ctx.restore();
   repack();
-  log('Daily briefing preview updated');
+  log('Preview l\u1ecbch th\u00e1ng v\u00e0 th\u1eddi ti\u1ebft \u0111\u00e3 c\u1eadp nh\u1eadt');
 }
 
 function addSimpleText(){
@@ -1059,7 +1054,7 @@ function minuteKey(date=new Date()){
   return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}-${pad(date.getHours())}-${pad(date.getMinutes())}`;
 }
 
-function stopAutoSync(message='Auto sync đang tắt',cls='warn'){
+function stopAutoSync(message='Auto sync Ä‘ang táº¯t',cls='warn'){
   autoSyncEnabled=false;
   $('autoSync').checked=false;
   if(autoSyncTimer){
@@ -1075,7 +1070,7 @@ function startAutoSync(){
   autoSyncEnabled=true;
   autoArmedMinuteKey=minuteKey();
   $('autoSync').checked=true;
-  setAutoStatus('Đang chờ phút mới','warn');
+  setAutoStatus('Äang chá» phĂºt má»›i','warn');
   if(!autoSyncTimer){
     autoSyncTimer=setInterval(checkAutoSyncMinute,1000);
   }
@@ -1085,7 +1080,7 @@ function startAutoSync(){
 async function checkAutoSyncMinute(){
   if(!autoSyncEnabled)return;
   if(!server?.connected){
-    stopAutoSync('Lỗi, đã tắt Auto sync','bad');
+    stopAutoSync('Lá»—i, Ä‘Ă£ táº¯t Auto sync','bad');
     return;
   }
   if(busy||e6Running||oneTapRunning||d2Running)return;
@@ -1096,17 +1091,17 @@ async function checkAutoSyncMinute(){
   }
 
   try{
-    setAutoStatus('Đang đồng bộ','warn');
+    setAutoStatus('Äang Ä‘á»“ng bá»™','warn');
     await syncClockToPanel();
     if($('e6Result').textContent !== 'COMPLETE'){
-      throw Error('E6 chưa COMPLETE.');
+      throw Error('E6 chÆ°a COMPLETE.');
     }
     lastAutoSentMinuteKey=currentMinuteKey;
     autoArmedMinuteKey=currentMinuteKey;
-    setAutoStatus('Đồng bộ hoàn tất','ok');
+    setAutoStatus('Äá»“ng bá»™ hoĂ n táº¥t','ok');
   }catch(error){
     log(`Auto sync error: ${error.message}`,'ERROR');
-    stopAutoSync('Lỗi, đã tắt Auto sync','bad');
+    stopAutoSync('Lá»—i, Ä‘Ă£ táº¯t Auto sync','bad');
   }
 }
 
@@ -1148,13 +1143,13 @@ function resetD2UiDisconnected(){
   $('d2Uptime').textContent='-';
   $('d2RenderStatus').textContent='NOT RUN';
   $('d2RenderStatus').className='warn';
-  $('actualFirmware').textContent='Chưa đọc';
+  $('actualFirmware').textContent='ChÆ°a Ä‘á»c';
   $('actualSourceId').textContent='-';
   $('actualHealth').textContent='-';
-  $('identityUpdatedAt').textContent='Chưa đọc';
-  $('batteryVoltage').textContent='Chưa đọc';
-  $('batteryLevel').textContent='Ước tính -';
-  $('batteryUpdatedAt').textContent='Chưa đọc';
+  $('identityUpdatedAt').textContent='ChÆ°a Ä‘á»c';
+  $('batteryVoltage').textContent='ChÆ°a Ä‘á»c';
+  $('batteryLevel').textContent='Æ¯á»›c tĂ­nh -';
+  $('batteryUpdatedAt').textContent='ChÆ°a Ä‘á»c';
   renderClockProfileSelection();
   renderClockPreferenceSelection();
   renderDeviceCompatibility(null,false);
@@ -1420,7 +1415,7 @@ function estimateBatteryPercent(millivolts){
 function renderBatteryTelemetry(millivolts){
   const percent=estimateBatteryPercent(millivolts);
   $('batteryVoltage').textContent=`${(millivolts/1000).toFixed(2)} V`;
-  $('batteryLevel').textContent=`Ước tính ${percent}%`;
+  $('batteryLevel').textContent=`Æ¯á»›c tĂ­nh ${percent}%`;
   $('batteryUpdatedAt').textContent=new Date().toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
   document.documentElement.dataset.einkBatteryMillivolts=String(millivolts);
   return percent;
@@ -1428,10 +1423,10 @@ function renderBatteryTelemetry(millivolts){
 
 async function refreshBatteryTelemetry(){
   if(batteryRunning)return;
-  if(!server?.connected)throw Error('BLE chưa kết nối.');
+  if(!server?.connected)throw Error('BLE chÆ°a káº¿t ná»‘i.');
   batteryRunning=true;
   controls();
-  $('batteryVoltage').textContent='Đang đọc';
+  $('batteryVoltage').textContent='Äang Ä‘á»c';
   try{
     batteryService=batteryService||await server.getPrimaryService(BATTERY_SERVICE);
     batteryChar=batteryChar||await batteryService.getCharacteristic(BATTERY_CHARACTERISTIC);
@@ -1444,9 +1439,9 @@ async function refreshBatteryTelemetry(){
   }catch(error){
     batteryService=null;
     batteryChar=null;
-    $('batteryVoltage').textContent='Không hỗ trợ';
-    $('batteryLevel').textContent='Ước tính -';
-    $('batteryUpdatedAt').textContent='Không đọc được';
+    $('batteryVoltage').textContent='KhĂ´ng há»— trá»£';
+    $('batteryLevel').textContent='Æ¯á»›c tĂ­nh -';
+    $('batteryUpdatedAt').textContent='KhĂ´ng Ä‘á»c Ä‘Æ°á»£c';
     log(`Battery unavailable: ${error.message}`,'BATTERY');
   }finally{
     batteryRunning=false;
@@ -1539,8 +1534,7 @@ function renderD2DailyStatus(status){
   dailyContextFlags=(status.weatherValid?1:0)|(status.agendaValid?2:0);
   const stateName=['Ch\u01b0a c\u00f3','H\u00f4m nay','\u0110\u00e3 h\u1ebft h\u1ea1n'][status.state]||`State ${status.state}`;
   const parts=[stateName];
-  if(status.weatherValid)parts.push(`${['SUN','CLD','RAN','STM','FOG','WND','HOT'][status.weather]||'?'} ${status.temperature}C`);
-  if(status.agendaValid)parts.push(`${status.agendaCount} l\u1ecbch`);
+  if(status.weatherValid)parts.push(`${['N\u1eafng','Nhi\u1ec1u m\u00e2y','M\u01b0a','Gi\u00f4ng','S\u01b0\u01a1ng m\u00f9','Gi\u00f3','N\u00f3ng'][status.weather]||'Kh\u00f4ng r\u00f5'} ${status.temperature} C, m\u01b0a ${status.precipitation}%`);
   $('dailyContextStatus').textContent=parts.join(' \u00b7 ');
   $('dailyContextStatus').className=`profileStatus ${status.result===0?'ok':'bad'}`;
   if(status.result===0)clearProductError();
@@ -1575,7 +1569,7 @@ function renderD2ProfileStatus(status){
     selectedClockProfile=status.active;
     clearProductError();
   }else if(status.result===0x06){
-    $('profileStatus').textContent='Panel đang render, sẽ tự áp dụng sau khi hoàn tất.';
+    $('profileStatus').textContent='Panel Ä‘ang render, sáº½ tá»± Ă¡p dá»¥ng sau khi hoĂ n táº¥t.';
   }else{
     selectedClockProfile=activeClockProfile;
     markProductError(`D2 profile ${d2ResultName(status.result)}`);
@@ -1587,7 +1581,7 @@ function renderD2ProfileStatus(status){
 function renderD2Identity(identity){
   deviceIdentity=identity;
   const sourceId=identity.sourceId.toString(16).padStart(8,'0').toUpperCase();
-  $('actualFirmware').textContent=identity.result===0?identity.firmware:'Không hỗ trợ';
+  $('actualFirmware').textContent=identity.result===0?identity.firmware:'KhĂ´ng há»— trá»£';
   $('actualSourceId').textContent=sourceId;
   const flags=[];
   if(identity.health&0x01)flags.push('TIME');
@@ -1596,7 +1590,7 @@ function renderD2Identity(identity){
   if(identity.health&0x08)flags.push('RENDER');
   if(identity.health&0x10)flags.push('PRIME');
   if(identity.health&0x20)flags.push('STORE');
-  $('actualHealth').textContent=flags.join(' · ')||'IDLE';
+  $('actualHealth').textContent=flags.join(' Â· ')||'IDLE';
   $('identityUpdatedAt').textContent=new Date().toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
   if(identity.result===0)clearProductError();
   renderDeviceCompatibility(identity,true);
@@ -1646,9 +1640,9 @@ function handleD2Notify(bytes){
     if(bytes[1]===0x81){
       const status=parseD2Status(bytes);
       if(identityProbePending&&status.result===0x01){
-        $('actualFirmware').textContent='Không hỗ trợ';
+        $('actualFirmware').textContent='KhĂ´ng há»— trá»£';
         $('actualSourceId').textContent='-';
-        $('actualHealth').textContent='Firmware cũ';
+        $('actualHealth').textContent='Firmware cÅ©';
         renderDeviceCompatibility({result:0x01,firmware:'----',sourceId:0},true);
         log('D2 identity is not supported by this firmware','D2');
       }else{
@@ -1715,7 +1709,7 @@ async function connect(){
     latestFwCrc=null;
     e6Running=false;
     $('ble').textContent='Disconnected';
-    stopAutoSync('Auto sync đang tắt');
+    stopAutoSync('Auto sync Ä‘ang táº¯t');
     resetD2UiDisconnected();
     log('Disconnected');
   });
@@ -1733,7 +1727,7 @@ async function connect(){
   try{
     await d2GetDeviceIdentity();
   }catch(error){
-    $('actualFirmware').textContent='Không hỗ trợ';
+    $('actualFirmware').textContent='KhĂ´ng há»— trá»£';
     renderDeviceCompatibility({result:0x01,firmware:'----',sourceId:0},true);
     log(`D2 identity unavailable: ${error.message}`,'D2');
   }
@@ -1759,8 +1753,8 @@ async function openE4(){
 }
 
 async function runD2Flow(action){
-  if(d2Running||busy||e6Running||oneTapRunning)throw Error('Đang có flow BLE khác chạy.');
-  if(!server?.connected)throw Error('BLE chưa kết nối. Hãy Connect EINK/HINK trước.');
+  if(d2Running||busy||e6Running||oneTapRunning)throw Error('Äang cĂ³ flow BLE khĂ¡c cháº¡y.');
+  if(!server?.connected)throw Error('BLE chÆ°a káº¿t ná»‘i. HĂ£y Connect EINK/HINK trÆ°á»›c.');
   d2Running=true;
   controls();
   try{
@@ -1788,6 +1782,49 @@ async function d2SetCurrentTime(options={}){
   renderD2Status(status,options);
   if(status.result===0x00)scheduleIdentityHealthRefresh('time sync');
   return status;
+}
+
+async function d2SyncTimeAndEnsureVisible(){
+  /*
+   * The first render after a fresh time sync primes this panel/controller.
+   * Firmware may report COMPLETE while that prime cycle still leaves the
+   * physical panel white. Wait for the prime cycle, then perform exactly
+   * one normal D2 redraw so the selected device layout becomes visible.
+   */
+  productD2RenderResult=null;
+  productD2RenderState=null;
+
+  const status=await d2SetCurrentTime();
+  if(status.result!==0x00){
+    throw Error(`D2 time sync rejected: ${d2ResultName(status.result)}`);
+  }
+
+  const deadline=Date.now()+35000;
+
+  while(productD2RenderState!==0x03){
+    const remaining=deadline-Date.now();
+    if(remaining<=0){
+      throw Error('D2 prime render timeout');
+    }
+
+    const prime=parseD2RenderStatus(await waitFor(
+      a=>a[0]===0xD2 &&
+         a[1]===0x82 &&
+         (a[3]===0x03 || a[3]===0x04),
+      remaining
+    ));
+
+    productD2RenderResult=prime.result;
+    productD2RenderState=prime.state;
+
+    if(prime.result!==0x00 || prime.state===0x04){
+      throw Error(`D2 prime render failed: ${d2ResultName(prime.result)} / ${d2RenderStateName(prime.state)}`);
+    }
+  }
+
+  log('Prime render COMPLETE; starting one visible redraw','D2');
+  await sleep(250);
+  await d2RenderClockFromDevice();
 }
 
 async function d2GetTimeStatus(options={}){
@@ -1857,7 +1894,7 @@ async function d2ApplyClockProfile(){
   renderD2ProfileStatus(status);
   if(status.result!==0x00)throw Error(`D2 profile rejected: ${d2ResultName(status.result)}`);
   await d2RenderClockFromDevice();
-  $('profileStatus').textContent=`Đã áp dụng: ${clockProfileName(activeClockProfile)}`;
+  $('profileStatus').textContent=`ÄĂ£ Ă¡p dá»¥ng: ${clockProfileName(activeClockProfile)}`;
 }
 
 async function d2GetClockPreferences(){
@@ -1937,7 +1974,7 @@ async function d2SetDailyContext(){
 function scheduleIdentityHealthRefresh(reason){
   if(identityRefreshPending||!server?.connected)return;
   identityRefreshPending=true;
-  $('identityUpdatedAt').textContent='Đang cập nhật';
+  $('identityUpdatedAt').textContent='Äang cáº­p nháº­t';
   setTimeout(async()=>{
     try{
       if(!server?.connected)return;
@@ -1948,7 +1985,7 @@ function scheduleIdentityHealthRefresh(reason){
       await d2GetDeviceIdentity();
       log(`Identity health refreshed after ${reason}`,'D2');
     }catch(error){
-      $('identityUpdatedAt').textContent='Không đọc được';
+      $('identityUpdatedAt').textContent='KhĂ´ng Ä‘á»c Ä‘Æ°á»£c';
       log(`Identity health refresh failed: ${error.message}`,'D2');
     }finally{
       identityRefreshPending=false;
@@ -1965,7 +2002,7 @@ async function d2RecoverStaleTime(){
     await d2SetCurrentTime();
     const status=await d2GetTimeStatus({recoveryConfirm:true});
     if(hasD2StalePresent(status)){
-      throw Error('STALE_PRESENT vẫn còn sau khi đồng bộ giờ.');
+      throw Error('STALE_PRESENT váº«n cĂ²n sau khi Ä‘á»“ng bá»™ giá».');
     }
     d2StaleRecoveryPending=false;
     d2StalePresent=false;
@@ -2250,29 +2287,29 @@ async function refreshPanel() {
 
 async function syncClockToPanel(){
   if(oneTapRunning||e6Running)return;
-  if(!server?.connected)throw Error('BLE chưa kết nối. Hãy Connect EINK/HINK trước.');
+  if(!server?.connected)throw Error('BLE chÆ°a káº¿t ná»‘i. HĂ£y Connect EINK/HINK trÆ°á»›c.');
 
   oneTapRunning=true;
   controls();
   try{
-    setSyncStatus('Đang cập nhật giờ','warn');
+    setSyncStatus('Äang cáº­p nháº­t giá»','warn');
     drawDailyCalendar();
 
-    setSyncStatus('Đang gửi E5','warn');
+    setSyncStatus('Äang gá»­i E5','warn');
     await sendFramebuffer();
     if(!(e5Success && latestFwCrc === browserCrc)){
-      throw Error('E5 chưa COMPLETE hoặc CRC chưa khớp.');
+      throw Error('E5 chÆ°a COMPLETE hoáº·c CRC chÆ°a khá»›p.');
     }
 
-    setSyncStatus('Đang refresh E6','warn');
+    setSyncStatus('Äang refresh E6','warn');
     await refreshPanel();
     if($('e6Result').textContent !== 'COMPLETE'){
-      throw Error('E6 chưa COMPLETE.');
+      throw Error('E6 chÆ°a COMPLETE.');
     }
 
-    setSyncStatus('Hoàn tất','ok');
+    setSyncStatus('HoĂ n táº¥t','ok');
   }catch(error){
-    setSyncStatus(`Lỗi: ${$('syncStatus').textContent}`, 'bad');
+    setSyncStatus(`Lá»—i: ${$('syncStatus').textContent}`, 'bad');
     throw error;
   }finally{
     oneTapRunning=false;
@@ -2317,7 +2354,7 @@ $('disconnect').onclick=()=>device?.gatt?.disconnect();
 $('send').onclick=()=>safe(sendFramebuffer);
 $('refresh').onclick=()=>safe(refreshPanel);
 $('syncClock').onclick=()=>safe(syncClockToPanel);
-$('d2SetTime').onclick=()=>runD2Flow(d2SetCurrentTime);
+$('d2SetTime').onclick=()=>runD2Flow(d2SyncTimeAndEnsureVisible);
 $('d2GetStatus').onclick=()=>runD2Flow(d2GetTimeStatus);
 $('d2RenderClock').onclick=()=>runD2Flow(d2RenderClockFromDevice);
 $('d2GetIdentity').onclick=()=>runD2Flow(d2GetDeviceIdentity);
@@ -2339,7 +2376,7 @@ resetD2UiDisconnected();
 controls();
 markLayoutHealth();
 window.addEventListener('resize',markLayoutHealth);
-log('TASK D13C ready. Phone weather uses geolocation and Open-Meteo.');
+log('TASK D13D s\u1eb5n s\u00e0ng. L\u1ecbch th\u00e1ng v\u00e0 th\u1eddi ti\u1ebft ti\u1ebfng Vi\u1ec7t.');
 </script>
 </body>
 </html>
