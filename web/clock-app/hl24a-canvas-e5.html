@@ -1288,7 +1288,7 @@ function mapOpenMeteoWeatherCode(
    * A WMO rain code alone may describe the model condition even when
    * no measurable rain is present at the current model time-step.
    */
-  if(rainCodes.includes(wmoCode)&&precipitationNow>=0.1)return 2;
+  if(rainCodes.includes(wmoCode)&&precipitationNow>=0.2)return 2;
   if(windSpeed>=35)return 5;
   if(temperature>=35)return 6;
   return wmoCode===0?0:1;
