@@ -126,6 +126,9 @@ static timer_hnd hink_e6_timer_hnd       __SECTION_ZERO("retention_mem_area0");
 #define HINK_D2_SET_PREF_LEN        4U
 #define HINK_D2_GET_PREF_LEN        2U
 #define HINK_D2_PREF_STATUS_LEN     8U
+#define HINK_D2_SET_DAILY_LEN       20U
+#define HINK_D2_GET_DAILY_LEN       2U
+#define HINK_D2_DAILY_STATUS_LEN    20U
 #define HINK_D2_EPOCH_MIN           1704067200UL
 #define HINK_D2_EPOCH_MAX           4102444799UL
 #define HINK_D2_STALE_SECONDS       86400UL
@@ -141,9 +144,11 @@ static timer_hnd hink_e6_timer_hnd       __SECTION_ZERO("retention_mem_area0");
 #define HINK_D2_RESULT_BUSY           0x06U
 #define HINK_D2_RESULT_INVALID_PROFILE 0x07U
 #define HINK_D2_RESULT_INVALID_PREF   0x08U
+#define HINK_D2_RESULT_INVALID_DAILY  0x09U
 
 #define HINK_CLOCK_PROFILE_MONTHLY    0x00U
 #define HINK_CLOCK_PROFILE_LARGE_TIME 0x01U
+#define HINK_CLOCK_PROFILE_DAILY      0x02U
 #define HINK_CLOCK_PROFILE_NONE       0xFFU
 #define HINK_PROFILE_FLAG_PERSISTED   0x01U
 #define HINK_PROFILE_FLAG_DEFAULTED   0x02U
@@ -164,6 +169,14 @@ static timer_hnd hink_e6_timer_hnd       __SECTION_ZERO("retention_mem_area0");
 #define HINK_D2_RENDER_RENDERING 0x02U
 #define HINK_D2_RENDER_COMPLETE  0x03U
 #define HINK_D2_RENDER_ERROR     0x04U
+
+#define HINK_DAILY_SCHEMA          0x01U
+#define HINK_DAILY_WEATHER_VALID   0x01U
+#define HINK_DAILY_AGENDA_VALID    0x02U
+#define HINK_DAILY_FLAGS_MASK      0x03U
+#define HINK_DAILY_STATE_UNSET     0x00U
+#define HINK_DAILY_STATE_FRESH     0x01U
+#define HINK_DAILY_STATE_EXPIRED   0x02U
 
 #define HINK_D8A_IDENTITY_SCHEMA 0x01U
 #define HINK_D8A_SOURCE_ID       0xD8A00001UL
@@ -192,6 +205,15 @@ static uint8_t hink_hour_mode              __SECTION_ZERO("retention_mem_area0")
 static uint8_t hink_refresh_minutes        __SECTION_ZERO("retention_mem_area0");
 static uint8_t hink_hour_mode_persisted    __SECTION_ZERO("retention_mem_area0");
 static uint8_t hink_refresh_persisted      __SECTION_ZERO("retention_mem_area0");
+static uint16_t hink_daily_day_key         __SECTION_ZERO("retention_mem_area0");
+static uint16_t hink_daily_agenda_minute[2] __SECTION_ZERO("retention_mem_area0");
+static int8_t hink_daily_temperature       __SECTION_ZERO("retention_mem_area0");
+static uint8_t hink_daily_flags            __SECTION_ZERO("retention_mem_area0");
+static uint8_t hink_daily_weather          __SECTION_ZERO("retention_mem_area0");
+static uint8_t hink_daily_precipitation    __SECTION_ZERO("retention_mem_area0");
+static uint8_t hink_daily_agenda_count     __SECTION_ZERO("retention_mem_area0");
+static uint8_t hink_daily_set              __SECTION_ZERO("retention_mem_area0");
+static char hink_daily_agenda_label[2][3]  __SECTION_ZERO("retention_mem_area0");
 static timer_hnd epd_wait_hnd;
 static uint8_t hink_epd_busy_seen;
 static uint8_t hink_epd_busy_start_polls;
@@ -269,6 +291,7 @@ static void hink_d7a_box(int x1, int y1, int x2, int y2, uint8_t color);
 static void hink_d7a_draw_acute(uint8_t x, uint8_t y);
 static void hink_d2_profile_notify(uint8_t result);
 static void hink_d2_pref_notify(uint8_t result);
+static void hink_d2_daily_notify(uint8_t result);
 
 static void hink_e4_arm_timer(void);
 
@@ -1263,6 +1286,26 @@ static void hink_d7a_draw_acute(uint8_t x, uint8_t y)
 	hink_d7a_pixel(x + 5U, y, BLACK);
 }
 
+static uint16_t hink_daily_current_day_key(void)
+{
+	return (uint16_t)((hink_auto_local_minute_key() / 1440UL) -
+	                  HINK_D3C_UNIX_DAY_2024_01_01);
+}
+
+static uint8_t hink_daily_state(void)
+{
+	if (!hink_daily_set)
+	{
+		return HINK_DAILY_STATE_UNSET;
+	}
+	if ((hink_d2_synced_epoch == 0UL) ||
+	    (hink_daily_day_key != hink_daily_current_day_key()))
+	{
+		return HINK_DAILY_STATE_EXPIRED;
+	}
+	return HINK_DAILY_STATE_FRESH;
+}
+
 static void hink_d7a_draw_circumflex(uint8_t x, uint8_t y)
 {
 	hink_d7a_pixel(x + 1U, y + 1U, BLACK);
@@ -1346,6 +1389,114 @@ static void hink_d11b_draw_large_time(uint8_t h, uint8_t m, uint16_t sy,
 		ampm_buf[1] = 'M';
 		ampm_buf[2] = 0;
 		draw_text(218, 102, ampm_buf, BLACK);
+	}
+}
+
+static void hink_d13b_draw_daily_briefing(uint8_t h, uint8_t m, uint16_t sy,
+                                          uint8_t sm, uint8_t sd, uint8_t sw,
+                                          uint8_t lunar_valid, uint8_t lm,
+                                          uint8_t ld, uint8_t ampm)
+{
+	static const char weather_tokens[7][3] = {
+		{'S','U','N'}, {'C','L','D'}, {'R','A','N'}, {'S','T','M'},
+		{'F','O','G'}, {'W','N','D'}, {'H','O','T'}
+	};
+	char buf[16];
+	uint8_t value;
+	uint8_t pos;
+	uint8_t i;
+
+	hink_weekday(buf, sw);
+	buf[2] = ' ';
+	hink_put_2(&buf[3], sd);
+	buf[5] = '/';
+	hink_put_2(&buf[6], (uint8_t)(sm + 1U));
+	buf[8] = '/';
+	hink_put_4(&buf[9], sy);
+	buf[13] = 0;
+	draw_text(4, 7, buf, BLACK);
+	hink_d7a_draw_hhmm(11, 34, h, m, BLACK);
+	hink_d9a_draw_lunar(24, 91, lunar_valid, lm, ld);
+	if (ampm != 0U)
+	{
+		buf[0] = (ampm == 2U) ? 'P' : 'A';
+		buf[1] = 'M';
+		buf[2] = 0;
+		draw_text(80, 78, buf, BLACK);
+	}
+	hink_d7a_box(104, 6, 105, 116, BLACK);
+
+	if (hink_daily_state() != HINK_DAILY_STATE_FRESH)
+	{
+		return;
+	}
+	if (hink_daily_flags & HINK_DAILY_WEATHER_VALID)
+	{
+		for (i = 0U; i < 3U; i++)
+		{
+			buf[i] = weather_tokens[hink_daily_weather][i];
+		}
+		buf[3] = ' ';
+		pos = 4U;
+		if (hink_daily_temperature < 0)
+		{
+			buf[pos++] = '-';
+			value = (uint8_t)(-hink_daily_temperature);
+		}
+		else
+		{
+			value = (uint8_t)hink_daily_temperature;
+		}
+		if (value >= 10U)
+		{
+			buf[pos++] = (char)('0' + (value / 10U));
+		}
+		buf[pos++] = (char)('0' + (value % 10U));
+		buf[pos++] = 'C';
+		buf[pos] = 0;
+		draw_text(116, 8, buf, BLACK);
+
+		buf[0] = 'P';
+		buf[1] = 'O';
+		buf[2] = 'P';
+		buf[3] = ' ';
+		pos = 4U;
+		value = hink_daily_precipitation;
+		if (value == 100U)
+		{
+			buf[pos++] = '1';
+			buf[pos++] = '0';
+			buf[pos++] = '0';
+		}
+		else
+		{
+			if (value >= 10U)
+			{
+				buf[pos++] = (char)('0' + (value / 10U));
+			}
+			buf[pos++] = (char)('0' + (value % 10U));
+		}
+		buf[pos] = 0;
+		draw_text(116, 22, buf, BLACK);
+	}
+
+	if (hink_daily_flags & HINK_DAILY_AGENDA_VALID)
+	{
+		draw_text(116, 42, "TODAY", BLACK);
+		for (i = 0U; i < hink_daily_agenda_count; i++)
+		{
+			value = (uint8_t)(hink_daily_agenda_minute[i] / 60U);
+			hink_put_2(&buf[0], value);
+			buf[2] = ':';
+			value = (uint8_t)(hink_daily_agenda_minute[i] % 60U);
+			hink_put_2(&buf[3], value);
+			buf[5] = ' ';
+			buf[6] = hink_daily_agenda_label[i][0];
+			buf[7] = hink_daily_agenda_label[i][1];
+			buf[8] = hink_daily_agenda_label[i][2];
+			buf[9] = 0;
+			draw_text(116, (uint8_t)(58U + (i * 18U)), buf, BLACK);
+		}
 	}
 }
 
@@ -1926,7 +2077,7 @@ static void hink_d2_profile_notify(uint8_t result)
     uint8_t msg[HINK_D2_PROFILE_STATUS_LEN];
     uint8_t status_flags = 0U;
 
-    if (hink_clock_profile_persisted <= HINK_CLOCK_PROFILE_LARGE_TIME)
+    if (hink_clock_profile_persisted <= HINK_CLOCK_PROFILE_DAILY)
     {
         status_flags |= HINK_PROFILE_FLAG_PERSISTED;
     }
@@ -1960,7 +2111,7 @@ static uint8_t hink_d2_profile_handle(struct custs1_val_write_ind const *param)
         return 1U;
     }
     profile = param->value[2];
-    if (profile > HINK_CLOCK_PROFILE_LARGE_TIME)
+    if (profile > HINK_CLOCK_PROFILE_DAILY)
     {
         hink_d2_profile_notify(HINK_D2_RESULT_INVALID_PROFILE);
         return 1U;
@@ -2079,6 +2230,178 @@ static uint8_t hink_d2_pref_handle(struct custs1_val_write_ind const *param)
     return 1U;
 }
 
+static uint8_t hink_daily_label_valid(const uint8_t *label)
+{
+    uint8_t i;
+    uint8_t non_space = 0U;
+
+    for (i = 0U; i < 3U; i++)
+    {
+        if (((label[i] < 'A') || (label[i] > 'Z')) &&
+            ((label[i] < '0') || (label[i] > '9')) &&
+            (label[i] != ' '))
+        {
+            return 0U;
+        }
+        if (label[i] != ' ')
+        {
+            non_space = 1U;
+        }
+    }
+    return non_space;
+}
+
+static uint8_t hink_daily_entry_blank(const uint8_t *value, uint8_t minute_offset,
+                                      uint8_t label_offset)
+{
+    return (uint8_t)((hink_u16_le(&value[minute_offset]) == 0U) &&
+                     (value[label_offset] == ' ') &&
+                     (value[label_offset + 1U] == ' ') &&
+                     (value[label_offset + 2U] == ' '));
+}
+
+static void hink_d2_daily_notify(uint8_t result)
+{
+    uint8_t msg[HINK_D2_DAILY_STATUS_LEN];
+    uint8_t i;
+    uint8_t state = hink_daily_state();
+
+    memset(msg, 0, sizeof(msg));
+    msg[0] = 0xD2;
+    msg[1] = 0x88;
+    msg[2] = result;
+    msg[3] = state;
+    msg[12] = msg[13] = msg[14] = ' ';
+    msg[17] = msg[18] = msg[19] = ' ';
+    if (hink_daily_set)
+    {
+        msg[3] |= (uint8_t)(hink_daily_flags << 2);
+        hink_put_u16_le(&msg[4], hink_daily_day_key);
+        msg[6] = hink_daily_weather;
+        msg[7] = (uint8_t)hink_daily_temperature;
+        msg[8] = hink_daily_precipitation;
+        msg[9] = hink_daily_agenda_count;
+        for (i = 0U; i < 2U; i++)
+        {
+            uint8_t minute_offset = (uint8_t)(10U + (i * 5U));
+            uint8_t label_offset = (uint8_t)(12U + (i * 5U));
+            hink_put_u16_le(&msg[minute_offset], hink_daily_agenda_minute[i]);
+            msg[label_offset] = (uint8_t)hink_daily_agenda_label[i][0];
+            msg[label_offset + 1U] = (uint8_t)hink_daily_agenda_label[i][1];
+            msg[label_offset + 2U] = (uint8_t)hink_daily_agenda_label[i][2];
+        }
+    }
+    hink_e4_notify_bytes(msg, HINK_D2_DAILY_STATUS_LEN);
+}
+
+static uint8_t hink_d2_daily_handle(struct custs1_val_write_ind const *param)
+{
+    uint16_t day_key;
+    uint16_t minute0;
+    uint16_t minute1;
+    int8_t temperature;
+    uint8_t flags;
+    uint8_t count;
+    uint8_t i;
+
+    if (param->value[1] == 0x09U)
+    {
+        hink_d2_daily_notify((param->length == HINK_D2_GET_DAILY_LEN) ?
+                             HINK_D2_RESULT_OK : HINK_D2_RESULT_INVALID_LENGTH);
+        return 1U;
+    }
+    if (param->length != HINK_D2_SET_DAILY_LEN)
+    {
+        hink_d2_daily_notify(HINK_D2_RESULT_INVALID_LENGTH);
+        return 1U;
+    }
+    if (param->value[2] != HINK_DAILY_SCHEMA)
+    {
+        hink_d2_daily_notify(HINK_D2_RESULT_INVALID_DAILY);
+        return 1U;
+    }
+    flags = param->value[3];
+    if (flags & (uint8_t)~HINK_DAILY_FLAGS_MASK)
+    {
+        hink_d2_daily_notify(HINK_D2_RESULT_INVALID_FLAGS);
+        return 1U;
+    }
+    if (hink_d2_synced_epoch == 0UL)
+    {
+        hink_d2_daily_notify(HINK_D2_RESULT_NOT_INIT);
+        return 1U;
+    }
+    if (!HINK_AUTO_IDLE())
+    {
+        hink_d2_daily_notify(HINK_D2_RESULT_BUSY);
+        return 1U;
+    }
+
+    day_key = hink_u16_le(&param->value[4]);
+    temperature = (int8_t)param->value[7];
+    count = param->value[9];
+    minute0 = hink_u16_le(&param->value[10]);
+    minute1 = hink_u16_le(&param->value[15]);
+    if (day_key != hink_daily_current_day_key())
+    {
+        hink_d2_daily_notify(HINK_D2_RESULT_INVALID_DAILY);
+        return 1U;
+    }
+    if (flags & HINK_DAILY_WEATHER_VALID)
+    {
+        if ((param->value[6] > 6U) || (temperature < -40) ||
+            (temperature > 80) || (param->value[8] > 100U))
+        {
+            hink_d2_daily_notify(HINK_D2_RESULT_INVALID_DAILY);
+            return 1U;
+        }
+    }
+    else if ((param->value[6] != 0U) || (temperature != 0) ||
+             (param->value[8] != 0U))
+    {
+        hink_d2_daily_notify(HINK_D2_RESULT_INVALID_DAILY);
+        return 1U;
+    }
+
+    if (flags & HINK_DAILY_AGENDA_VALID)
+    {
+        if ((count == 0U) || (count > 2U) || (minute0 > 1439U) ||
+            !hink_daily_label_valid(&param->value[12]) ||
+            ((count == 2U) && ((minute1 > 1439U) ||
+             (minute1 <= minute0) ||
+             !hink_daily_label_valid(&param->value[17]))) ||
+            ((count == 1U) && !hink_daily_entry_blank(param->value, 15U, 17U)))
+        {
+            hink_d2_daily_notify(HINK_D2_RESULT_INVALID_DAILY);
+            return 1U;
+        }
+    }
+    else if ((count != 0U) ||
+             !hink_daily_entry_blank(param->value, 10U, 12U) ||
+             !hink_daily_entry_blank(param->value, 15U, 17U))
+    {
+        hink_d2_daily_notify(HINK_D2_RESULT_INVALID_DAILY);
+        return 1U;
+    }
+
+    hink_daily_day_key = day_key;
+    hink_daily_flags = flags;
+    hink_daily_weather = param->value[6];
+    hink_daily_temperature = temperature;
+    hink_daily_precipitation = param->value[8];
+    hink_daily_agenda_count = count;
+    hink_daily_agenda_minute[0] = minute0;
+    hink_daily_agenda_minute[1] = minute1;
+    for (i = 0U; i < 3U; i++)
+    {
+        hink_daily_agenda_label[0][i] = (char)param->value[12U + i];
+        hink_daily_agenda_label[1][i] = (char)param->value[17U + i];
+    }
+    hink_daily_set = 1U;
+    hink_d2_daily_notify(HINK_D2_RESULT_OK);
+    return 1U;
+}
+
 static uint8_t hink_d2_time_handle(struct custs1_val_write_ind const *param)
 {
     uint8_t subcmd;
@@ -2168,6 +2491,11 @@ static uint8_t hink_d2_time_handle(struct custs1_val_write_ind const *param)
     if ((subcmd == 0x06U) || (subcmd == 0x07U))
     {
         return hink_d2_pref_handle(param);
+    }
+
+    if ((subcmd == 0x08U) || (subcmd == 0x09U))
+    {
+        return hink_d2_daily_handle(param);
     }
 
     if (subcmd == 0x01U)
@@ -2357,6 +2685,11 @@ static void hink_d2_draw_current_framebuffer(void)
 	if (hink_clock_profile == HINK_CLOCK_PROFILE_LARGE_TIME)
 	{
 		hink_d11b_draw_large_time(draw_hour, m, sy, sm, sd, sw, lunar_valid, lm, ld, ampm);
+	}
+	else if (hink_clock_profile == HINK_CLOCK_PROFILE_DAILY)
+	{
+		hink_d13b_draw_daily_briefing(draw_hour, m, sy, sm, sd, sw,
+		                                  lunar_valid, lm, ld, ampm);
 	}
 	else
 	{
@@ -2580,7 +2913,7 @@ void hink_d3d_boot_load_last_known_time(void)
         hink_d3d_stale_timezone = tz_a;
         hink_d3d_stale_flags = flags_a;
         hink_d3d_stale_valid = 1U;
-        if (a[16] <= HINK_CLOCK_PROFILE_LARGE_TIME)
+        if (a[16] <= HINK_CLOCK_PROFILE_DAILY)
         {
             hink_clock_profile = a[16];
             hink_clock_profile_persisted = a[16];
@@ -2602,7 +2935,7 @@ void hink_d3d_boot_load_last_known_time(void)
         hink_d3d_stale_timezone = tz_b;
         hink_d3d_stale_flags = flags_b;
         hink_d3d_stale_valid = 1U;
-        if (b[16] <= HINK_CLOCK_PROFILE_LARGE_TIME)
+        if (b[16] <= HINK_CLOCK_PROFILE_DAILY)
         {
             hink_clock_profile = b[16];
             hink_clock_profile_persisted = b[16];
