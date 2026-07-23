@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TASK D12B - Clock Preferences</title>
+<title>TASK D13B - Daily Briefing Profile</title>
 <style>
 :root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;--bg:#07101b;--card:#111c2c;--line:#2a3d59;--text:#f4f8ff;--muted:#9fb1c8;--ok:#45d99c;--warn:#ffd166;--bad:#ff6b86}
 *{box-sizing:border-box}body{margin:0;background:linear-gradient(#050a12,#101a2a);color:var(--text)}main{max-width:1040px;margin:auto;padding:20px}
@@ -16,6 +16,7 @@
 .batteryValue{color:#8be8bd}
 .heroAction{font-size:1rem;min-width:160px}.presetRow button{min-width:160px}.presetRow button.selected,.preferenceRow button.selected{border-color:#45d99c;background:#123d34}.profileStatus{margin-top:10px;color:var(--muted)}
 .preferencePanel{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}.preferencePanel h3{margin:0 0 9px;font-size:1rem}.preferenceRow{margin-bottom:9px}.preferenceRow button{min-width:92px}.preferenceHint{margin:4px 0 9px;font-size:.85rem}
+.dailyContextPanel{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}.dailyContextPanel[hidden]{display:none}.dailyContextPanel h3{margin:0 0 9px;font-size:1rem}.dailyContextGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:9px}.dailyContextGrid label{display:grid;gap:5px;color:var(--muted);font-size:.82rem}.dailyContextGrid input,.dailyContextGrid select{width:100%}
 .advanced{margin:18px 0;border:1px solid var(--line);border-radius:12px;background:rgba(11,20,33,.96);overflow:hidden}
 .advanced>summary{cursor:pointer;list-style:none;padding:15px 16px;font-weight:850;color:#dbeafe}.advanced>summary::-webkit-details-marker{display:none}
 .advanced>summary:focus-visible{outline:2px solid #93c5fd;outline-offset:3px}.advancedBody{padding:0 16px 16px}.advancedBody .card{border-radius:10px;background:#0e1928}
@@ -173,12 +174,12 @@ const BATTERY_CHARACTERISTIC=0xFF02;
 const D2_STALE_PRESENT_FLAG=0x80;
 const D2_STALE_WARNING='Thiết bị đang giữ giờ cũ. Hãy đồng bộ giờ hiện tại để tiếp tục chạy đồng hồ.';
 const EINK_TEST_IDENTITY={
-  webBuild:'D12B-PREFERENCES-20260722',
+  webBuild:'D13B-DAILY-20260722',
   expectedFirmware:'D8A00001',
   expectedRuntime:'D8A1',
   expectedSourceId:'D8A00001',
   expectedBin:'BUILD-SPECIFIC',
-  label:'D12B CLOCK PREFERENCES'
+  label:'D13B DAILY BRIEFING'
 };
 window.EINK_TEST_IDENTITY=EINK_TEST_IDENTITY;
 
@@ -205,6 +206,7 @@ let batteryService=null,batteryChar=null,batteryRunning=false;
 let selectedClockProfile=0,activeClockProfile=0,persistedClockProfile=0xFF;
 let selectedHourMode=0,activeHourMode=0,persistedHourMode=0xFF;
 let selectedRefreshMinutes=5,activeRefreshMinutes=5,persistedRefreshMinutes=0xFF;
+let dailyContextState=0,dailyContextFlags=0;
 
 function setupProductMode(){
   const main=document.querySelector('main');
@@ -255,6 +257,17 @@ function setupProductMode(){
   profileStatus.textContent='Ch\u01b0a \u0111\u1ecdc profile t\u1eeb thi\u1ebft b\u1ecb.';
   presetCard.append(profileStatus);
 
+  const dailyBriefing=document.createElement('button');
+  dailyBriefing.id='dailyBriefing';
+  dailyBriefing.type='button';
+  dailyBriefing.textContent='T\u00f3m t\u1eaft trong ng\u00e0y';
+  const dailyContextPanel=document.createElement('div');
+  dailyContextPanel.id='dailyContextPanel';
+  dailyContextPanel.className='dailyContextPanel';
+  dailyContextPanel.hidden=true;
+  dailyContextPanel.innerHTML='<h3>Th\u1eddi ti\u1ebft v\u00e0 l\u1ecbch h\u00f4m nay</h3><div class="dailyContextGrid"><label><span><input id="dailyWeatherEnabled" type="checkbox"> C\u00f3 th\u1eddi ti\u1ebft</span></label><label>Tr\u1ea1ng th\u00e1i<select id="dailyWeatherCode"><option value="0">N\u1eafng</option><option value="1">Nhi\u1ec1u m\u00e2y</option><option value="2">M\u01b0a</option><option value="3">Gi\u00f4ng</option><option value="4">S\u01b0\u01a1ng m\u00f9</option><option value="5">Gi\u00f3</option><option value="6">N\u00f3ng</option></select></label><label>Nhi\u1ec7t \u0111\u1ed9 C<input id="dailyTemperature" type="number" min="-40" max="80" inputmode="numeric" placeholder="27"></label><label>M\u01b0a %<input id="dailyPrecipitation" type="number" min="0" max="100" inputmode="numeric" placeholder="0"></label><label>Gi\u1edd 1<input id="dailyAgendaTime0" type="time"></label><label>M\u00e3 1<input id="dailyAgendaLabel0" maxlength="3" autocomplete="off" placeholder="HOP"></label><label>Gi\u1edd 2<input id="dailyAgendaTime1" type="time"></label><label>M\u00e3 2<input id="dailyAgendaLabel1" maxlength="3" autocomplete="off" placeholder="GYM"></label></div><p class="preferenceHint">M\u00e3 l\u1ecbch t\u1ed1i \u0111a 3 k\u00fd t\u1ef1 A-Z, 0-9. D\u1eef li\u1ec7u ch\u1ec9 gi\u1eef trong RAM v\u00e0 h\u1ebft h\u1ea1n khi sang ng\u00e0y.</p><div id="dailyContextStatus" class="profileStatus" role="status" aria-live="polite">Ch\u01b0a g\u1eedi d\u1eef li\u1ec7u trong ng\u00e0y.</div>';
+  presetCard.append(dailyContextPanel);
+
   const preferencePanel=document.createElement('div');
   preferencePanel.className='preferencePanel';
   preferencePanel.innerHTML='<h3>T\u00f9y ch\u1ecdn hi\u1ec3n th\u1ecb</h3><div class="row preferenceRow" id="hourModeRow"><button id="hour24" type="button">24 gi\u1edd</button><button id="hour12" type="button">12 gi\u1edd</button></div><div class="row preferenceRow" id="cadenceRow"><button id="cadence5" type="button">5 ph\u00fat</button><button id="cadence10" type="button">10 ph\u00fat</button><button id="cadence1" type="button">1 ph\u00fat</button></div><p class="preferenceHint">1 ph\u00fat s\u1ebd t\u0103ng m\u1ee9c d\u00f9ng pin v\u00e0 s\u1ed1 l\u1ea7n refresh panel.</p><div class="row"><button id="preferenceApply" class="good" type="button">\u00c1p d\u1ee5ng t\u00f9y ch\u1ecdn</button></div><div id="preferenceStatus" class="profileStatus" role="status" aria-live="polite">Ch\u01b0a \u0111\u1ecdc t\u00f9y ch\u1ecdn t\u1eeb thi\u1ebft b\u1ecb.</div>';
@@ -279,7 +292,7 @@ function setupProductMode(){
   $('productActionRow').append(refs.d2SetTime,refs.syncClock);
   refs.d2SetTime.textContent='Đồng bộ giờ';
   refs.syncClock.textContent='Gửi lên màn';
-  $('productPresetRow').append(refs.dailyCalendar,refs.updateClock,profileApply);
+  $('productPresetRow').append(refs.dailyCalendar,refs.updateClock,dailyBriefing,profileApply);
   refs.dailyCalendar.textContent='Mặt lịch hằng ngày';
   refs.updateClock.textContent='Giờ đơn giản';
   refs.updateClock.textContent='Gi\u1edd l\u1edbn';
@@ -313,7 +326,8 @@ const d2ResultName=value=>({
   0x05:'INTERNAL_ERROR',
   0x06:'BUSY',
   0x07:'INVALID_PROFILE',
-  0x08:'INVALID_PREFERENCE'
+  0x08:'INVALID_PREFERENCE',
+  0x09:'INVALID_DAILY_DATA'
 }[value]||`UNKNOWN_${value}`);
 const d2StateName=value=>({
   0x00:'UNSET',
@@ -328,13 +342,16 @@ const d2RenderStateName=value=>({
   0x03:'COMPLETE',
   0x04:'ERROR'
 }[value]||`UNKNOWN_${value}`);
-const clockProfileName=value=>({0:'Lịch tháng',1:'Giờ lớn'}[value]||`Profile ${value}`);
+const clockProfileName=value=>({0:'Lịch tháng',1:'Giờ lớn',2:'Tóm tắt trong ngày'}[value]||`Profile ${value}`);
 
 function renderClockProfileSelection(){
   $('dailyCalendar').classList.toggle('selected',selectedClockProfile===0);
   $('updateClock').classList.toggle('selected',selectedClockProfile===1);
+  $('dailyBriefing').classList.toggle('selected',selectedClockProfile===2);
   $('dailyCalendar').setAttribute('aria-pressed',String(selectedClockProfile===0));
   $('updateClock').setAttribute('aria-pressed',String(selectedClockProfile===1));
+  $('dailyBriefing').setAttribute('aria-pressed',String(selectedClockProfile===2));
+  $('dailyContextPanel').hidden=selectedClockProfile!==2;
   const stored=persistedClockProfile===0xFF?'mặc định':clockProfileName(persistedClockProfile);
   $('profileStatus').textContent=`Đang chạy: ${clockProfileName(activeClockProfile)} · Lưu: ${stored}`;
   document.documentElement.dataset.einkClockProfile=String(activeClockProfile);
@@ -342,7 +359,9 @@ function renderClockProfileSelection(){
 
 function selectClockProfile(profile){
   selectedClockProfile=profile;
-  if(profile===0)drawDailyCalendar();else drawCurrentClock();
+  if(profile===0)drawDailyCalendar();
+  else if(profile===1)drawCurrentClock();
+  else drawDailyBriefingPreview();
   renderClockProfileSelection();
   controls();
 }
@@ -939,6 +958,34 @@ function drawCurrentClock(){
   log(`Preview clock updated: ${timeText} · ${dateText}`);
 }
 
+function drawDailyBriefingPreview(){
+  const now=new Date();
+  const time=new Intl.DateTimeFormat('vi-VN',{hour:'2-digit',minute:'2-digit',hour12:false}).format(now);
+  const date=new Intl.DateTimeFormat('vi-VN',{weekday:'short',day:'2-digit',month:'2-digit',year:'numeric'}).format(now).replace(',','');
+  const weatherEnabled=$('dailyWeatherEnabled').checked;
+  const weather=['SUN','CLD','RAN','STM','FOG','WND','HOT'][Number($('dailyWeatherCode').value)]||'SUN';
+  const temperature=$('dailyTemperature').value;
+  const precipitation=$('dailyPrecipitation').value;
+  const rows=[0,1].map(index=>({time:$(`dailyAgendaTime${index}`).value,label:$(`dailyAgendaLabel${index}`).value.trim().toUpperCase()})).filter(row=>row.time&&row.label);
+
+  clearWhite();
+  ctx.save();
+  ctx.fillStyle='#000';
+  ctx.font='bold 10px ui-monospace,monospace';
+  ctx.textAlign='left';
+  ctx.fillText(date,4,14);
+  ctx.font='bold 32px ui-monospace,monospace';
+  ctx.fillText(time,7,58);
+  ctx.fillRect(104,6,2,110);
+  ctx.font='bold 11px ui-monospace,monospace';
+  if(weatherEnabled&&temperature!=='')ctx.fillText(`${weather} ${temperature}C`,116,16);
+  if(weatherEnabled&&precipitation!=='')ctx.fillText(`POP ${precipitation}`,116,31);
+  rows.forEach((row,index)=>ctx.fillText(`${row.time} ${row.label}`,116,59+(index*19)));
+  ctx.restore();
+  repack();
+  log('Daily briefing preview updated');
+}
+
 function addSimpleText(){
   const text=$('text').value.trim()||'D1C CLOCK';
   ctx.save();
@@ -977,6 +1024,8 @@ function controls(){
   $('invert').disabled=locked;
   $('updateClock').disabled=locked;
   $('dailyCalendar').disabled=locked;
+  $('dailyBriefing').disabled=locked;
+  for(const input of document.querySelectorAll('#dailyContextPanel input,#dailyContextPanel select'))input.disabled=locked;
   $('sample').disabled=locked;
   $('addText').disabled=locked;
   $('repack').disabled=locked;
@@ -1082,6 +1131,10 @@ function resetD2UiDisconnected(){
   selectedRefreshMinutes=5;
   activeRefreshMinutes=5;
   persistedRefreshMinutes=0xFF;
+  dailyContextState=0;
+  dailyContextFlags=0;
+  $('dailyContextStatus').textContent='Ch\u01b0a \u0111\u1ecdc d\u1eef li\u1ec7u trong ng\u00e0y.';
+  $('dailyContextStatus').className='profileStatus';
   setD2Status('DISCONNECTED','warn');
   $('d2Result').textContent='-';
   $('d2State').textContent='-';
@@ -1165,6 +1218,11 @@ function putI16LE(packet,offset,value){
   packet[offset+1]=(encoded>>>8)&0xFF;
 }
 
+function putU16LE(packet,offset,value){
+  packet[offset]=value&0xFF;
+  packet[offset+1]=(value>>>8)&0xFF;
+}
+
 function buildD2SetTimePacket(date=new Date()){
   const packet=new Uint8Array(9);
   packet[0]=0xD2;
@@ -1201,6 +1259,60 @@ function buildD2SetPreferencePacket(hourMode,refreshMinutes){
 
 function buildD2GetPreferencePacket(){
   return Uint8Array.of(0xD2,0x07);
+}
+
+function dailyDayKey(date=new Date()){
+  return Math.floor((Date.UTC(date.getFullYear(),date.getMonth(),date.getDate())-Date.UTC(2024,0,1))/86400000);
+}
+
+function dailyAgendaRows(){
+  const rows=[];
+  for(const index of [0,1]){
+    const time=$(`dailyAgendaTime${index}`).value;
+    const raw=$(`dailyAgendaLabel${index}`).value.trim().toUpperCase();
+    if(!time&&!raw)continue;
+    if(!time||!raw)throw Error(`L\u1ecbch ${index+1} c\u1ea7n \u0111\u1ee7 gi\u1edd v\u00e0 m\u00e3.`);
+    if(!/^[A-Z0-9 ]{1,3}$/.test(raw))throw Error(`M\u00e3 l\u1ecbch ${index+1} ch\u1ec9 d\u00f9ng A-Z, 0-9.`);
+    const [hour,minute]=time.split(':').map(Number);
+    rows.push({minute:(hour*60)+minute,label:raw.padEnd(3,' ')});
+  }
+  rows.sort((a,b)=>a.minute-b.minute);
+  if(rows.length===2&&rows[0].minute===rows[1].minute)throw Error('Hai l\u1ecbch kh\u00f4ng \u0111\u01b0\u1ee3c tr\u00f9ng gi\u1edd.');
+  return rows;
+}
+
+function buildD2SetDailyPacket(date=new Date()){
+  const packet=new Uint8Array(20);
+  const weatherValid=$('dailyWeatherEnabled').checked;
+  const rows=dailyAgendaRows();
+  packet[0]=0xD2;
+  packet[1]=0x08;
+  packet[2]=0x01;
+  packet[3]=(weatherValid?0x01:0)|(rows.length?0x02:0);
+  putU16LE(packet,4,dailyDayKey(date));
+  if(weatherValid){
+    const temperature=Number($('dailyTemperature').value);
+    const precipitation=Number($('dailyPrecipitation').value);
+    if($('dailyTemperature').value===''||!Number.isInteger(temperature)||temperature< -40||temperature>80)throw Error('Nhi\u1ec7t \u0111\u1ed9 ph\u1ea3i l\u00e0 s\u1ed1 nguy\u00ean t\u1eeb -40 \u0111\u1ebfn 80 C.');
+    if($('dailyPrecipitation').value===''||!Number.isInteger(precipitation)||precipitation<0||precipitation>100)throw Error('M\u01b0a ph\u1ea3i l\u00e0 s\u1ed1 nguy\u00ean t\u1eeb 0 \u0111\u1ebfn 100%.');
+    packet[6]=Number($('dailyWeatherCode').value);
+    packet[7]=temperature&0xFF;
+    packet[8]=precipitation;
+  }
+  packet[9]=rows.length;
+  packet.fill(0x20,12,15);
+  packet.fill(0x20,17,20);
+  rows.forEach((row,index)=>{
+    const minuteOffset=10+(index*5);
+    const labelOffset=12+(index*5);
+    putU16LE(packet,minuteOffset,row.minute);
+    for(let i=0;i<3;i++)packet[labelOffset+i]=row.label.charCodeAt(i);
+  });
+  return packet;
+}
+
+function buildD2GetDailyPacket(){
+  return Uint8Array.of(0xD2,0x09);
 }
 
 function estimateBatteryPercent(millivolts){
@@ -1304,6 +1416,43 @@ function parseD2PreferenceStatus(bytes){
     throw Error(`Unknown D2 preference response: ${hex(bytes)}`);
   }
   return{result:bytes[2],activeHour:bytes[3],activeRefresh:bytes[4],persistedHour:bytes[5],persistedRefresh:bytes[6],flags:bytes[7]};
+}
+
+function parseD2DailyStatus(bytes){
+  if(bytes.length!==20||bytes[0]!==0xD2||bytes[1]!==0x88){
+    throw Error(`Unknown D2 daily response: ${hex(bytes)}`);
+  }
+  const stateFlags=bytes[3];
+  const decodeLabel=offset=>String.fromCharCode(bytes[offset],bytes[offset+1],bytes[offset+2]).trim();
+  return{
+    result:bytes[2],
+    state:stateFlags&0x03,
+    weatherValid:(stateFlags&0x04)!==0,
+    agendaValid:(stateFlags&0x08)!==0,
+    dayKey:u16(bytes[4],bytes[5]),
+    weather:bytes[6],
+    temperature:bytes[7]&0x80?bytes[7]-0x100:bytes[7],
+    precipitation:bytes[8],
+    agendaCount:bytes[9],
+    entries:[
+      {minute:u16(bytes[10],bytes[11]),label:decodeLabel(12)},
+      {minute:u16(bytes[15],bytes[16]),label:decodeLabel(17)}
+    ]
+  };
+}
+
+function renderD2DailyStatus(status){
+  dailyContextState=status.state;
+  dailyContextFlags=(status.weatherValid?1:0)|(status.agendaValid?2:0);
+  const stateName=['Ch\u01b0a c\u00f3','H\u00f4m nay','\u0110\u00e3 h\u1ebft h\u1ea1n'][status.state]||`State ${status.state}`;
+  const parts=[stateName];
+  if(status.weatherValid)parts.push(`${['SUN','CLD','RAN','STM','FOG','WND','HOT'][status.weather]||'?'} ${status.temperature}C`);
+  if(status.agendaValid)parts.push(`${status.agendaCount} l\u1ecbch`);
+  $('dailyContextStatus').textContent=parts.join(' \u00b7 ');
+  $('dailyContextStatus').className=`profileStatus ${status.result===0?'ok':'bad'}`;
+  if(status.result===0)clearProductError();
+  else if(status.result!==0x06)markProductError(`D2 daily ${d2ResultName(status.result)}`);
+  log(`D2 daily result=${d2ResultName(status.result)} state=${status.state} flags=0x${dailyContextFlags.toString(16).padStart(2,'0').toUpperCase()} day=${status.dayKey}`,'D2');
 }
 
 function renderD2PreferenceStatus(status){
@@ -1435,6 +1584,8 @@ function handleD2Notify(bytes){
       renderD2ProfileStatus(parseD2ProfileStatus(bytes));
     }else if(bytes[1]===0x86){
       renderD2PreferenceStatus(parseD2PreferenceStatus(bytes));
+    }else if(bytes[1]===0x88){
+      renderD2DailyStatus(parseD2DailyStatus(bytes));
     }else{
       log(`Unknown D2 response: ${hex(bytes)}`,'D2');
       markProductError('Unknown D2 response');
@@ -1498,6 +1649,7 @@ async function connect(){
     await d2GetTimeStatus();
     await d2GetClockProfile();
     await d2GetClockPreferences();
+    await d2GetDailyContext();
   }catch(error){
     log(`Clock profile unavailable: ${error.message}`,'D2');
   }
@@ -1586,6 +1738,7 @@ async function d2GetClockProfile(){
 }
 
 async function d2ApplyClockProfile(){
+  if(selectedClockProfile===2)await d2SetDailyContext();
   let status=parseD2ProfileStatus(await request(
     buildD2SetProfilePacket(selectedClockProfile),
     a=>a[0]===0xD2&&a[1]===0x84,
@@ -1646,6 +1799,43 @@ async function d2ApplyClockPreferences(){
   if(status.result!==0x00)throw Error(`D2 preference rejected: ${d2ResultName(status.result)}`);
   await d2RenderClockFromDevice();
   $('preferenceStatus').textContent=`\u0110\u00e3 \u00e1p d\u1ee5ng: ${activeHourMode===1?'12':'24'} gi\u1edd / ${activeRefreshMinutes} ph\u00fat`;
+}
+
+async function d2GetDailyContext(){
+  const status=parseD2DailyStatus(await request(
+    buildD2GetDailyPacket(),
+    a=>a[0]===0xD2&&a[1]===0x88,
+    {timeout:2500}
+  ));
+  renderD2DailyStatus(status);
+  if(status.result!==0x00)throw Error(`D2 daily rejected: ${d2ResultName(status.result)}`);
+  return status;
+}
+
+async function d2SetDailyContext(){
+  const packet=buildD2SetDailyPacket(new Date());
+  let status=parseD2DailyStatus(await request(
+    packet,
+    a=>a[0]===0xD2&&a[1]===0x88,
+    {timeout:5000}
+  ));
+  if(status.result===0x06){
+    if(productD2RenderState!==0x03){
+      const completed=parseD2RenderStatus(await waitFor(
+        a=>a[0]===0xD2&&a[1]===0x82&&a[3]===0x03,
+        35000
+      ));
+      if(completed.result!==0x00)throw Error(`D2 render ${d2ResultName(completed.result)}`);
+    }
+    status=parseD2DailyStatus(await request(
+      packet,
+      a=>a[0]===0xD2&&a[1]===0x88,
+      {timeout:5000}
+    ));
+  }
+  renderD2DailyStatus(status);
+  if(status.result!==0x00)throw Error(`D2 daily rejected: ${d2ResultName(status.result)}`);
+  return status;
 }
 
 function scheduleIdentityHealthRefresh(reason){
@@ -2015,6 +2205,10 @@ $('fillBlack').onclick=fillBlack;
 $('invert').onclick=invertCanvas;
 $('updateClock').onclick=()=>selectClockProfile(1);
 $('dailyCalendar').onclick=()=>selectClockProfile(0);
+$('dailyBriefing').onclick=()=>selectClockProfile(2);
+for(const input of document.querySelectorAll('#dailyContextPanel input,#dailyContextPanel select')){
+  input.addEventListener('input',()=>{if(selectedClockProfile===2)drawDailyBriefingPreview()});
+}
 $('sample').onclick=drawSample;
 $('addText').onclick=addSimpleText;
 $('repack').onclick=repack;
@@ -2045,7 +2239,7 @@ resetD2UiDisconnected();
 controls();
 markLayoutHealth();
 window.addEventListener('resize',markLayoutHealth);
-log('TASK D12B ready. Clock preferences use D2 06/07/86.');
+log('TASK D13B ready. Daily briefing uses D2 08/09/88.');
 </script>
 </body>
 </html>
