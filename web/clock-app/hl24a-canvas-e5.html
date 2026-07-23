@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TASK D13D - Lá»‹ch thĂ¡ng vĂ  thá»i tiáº¿t tiáº¿ng Viá»‡t</title>
+<title>TASK D13D - Lịch tháng và thời tiết tiếng Việt</title>
 <style>
 :root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;--bg:#07101b;--card:#111c2c;--line:#2a3d59;--text:#f4f8ff;--muted:#9fb1c8;--ok:#45d99c;--warn:#ffd166;--bad:#ff6b86}
 *{box-sizing:border-box}body{margin:0;background:linear-gradient(#050a12,#101a2a);color:var(--text)}main{max-width:1040px;margin:auto;padding:20px}
@@ -35,18 +35,18 @@ small{color:var(--muted)}
 </style>
 </head>
 <body><main>
-<div class="badge">TASK D8A â€¢ DEVICE IDENTITY + HEALTH â€¢ HINK213 BW</div>
-<h1>250Ă—122 Clock â†’ Verified Device Identity + Health</h1>
-<p>Preview hiá»ƒn thá»‹ theo hÆ°á»›ng panel tháº­t. Payload gá»­i RAM controller 122Ă—250, 16 byte/dĂ²ng, 4000 byte.</p>
+<div class="badge">TASK D8A • DEVICE IDENTITY + HEALTH • HINK213 BW</div>
+<h1>250×122 Clock → Verified Device Identity + Health</h1>
+<p>Preview hiển thị theo hướng panel thật. Payload gửi RAM controller 122×250, 16 byte/dòng, 4000 byte.</p>
 
 <section class="card">
-<h2>Canvas 250Ă—122</h2>
+<h2>Canvas 250×122</h2>
 <div class="row">
 <button id="clearWhite">Clear white</button>
 <button id="fillBlack">Fill black</button>
 <button id="invert">Invert</button>
-<button id="updateClock" class="primary">Cáº­p nháº­t giá» hiá»‡n táº¡i</button>
-<button id="dailyCalendar" class="primary">Máº·t lá»‹ch háº±ng ngĂ y</button>
+<button id="updateClock" class="primary">Cập nhật giờ hiện tại</button>
+<button id="dailyCalendar" class="primary">Mặt lịch hằng ngày</button>
 <button id="sample">Draw sample</button>
 <label>Brush
 <select id="brush">
@@ -62,14 +62,14 @@ small{color:var(--muted)}
 <div class="canvasWrap" style="margin-top:12px">
 <canvas id="canvas" width="250" height="122"></canvas>
 </div>
-<p><small>Preview landscape 250Ă—122 Ä‘Æ°á»£c pack theo ROTATE_3 vĂ o RAM 122Ă—250, MSB-first, bit 1 = tráº¯ng. SĂ¡u padding bit cuá»‘i má»—i RAM row giá»¯ tráº¯ng.</small></p>
+<p><small>Preview landscape 250×122 được pack theo ROTATE_3 vào RAM 122×250, MSB-first, bit 1 = trắng. Sáu padding bit cuối mỗi RAM row giữ trắng.</small></p>
 </section>
 
 <section class="card">
 <h2>Payload</h2>
 <div class="grid">
-<div class="stat"><span>Preview</span><strong>250 Ă— 122</strong></div>
-<div class="stat"><span>RAM</span><strong>122 Ă— 250</strong></div>
+<div class="stat"><span>Preview</span><strong>250 × 122</strong></div>
+<div class="stat"><span>RAM</span><strong>122 × 250</strong></div>
 <div class="stat"><span>Stride</span><strong>16 bytes</strong></div>
 <div class="stat"><span>Bytes</span><strong id="byteCount">4000</strong></div>
 <div class="stat"><span>Chunks</span><strong id="chunkCount">286</strong></div>
@@ -83,43 +83,43 @@ small{color:var(--muted)}
 <section class="card">
 <h2>One-Tap Clock Sync</h2>
 <div class="row">
-<button id="syncClock" class="good">Äá»“ng bá»™ giá» lĂªn mĂ n</button>
+<button id="syncClock" class="good">Đồng bộ giờ lên màn</button>
 </div>
-<p>Tráº¡ng thĂ¡i Ä‘á»“ng bá»™: <strong id="syncStatus" class="warn">Sáº´N SĂ€NG</strong></p>
-<p><small>Báº¥m má»™t láº§n Ä‘á»ƒ váº½ giá» hiá»‡n táº¡i, gá»­i E5, Ä‘á»£i E5 COMPLETE rá»“i refresh E6. Trang khĂ´ng tá»± cháº¡y khi má»Ÿ vĂ  khĂ´ng tá»± refresh theo phĂºt.</small></p>
+<p>Trạng thái đồng bộ: <strong id="syncStatus" class="warn">SẴN SÀNG</strong></p>
+<p><small>Bấm một lần để vẽ giờ hiện tại, gửi E5, đợi E5 COMPLETE rồi refresh E6. Trang không tự chạy khi mở và không tự refresh theo phút.</small></p>
 </section>
 
 <section class="card">
 <h2>Auto Minute Sync</h2>
-<label class="row"><input id="autoSync" type="checkbox"> Tá»± Ä‘á»“ng bá»™ khi phĂºt Ä‘á»•i</label>
-<p>Auto sync: <strong id="autoStatus" class="warn" aria-live="polite">Auto sync Ä‘ang táº¯t</strong></p>
-<p><small>Máº·c Ä‘á»‹nh táº¯t. Khi báº­t, trang chá»‰ Ä‘á»“ng bá»™ náº¿u BLE Ä‘Ă£ káº¿t ná»‘i vĂ  phĂºt local cá»§a browser Ä‘á»•i sang phĂºt má»›i.</small></p>
+<label class="row"><input id="autoSync" type="checkbox"> Tự đồng bộ khi phút đổi</label>
+<p>Auto sync: <strong id="autoStatus" class="warn" aria-live="polite">Auto sync đang tắt</strong></p>
+<p><small>Mặc định tắt. Khi bật, trang chỉ đồng bộ nếu BLE đã kết nối và phút local của browser đổi sang phút mới.</small></p>
 </section>
 
 <section class="card">
-<h2>DEVICE TIME SYNC â€” D2</h2>
+<h2>DEVICE TIME SYNC — D2</h2>
 <div class="row">
-<button id="d2SetTime" class="primary">Gá»­i giá» xuá»‘ng thiáº¿t bá»‹</button>
-<button id="d2GetStatus">Äá»c tráº¡ng thĂ¡i giá»</button>
-<button id="d2RenderClock" class="good">Váº½ giá» tá»« thiáº¿t bá»‹ lĂªn mĂ n</button>
-<button id="d2GetIdentity">Äá»c danh tĂ­nh thiáº¿t bá»‹</button>
+<button id="d2SetTime" class="primary">Gửi giờ xuống thiết bị</button>
+<button id="d2GetStatus">Đọc trạng thái giờ</button>
+<button id="d2RenderClock" class="good">Vẽ giờ từ thiết bị lên màn</button>
+<button id="d2GetIdentity">Đọc danh tính thiết bị</button>
 </div>
 <p>D2: <strong id="d2StatusText" class="warn" aria-live="polite">DISCONNECTED</strong></p>
 <p>D2 render: <strong id="d2RenderStatus" class="warn" aria-live="polite">NOT RUN</strong></p>
 <div id="d2StaleBox" class="staleBox" role="alert" aria-live="assertive" hidden>
-<p id="d2StaleWarning">Thiáº¿t bá»‹ Ä‘ang giá»¯ giá» cÅ©. HĂ£y Ä‘á»“ng bá»™ giá» hiá»‡n táº¡i Ä‘á»ƒ tiáº¿p tá»¥c cháº¡y Ä‘á»“ng há»“.</p>
-<button id="d2StaleRecover" class="primary" type="button">Äá»“ng bá»™ giá» hiá»‡n táº¡i</button>
+<p id="d2StaleWarning">Thiết bị đang giữ giờ cũ. Hãy đồng bộ giờ hiện tại để tiếp tục chạy đồng hồ.</p>
+<button id="d2StaleRecover" class="primary" type="button">Đồng bộ giờ hiện tại</button>
 </div>
 <div class="grid" style="margin-top:12px">
 <div class="stat"><span>Result</span><strong id="d2Result">-</strong></div>
 <div class="stat"><span>State</span><strong id="d2State">-</strong></div>
 <div class="stat"><span>Device epoch UTC</span><strong id="d2Epoch">-</strong></div>
 <div class="stat"><span>Local time</span><strong id="d2LocalTime">-</strong></div>
-<div class="stat"><span>Timezone offset phĂºt</span><strong id="d2Timezone">-</strong></div>
+<div class="stat"><span>Timezone offset phút</span><strong id="d2Timezone">-</strong></div>
 <div class="stat"><span>Flags</span><strong id="d2Flags">-</strong></div>
 <div class="stat"><span>Uptime seconds</span><strong id="d2Uptime">-</strong></div>
 </div>
-<p><small>D2 SET/GET chá»‰ Ä‘á»“ng bá»™ state giá» RAM trong firmware. D2 render yĂªu cáº§u firmware tá»± váº½ tá»« giá» RAM vĂ  refresh panel, khĂ´ng gá»­i E5 vĂ  khĂ´ng váº½ láº¡i preview.</small></p>
+<p><small>D2 SET/GET chỉ đồng bộ state giờ RAM trong firmware. D2 render yêu cầu firmware tự vẽ từ giờ RAM và refresh panel, không gửi E5 và không vẽ lại preview.</small></p>
 </section>
 
 <section class="card">
@@ -130,7 +130,7 @@ small{color:var(--muted)}
 <button id="send" class="good" disabled>Open E4 + Send E5</button>
 <button id="clearLog">Clear log</button>
 </div>
-<p>BLE: <strong id="ble">Disconnected</strong> Â· Result: <strong id="result" class="warn">NOT RUN</strong></p>
+<p>BLE: <strong id="ble">Disconnected</strong> · Result: <strong id="result" class="warn">NOT RUN</strong></p>
 <progress id="progress" max="4000" value="0"></progress>
 <div class="grid" style="margin-top:12px">
 <div class="stat"><span>Transfer ID</span><strong id="transferId">-</strong></div>
@@ -139,7 +139,7 @@ small{color:var(--muted)}
 <div class="stat"><span>Bytes</span><strong id="fwBytes">0</strong></div>
 <div class="stat"><span>Firmware CRC</span><strong id="fwCrc">----</strong></div>
 </div>
-<p>Expected PASS: <code>state=COMPLETE Â· chunks=286 Â· bytes=4000 Â· browser CRC = firmware CRC</code></p>
+<p>Expected PASS: <code>state=COMPLETE · chunks=286 · bytes=4000 · browser CRC = firmware CRC</code></p>
 </section>
 
 <section class="card">
@@ -173,14 +173,14 @@ const NOTIFY='15005991-b131-3396-014c-664c9867b917';
 const BATTERY_SERVICE=0xFF00;
 const BATTERY_CHARACTERISTIC=0xFF02;
 const D2_STALE_PRESENT_FLAG=0x80;
-const D2_STALE_WARNING='Thiáº¿t bá»‹ Ä‘ang giá»¯ giá» cÅ©. HĂ£y Ä‘á»“ng bá»™ giá» hiá»‡n táº¡i Ä‘á»ƒ tiáº¿p tá»¥c cháº¡y Ä‘á»“ng há»“.';
+const D2_STALE_WARNING='Thiết bị đang giữ giờ cũ. Hãy đồng bộ giờ hiện tại để tiếp tục chạy đồng hồ.';
 const EINK_TEST_IDENTITY={
   webBuild:'D13D-VI-WEATHER-20260723',
   expectedFirmware:'D8A00001',
   expectedRuntime:'D8A1',
   expectedSourceId:'D8A00001',
   expectedBin:'BUILD-SPECIFIC',
-  label:'D13D Lá»CH THĂNG VĂ€ THá»œI TIáº¾T'
+  label:'D13D LỊCH THÁNG VÀ THỜI TIẾT'
 };
 window.EINK_TEST_IDENTITY=EINK_TEST_IDENTITY;
 
@@ -227,7 +227,7 @@ function setupProductMode(){
   };
   const header=document.createElement('div');
   header.className='productHeader';
-  header.innerHTML='<div><div class="badge">EINK Clock</div><h1>Äá»“ng há»“ lá»‹ch háº±ng ngĂ y</h1><p>Chá»n máº·t Ä‘á»“ng há»“, xem preview vĂ  gá»­i lĂªn mĂ n e-ink. CĂ¡c thĂ´ng sá»‘ ká»¹ thuáº­t váº«n cĂ³ sáºµn trong má»¥c nĂ¢ng cao.</p></div><div class="row" id="productConnectRow"></div>';
+  header.innerHTML='<div><div class="badge">EINK Clock</div><h1>Đồng hồ lịch hằng ngày</h1><p>Chọn mặt đồng hồ, xem preview và gửi lên màn e-ink. Các thông số kỹ thuật vẫn có sẵn trong mục nâng cao.</p></div><div class="row" id="productConnectRow"></div>';
 
   const identityCard=document.createElement('section');
   identityCard.className='card identityCard';
@@ -236,15 +236,15 @@ function setupProductMode(){
   identityCard.dataset.expectedRuntime=EINK_TEST_IDENTITY.expectedRuntime;
   identityCard.dataset.expectedSourceId=EINK_TEST_IDENTITY.expectedSourceId;
   identityCard.dataset.expectedBin=EINK_TEST_IDENTITY.expectedBin;
-  identityCard.innerHTML=`<div class="identityTitle">${EINK_TEST_IDENTITY.label}</div><div class="compatibilityState" role="status" aria-live="polite"><span>TÆ°Æ¡ng thĂ­ch thiáº¿t bá»‹</span><strong id="identityCompatibility" class="warn">ChÆ°a káº¿t ná»‘i</strong><small id="identityCompatibilityDetail">Káº¿t ná»‘i Ä‘á»ƒ kiá»ƒm tra firmware thá»±c táº¿.</small></div><div class="identityGrid"><div class="stat"><span>Firmware yĂªu cáº§u</span><strong>${EINK_TEST_IDENTITY.expectedRuntime}</strong></div><div class="stat"><span>Firmware thá»±c táº¿</span><strong id="actualFirmware">ChÆ°a Ä‘á»c</strong></div><div class="stat"><span>Source ID yĂªu cáº§u</span><strong>${EINK_TEST_IDENTITY.expectedSourceId}</strong></div><div class="stat"><span>Source ID thá»±c táº¿</span><strong id="actualSourceId">-</strong></div><div class="stat"><span>Health</span><strong id="actualHealth">-</strong></div><div class="stat"><span>Health cáº­p nháº­t</span><strong id="identityUpdatedAt">ChÆ°a Ä‘á»c</strong></div><div class="stat"><span>Äiá»‡n Ă¡p pin</span><strong id="batteryVoltage" class="batteryValue" aria-live="polite">ChÆ°a Ä‘á»c</strong></div><div class="stat"><span>Má»©c pin</span><strong id="batteryLevel">Æ¯á»›c tĂ­nh -</strong></div><div class="stat"><span>Pin cáº­p nháº­t</span><strong id="batteryUpdatedAt">ChÆ°a Ä‘á»c</strong></div><div class="stat"><span>Web build</span><strong>${EINK_TEST_IDENTITY.webBuild}</strong></div></div><div class="row" id="identityActionRow"><button id="batteryRefresh" type="button">Äá»c pin</button></div><p class="identityNote">Äiá»‡n Ă¡p Ä‘Æ°á»£c Ä‘á»c trá»±c tiáº¿p tá»« thiáº¿t bá»‹. Pháº§n trÄƒm chá»‰ lĂ  Æ°á»›c tĂ­nh theo Ä‘Æ°á»ng cong CR2032.</p>`;
+  identityCard.innerHTML=`<div class="identityTitle">${EINK_TEST_IDENTITY.label}</div><div class="compatibilityState" role="status" aria-live="polite"><span>Tương thích thiết bị</span><strong id="identityCompatibility" class="warn">Chưa kết nối</strong><small id="identityCompatibilityDetail">Kết nối để kiểm tra firmware thực tế.</small></div><div class="identityGrid"><div class="stat"><span>Firmware yêu cầu</span><strong>${EINK_TEST_IDENTITY.expectedRuntime}</strong></div><div class="stat"><span>Firmware thực tế</span><strong id="actualFirmware">Chưa đọc</strong></div><div class="stat"><span>Source ID yêu cầu</span><strong>${EINK_TEST_IDENTITY.expectedSourceId}</strong></div><div class="stat"><span>Source ID thực tế</span><strong id="actualSourceId">-</strong></div><div class="stat"><span>Health</span><strong id="actualHealth">-</strong></div><div class="stat"><span>Health cập nhật</span><strong id="identityUpdatedAt">Chưa đọc</strong></div><div class="stat"><span>Điện áp pin</span><strong id="batteryVoltage" class="batteryValue" aria-live="polite">Chưa đọc</strong></div><div class="stat"><span>Mức pin</span><strong id="batteryLevel">Ước tính -</strong></div><div class="stat"><span>Pin cập nhật</span><strong id="batteryUpdatedAt">Chưa đọc</strong></div><div class="stat"><span>Web build</span><strong>${EINK_TEST_IDENTITY.webBuild}</strong></div></div><div class="row" id="identityActionRow"><button id="batteryRefresh" type="button">Đọc pin</button></div><p class="identityNote">Điện áp được đọc trực tiếp từ thiết bị. Phần trăm chỉ là ước tính theo đường cong CR2032.</p>`;
 
   const statusCard=document.createElement('section');
   statusCard.className='card';
-  statusCard.innerHTML='<h2>Tráº¡ng thĂ¡i</h2><div class="productStatus"><div class="stat"><span>Thiáº¿t bá»‹</span><strong id="productState" class="warn">ChÆ°a káº¿t ná»‘i</strong></div><div class="stat"><span>Tiáº¿n trĂ¬nh</span><span id="productSyncSlot"></span></div></div><div class="row" id="productActionRow"></div>';
+  statusCard.innerHTML='<h2>Trạng thái</h2><div class="productStatus"><div class="stat"><span>Thiết bị</span><strong id="productState" class="warn">Chưa kết nối</strong></div><div class="stat"><span>Tiến trình</span><span id="productSyncSlot"></span></div></div><div class="row" id="productActionRow"></div>';
 
   const presetCard=document.createElement('section');
   presetCard.className='card';
-  presetCard.innerHTML='<h2>Chá»n máº·t Ä‘á»“ng há»“</h2><div class="row presetRow" id="productPresetRow"></div>';
+  presetCard.innerHTML='<h2>Chọn mặt đồng hồ</h2><div class="row presetRow" id="productPresetRow"></div>';
 
   const profileApply=document.createElement('button');
   profileApply.id='profileApply';
@@ -277,26 +277,26 @@ function setupProductMode(){
 
   const previewCard=document.createElement('section');
   previewCard.className='card';
-  previewCard.innerHTML='<h2>Preview</h2><p><small>Preview dĂ¹ng Ä‘Ăºng khung 250Ă—122 cá»§a mĂ n.</small></p>';
+  previewCard.innerHTML='<h2>Preview</h2><p><small>Preview dùng đúng khung 250×122 của màn.</small></p>';
 
   const advanced=document.createElement('details');
   advanced.className='advanced';
   advanced.id='advancedPanel';
-  advanced.innerHTML='<summary>Ká»¹ thuáº­t / NĂ¢ng cao</summary><div class="advancedBody"></div>';
+  advanced.innerHTML='<summary>Kỹ thuật / Nâng cao</summary><div class="advancedBody"></div>';
 
   main.innerHTML='';
   main.append(header,statusCard,presetCard,identityCard,previewCard,advanced);
   $('identityActionRow').append(refs.d2GetIdentity);
 
   $('productConnectRow').append(refs.connect,refs.disconnect);
-  refs.connect.textContent='Káº¿t ná»‘i';
-  refs.disconnect.textContent='Ngáº¯t káº¿t ná»‘i';
+  refs.connect.textContent='Kết nối';
+  refs.disconnect.textContent='Ngắt kết nối';
   $('productActionRow').append(refs.d2SetTime,refs.syncClock);
-  refs.d2SetTime.textContent='Äá»“ng bá»™ giá»';
-  refs.syncClock.textContent='Gá»­i lĂªn mĂ n';
+  refs.d2SetTime.textContent='Đồng bộ giờ';
+  refs.syncClock.textContent='Gửi lên màn';
   $('productPresetRow').append(refs.dailyCalendar,refs.updateClock,dailyBriefing,profileApply);
-  refs.dailyCalendar.textContent='Máº·t lá»‹ch háº±ng ngĂ y';
-  refs.updateClock.textContent='Giá» Ä‘Æ¡n giáº£n';
+  refs.dailyCalendar.textContent='Mặt lịch hằng ngày';
+  refs.updateClock.textContent='Giờ đơn giản';
   refs.updateClock.textContent='Gi\u1edd l\u1edbn';
   $('productSyncSlot').append(refs.syncStatus);
   statusCard.insertBefore(refs.d2StaleBox,$('productActionRow'));
@@ -344,7 +344,7 @@ const d2RenderStateName=value=>({
   0x03:'COMPLETE',
   0x04:'ERROR'
 }[value]||`UNKNOWN_${value}`);
-const clockProfileName=value=>({0:'Lá»‹ch thĂ¡ng',1:'Giá» lá»›n',2:'TĂ³m táº¯t trong ngĂ y'}[value]||`Profile ${value}`);
+const clockProfileName=value=>({0:'Lịch tháng',1:'Giờ lớn',2:'Tóm tắt trong ngày'}[value]||`Profile ${value}`);
 
 function renderClockProfileSelection(){
   $('dailyCalendar').classList.toggle('selected',selectedClockProfile===0);
@@ -354,8 +354,8 @@ function renderClockProfileSelection(){
   $('updateClock').setAttribute('aria-pressed',String(selectedClockProfile===1));
   $('dailyBriefing').setAttribute('aria-pressed',String(selectedClockProfile===2));
   $('dailyContextPanel').hidden=selectedClockProfile!==2;
-  const stored=persistedClockProfile===0xFF?'máº·c Ä‘á»‹nh':clockProfileName(persistedClockProfile);
-  $('profileStatus').textContent=`Äang cháº¡y: ${clockProfileName(activeClockProfile)} Â· LÆ°u: ${stored}`;
+  const stored=persistedClockProfile===0xFF?'mặc định':clockProfileName(persistedClockProfile);
+  $('profileStatus').textContent=`Đang chạy: ${clockProfileName(activeClockProfile)} · Lưu: ${stored}`;
   document.documentElement.dataset.einkClockProfile=String(activeClockProfile);
 }
 
@@ -437,41 +437,41 @@ function productD2RenderIsRunning(result,state){
 
 function resolveProductState(input){
   if(!input.connected){
-    return{text:'ChÆ°a káº¿t ná»‘i',cls:'warn'};
+    return{text:'Chưa kết nối',cls:'warn'};
   }
   if(input.compatibilityMismatch){
-    return{text:'CĂ³ lá»—i',cls:'bad'};
+    return{text:'Có lỗi',cls:'bad'};
   }
   if(input.hasError){
-    return{text:'CĂ³ lá»—i',cls:'bad'};
+    return{text:'Có lỗi',cls:'bad'};
   }
   if(input.stalePresent){
-    return{text:'Cáº§n Ä‘á»“ng bá»™ giá»',cls:'warn'};
+    return{text:'Cần đồng bộ giờ',cls:'warn'};
   }
   if(productD2StatusIsRunning(input.d2Result,input.d2State) ||
      productD2RenderIsRunning(input.d2RenderResult,input.d2RenderState)){
-    return{text:'Äang cháº¡y',cls:'ok'};
+    return{text:'Đang chạy',cls:'ok'};
   }
-  return{text:'Cáº§n Ä‘á»“ng bá»™ giá»',cls:'warn'};
+  return{text:'Cần đồng bộ giờ',cls:'warn'};
 }
 
 window.__resolveEinkProductState=resolveProductState;
 
 function resolveDeviceCompatibility(identity,connected=true){
   if(!connected){
-    return{state:'disconnected',text:'ChÆ°a káº¿t ná»‘i',cls:'warn',detail:'Káº¿t ná»‘i Ä‘á»ƒ kiá»ƒm tra firmware thá»±c táº¿.'};
+    return{state:'disconnected',text:'Chưa kết nối',cls:'warn',detail:'Kết nối để kiểm tra firmware thực tế.'};
   }
   if(!identity){
-    return{state:'checking',text:'Äang kiá»ƒm tra',cls:'warn',detail:'Äang Ä‘á»c identity trá»±c tiáº¿p tá»« thiáº¿t bá»‹.'};
+    return{state:'checking',text:'Đang kiểm tra',cls:'warn',detail:'Đang đọc identity trực tiếp từ thiết bị.'};
   }
   if(identity.result!==0x00){
-    return{state:'unsupported',text:'KhĂ´ng há»— trá»£',cls:'bad',detail:'Firmware khĂ´ng tráº£ identity D8A há»£p lá»‡.'};
+    return{state:'unsupported',text:'Không hỗ trợ',cls:'bad',detail:'Firmware không trả identity D8A hợp lệ.'};
   }
   const sourceId=identity.sourceId.toString(16).padStart(8,'0').toUpperCase();
   if(identity.firmware===EINK_TEST_IDENTITY.expectedRuntime && sourceId===EINK_TEST_IDENTITY.expectedSourceId){
-    return{state:'compatible',text:'TÆ°Æ¡ng thĂ­ch',cls:'ok',detail:`ÄĂºng ${identity.firmware} / ${sourceId}.`};
+    return{state:'compatible',text:'Tương thích',cls:'ok',detail:`Đúng ${identity.firmware} / ${sourceId}.`};
   }
-  return{state:'mismatch',text:'Sai firmware',cls:'bad',detail:`Nháº­n ${identity.firmware} / ${sourceId}; cáº§n ${EINK_TEST_IDENTITY.expectedRuntime} / ${EINK_TEST_IDENTITY.expectedSourceId}.`};
+  return{state:'mismatch',text:'Sai firmware',cls:'bad',detail:`Nhận ${identity.firmware} / ${sourceId}; cần ${EINK_TEST_IDENTITY.expectedRuntime} / ${EINK_TEST_IDENTITY.expectedSourceId}.`};
 }
 
 window.__resolveEinkDeviceCompatibility=resolveDeviceCompatibility;
@@ -931,7 +931,7 @@ function drawDailyCalendar(sourceDate=new Date()){
   };
   ctx.restore();
   repack();
-  log(`Daily calendar updated: ${time} Â· ${solar} Â· ${lunarText}`);
+  log(`Daily calendar updated: ${time} · ${solar} · ${lunarText}`);
 }
 function drawCurrentClock(){
   const now=new Date();
@@ -957,7 +957,7 @@ function drawCurrentClock(){
   ctx.fillText(dateText,WIDTH/2,94);
   ctx.restore();
   repack();
-  log(`Preview clock updated: ${timeText} Â· ${dateText}`);
+  log(`Preview clock updated: ${timeText} · ${dateText}`);
 }
 
 function drawDailyBriefingPreview(){
@@ -1054,7 +1054,7 @@ function minuteKey(date=new Date()){
   return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}-${pad(date.getHours())}-${pad(date.getMinutes())}`;
 }
 
-function stopAutoSync(message='Auto sync Ä‘ang táº¯t',cls='warn'){
+function stopAutoSync(message='Auto sync đang tắt',cls='warn'){
   autoSyncEnabled=false;
   $('autoSync').checked=false;
   if(autoSyncTimer){
@@ -1070,7 +1070,7 @@ function startAutoSync(){
   autoSyncEnabled=true;
   autoArmedMinuteKey=minuteKey();
   $('autoSync').checked=true;
-  setAutoStatus('Äang chá» phĂºt má»›i','warn');
+  setAutoStatus('Đang chờ phút mới','warn');
   if(!autoSyncTimer){
     autoSyncTimer=setInterval(checkAutoSyncMinute,1000);
   }
@@ -1080,7 +1080,7 @@ function startAutoSync(){
 async function checkAutoSyncMinute(){
   if(!autoSyncEnabled)return;
   if(!server?.connected){
-    stopAutoSync('Lá»—i, Ä‘Ă£ táº¯t Auto sync','bad');
+    stopAutoSync('Lỗi, đã tắt Auto sync','bad');
     return;
   }
   if(busy||e6Running||oneTapRunning||d2Running)return;
@@ -1091,17 +1091,17 @@ async function checkAutoSyncMinute(){
   }
 
   try{
-    setAutoStatus('Äang Ä‘á»“ng bá»™','warn');
+    setAutoStatus('Đang đồng bộ','warn');
     await syncClockToPanel();
     if($('e6Result').textContent !== 'COMPLETE'){
-      throw Error('E6 chÆ°a COMPLETE.');
+      throw Error('E6 chưa COMPLETE.');
     }
     lastAutoSentMinuteKey=currentMinuteKey;
     autoArmedMinuteKey=currentMinuteKey;
-    setAutoStatus('Äá»“ng bá»™ hoĂ n táº¥t','ok');
+    setAutoStatus('Đồng bộ hoàn tất','ok');
   }catch(error){
     log(`Auto sync error: ${error.message}`,'ERROR');
-    stopAutoSync('Lá»—i, Ä‘Ă£ táº¯t Auto sync','bad');
+    stopAutoSync('Lỗi, đã tắt Auto sync','bad');
   }
 }
 
@@ -1143,13 +1143,13 @@ function resetD2UiDisconnected(){
   $('d2Uptime').textContent='-';
   $('d2RenderStatus').textContent='NOT RUN';
   $('d2RenderStatus').className='warn';
-  $('actualFirmware').textContent='ChÆ°a Ä‘á»c';
+  $('actualFirmware').textContent='Chưa đọc';
   $('actualSourceId').textContent='-';
   $('actualHealth').textContent='-';
-  $('identityUpdatedAt').textContent='ChÆ°a Ä‘á»c';
-  $('batteryVoltage').textContent='ChÆ°a Ä‘á»c';
-  $('batteryLevel').textContent='Æ¯á»›c tĂ­nh -';
-  $('batteryUpdatedAt').textContent='ChÆ°a Ä‘á»c';
+  $('identityUpdatedAt').textContent='Chưa đọc';
+  $('batteryVoltage').textContent='Chưa đọc';
+  $('batteryLevel').textContent='Ước tính -';
+  $('batteryUpdatedAt').textContent='Chưa đọc';
   renderClockProfileSelection();
   renderClockPreferenceSelection();
   renderDeviceCompatibility(null,false);
@@ -1415,7 +1415,7 @@ function estimateBatteryPercent(millivolts){
 function renderBatteryTelemetry(millivolts){
   const percent=estimateBatteryPercent(millivolts);
   $('batteryVoltage').textContent=`${(millivolts/1000).toFixed(2)} V`;
-  $('batteryLevel').textContent=`Æ¯á»›c tĂ­nh ${percent}%`;
+  $('batteryLevel').textContent=`Ước tính ${percent}%`;
   $('batteryUpdatedAt').textContent=new Date().toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
   document.documentElement.dataset.einkBatteryMillivolts=String(millivolts);
   return percent;
@@ -1423,10 +1423,10 @@ function renderBatteryTelemetry(millivolts){
 
 async function refreshBatteryTelemetry(){
   if(batteryRunning)return;
-  if(!server?.connected)throw Error('BLE chÆ°a káº¿t ná»‘i.');
+  if(!server?.connected)throw Error('BLE chưa kết nối.');
   batteryRunning=true;
   controls();
-  $('batteryVoltage').textContent='Äang Ä‘á»c';
+  $('batteryVoltage').textContent='Đang đọc';
   try{
     batteryService=batteryService||await server.getPrimaryService(BATTERY_SERVICE);
     batteryChar=batteryChar||await batteryService.getCharacteristic(BATTERY_CHARACTERISTIC);
@@ -1439,9 +1439,9 @@ async function refreshBatteryTelemetry(){
   }catch(error){
     batteryService=null;
     batteryChar=null;
-    $('batteryVoltage').textContent='KhĂ´ng há»— trá»£';
-    $('batteryLevel').textContent='Æ¯á»›c tĂ­nh -';
-    $('batteryUpdatedAt').textContent='KhĂ´ng Ä‘á»c Ä‘Æ°á»£c';
+    $('batteryVoltage').textContent='Không hỗ trợ';
+    $('batteryLevel').textContent='Ước tính -';
+    $('batteryUpdatedAt').textContent='Không đọc được';
     log(`Battery unavailable: ${error.message}`,'BATTERY');
   }finally{
     batteryRunning=false;
@@ -1569,7 +1569,7 @@ function renderD2ProfileStatus(status){
     selectedClockProfile=status.active;
     clearProductError();
   }else if(status.result===0x06){
-    $('profileStatus').textContent='Panel Ä‘ang render, sáº½ tá»± Ă¡p dá»¥ng sau khi hoĂ n táº¥t.';
+    $('profileStatus').textContent='Panel đang render, sẽ tự áp dụng sau khi hoàn tất.';
   }else{
     selectedClockProfile=activeClockProfile;
     markProductError(`D2 profile ${d2ResultName(status.result)}`);
@@ -1581,7 +1581,7 @@ function renderD2ProfileStatus(status){
 function renderD2Identity(identity){
   deviceIdentity=identity;
   const sourceId=identity.sourceId.toString(16).padStart(8,'0').toUpperCase();
-  $('actualFirmware').textContent=identity.result===0?identity.firmware:'KhĂ´ng há»— trá»£';
+  $('actualFirmware').textContent=identity.result===0?identity.firmware:'Không hỗ trợ';
   $('actualSourceId').textContent=sourceId;
   const flags=[];
   if(identity.health&0x01)flags.push('TIME');
@@ -1590,7 +1590,7 @@ function renderD2Identity(identity){
   if(identity.health&0x08)flags.push('RENDER');
   if(identity.health&0x10)flags.push('PRIME');
   if(identity.health&0x20)flags.push('STORE');
-  $('actualHealth').textContent=flags.join(' Â· ')||'IDLE';
+  $('actualHealth').textContent=flags.join(' · ')||'IDLE';
   $('identityUpdatedAt').textContent=new Date().toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
   if(identity.result===0)clearProductError();
   renderDeviceCompatibility(identity,true);
@@ -1640,9 +1640,9 @@ function handleD2Notify(bytes){
     if(bytes[1]===0x81){
       const status=parseD2Status(bytes);
       if(identityProbePending&&status.result===0x01){
-        $('actualFirmware').textContent='KhĂ´ng há»— trá»£';
+        $('actualFirmware').textContent='Không hỗ trợ';
         $('actualSourceId').textContent='-';
-        $('actualHealth').textContent='Firmware cÅ©';
+        $('actualHealth').textContent='Firmware cũ';
         renderDeviceCompatibility({result:0x01,firmware:'----',sourceId:0},true);
         log('D2 identity is not supported by this firmware','D2');
       }else{
@@ -1709,7 +1709,7 @@ async function connect(){
     latestFwCrc=null;
     e6Running=false;
     $('ble').textContent='Disconnected';
-    stopAutoSync('Auto sync Ä‘ang táº¯t');
+    stopAutoSync('Auto sync đang tắt');
     resetD2UiDisconnected();
     log('Disconnected');
   });
@@ -1727,7 +1727,7 @@ async function connect(){
   try{
     await d2GetDeviceIdentity();
   }catch(error){
-    $('actualFirmware').textContent='KhĂ´ng há»— trá»£';
+    $('actualFirmware').textContent='Không hỗ trợ';
     renderDeviceCompatibility({result:0x01,firmware:'----',sourceId:0},true);
     log(`D2 identity unavailable: ${error.message}`,'D2');
   }
@@ -1753,8 +1753,8 @@ async function openE4(){
 }
 
 async function runD2Flow(action){
-  if(d2Running||busy||e6Running||oneTapRunning)throw Error('Äang cĂ³ flow BLE khĂ¡c cháº¡y.');
-  if(!server?.connected)throw Error('BLE chÆ°a káº¿t ná»‘i. HĂ£y Connect EINK/HINK trÆ°á»›c.');
+  if(d2Running||busy||e6Running||oneTapRunning)throw Error('Đang có flow BLE khác chạy.');
+  if(!server?.connected)throw Error('BLE chưa kết nối. Hãy Connect EINK/HINK trước.');
   d2Running=true;
   controls();
   try{
@@ -1786,10 +1786,9 @@ async function d2SetCurrentTime(options={}){
 
 async function d2SyncTimeAndEnsureVisible(){
   /*
-   * The first render after a fresh time sync primes this panel/controller.
-   * Firmware may report COMPLETE while that prime cycle still leaves the
-   * physical panel white. Wait for the prime cycle, then perform exactly
-   * one normal D2 redraw so the selected device layout becomes visible.
+   * First render after a fresh time sync primes this panel/controller.
+   * Wait for that prime cycle to complete, then perform exactly one
+   * normal D2 redraw so the physical panel becomes visible immediately.
    */
   productD2RenderResult=null;
   productD2RenderState=null;
@@ -1894,7 +1893,7 @@ async function d2ApplyClockProfile(){
   renderD2ProfileStatus(status);
   if(status.result!==0x00)throw Error(`D2 profile rejected: ${d2ResultName(status.result)}`);
   await d2RenderClockFromDevice();
-  $('profileStatus').textContent=`ÄĂ£ Ă¡p dá»¥ng: ${clockProfileName(activeClockProfile)}`;
+  $('profileStatus').textContent=`Đã áp dụng: ${clockProfileName(activeClockProfile)}`;
 }
 
 async function d2GetClockPreferences(){
@@ -1974,7 +1973,7 @@ async function d2SetDailyContext(){
 function scheduleIdentityHealthRefresh(reason){
   if(identityRefreshPending||!server?.connected)return;
   identityRefreshPending=true;
-  $('identityUpdatedAt').textContent='Äang cáº­p nháº­t';
+  $('identityUpdatedAt').textContent='Đang cập nhật';
   setTimeout(async()=>{
     try{
       if(!server?.connected)return;
@@ -1985,7 +1984,7 @@ function scheduleIdentityHealthRefresh(reason){
       await d2GetDeviceIdentity();
       log(`Identity health refreshed after ${reason}`,'D2');
     }catch(error){
-      $('identityUpdatedAt').textContent='KhĂ´ng Ä‘á»c Ä‘Æ°á»£c';
+      $('identityUpdatedAt').textContent='Không đọc được';
       log(`Identity health refresh failed: ${error.message}`,'D2');
     }finally{
       identityRefreshPending=false;
@@ -2002,7 +2001,7 @@ async function d2RecoverStaleTime(){
     await d2SetCurrentTime();
     const status=await d2GetTimeStatus({recoveryConfirm:true});
     if(hasD2StalePresent(status)){
-      throw Error('STALE_PRESENT váº«n cĂ²n sau khi Ä‘á»“ng bá»™ giá».');
+      throw Error('STALE_PRESENT vẫn còn sau khi đồng bộ giờ.');
     }
     d2StaleRecoveryPending=false;
     d2StalePresent=false;
@@ -2287,29 +2286,29 @@ async function refreshPanel() {
 
 async function syncClockToPanel(){
   if(oneTapRunning||e6Running)return;
-  if(!server?.connected)throw Error('BLE chÆ°a káº¿t ná»‘i. HĂ£y Connect EINK/HINK trÆ°á»›c.');
+  if(!server?.connected)throw Error('BLE chưa kết nối. Hãy Connect EINK/HINK trước.');
 
   oneTapRunning=true;
   controls();
   try{
-    setSyncStatus('Äang cáº­p nháº­t giá»','warn');
+    setSyncStatus('Đang cập nhật giờ','warn');
     drawDailyCalendar();
 
-    setSyncStatus('Äang gá»­i E5','warn');
+    setSyncStatus('Đang gửi E5','warn');
     await sendFramebuffer();
     if(!(e5Success && latestFwCrc === browserCrc)){
-      throw Error('E5 chÆ°a COMPLETE hoáº·c CRC chÆ°a khá»›p.');
+      throw Error('E5 chưa COMPLETE hoặc CRC chưa khớp.');
     }
 
-    setSyncStatus('Äang refresh E6','warn');
+    setSyncStatus('Đang refresh E6','warn');
     await refreshPanel();
     if($('e6Result').textContent !== 'COMPLETE'){
-      throw Error('E6 chÆ°a COMPLETE.');
+      throw Error('E6 chưa COMPLETE.');
     }
 
-    setSyncStatus('HoĂ n táº¥t','ok');
+    setSyncStatus('Hoàn tất','ok');
   }catch(error){
-    setSyncStatus(`Lá»—i: ${$('syncStatus').textContent}`, 'bad');
+    setSyncStatus(`Lỗi: ${$('syncStatus').textContent}`, 'bad');
     throw error;
   }finally{
     oneTapRunning=false;
