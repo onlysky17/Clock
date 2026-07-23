@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TASK D13B - Daily Briefing Profile</title>
+<title>TASK D13C - Automatic Phone Weather</title>
 <style>
 :root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;--bg:#07101b;--card:#111c2c;--line:#2a3d59;--text:#f4f8ff;--muted:#9fb1c8;--ok:#45d99c;--warn:#ffd166;--bad:#ff6b86}
 *{box-sizing:border-box}body{margin:0;background:linear-gradient(#050a12,#101a2a);color:var(--text)}main{max-width:1040px;margin:auto;padding:20px}
@@ -17,6 +17,7 @@
 .heroAction{font-size:1rem;min-width:160px}.presetRow button{min-width:160px}.presetRow button.selected,.preferenceRow button.selected{border-color:#45d99c;background:#123d34}.profileStatus{margin-top:10px;color:var(--muted)}
 .preferencePanel{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}.preferencePanel h3{margin:0 0 9px;font-size:1rem}.preferenceRow{margin-bottom:9px}.preferenceRow button{min-width:92px}.preferenceHint{margin:4px 0 9px;font-size:.85rem}
 .dailyContextPanel{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}.dailyContextPanel[hidden]{display:none}.dailyContextPanel h3{margin:0 0 9px;font-size:1rem}.dailyContextGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:9px}.dailyContextGrid label{display:grid;gap:5px;color:var(--muted);font-size:.82rem}.dailyContextGrid input,.dailyContextGrid select{width:100%}
+.weatherAutoRow{margin:0 0 10px}.weatherAutoStatus{margin:8px 0;color:var(--muted);font-size:.85rem}.weatherAutoStatus.ok{color:var(--ok)}.weatherAutoStatus.bad{color:var(--bad)}
 .advanced{margin:18px 0;border:1px solid var(--line);border-radius:12px;background:rgba(11,20,33,.96);overflow:hidden}
 .advanced>summary{cursor:pointer;list-style:none;padding:15px 16px;font-weight:850;color:#dbeafe}.advanced>summary::-webkit-details-marker{display:none}
 .advanced>summary:focus-visible{outline:2px solid #93c5fd;outline-offset:3px}.advancedBody{padding:0 16px 16px}.advancedBody .card{border-radius:10px;background:#0e1928}
@@ -174,12 +175,12 @@ const BATTERY_CHARACTERISTIC=0xFF02;
 const D2_STALE_PRESENT_FLAG=0x80;
 const D2_STALE_WARNING='Thiết bị đang giữ giờ cũ. Hãy đồng bộ giờ hiện tại để tiếp tục chạy đồng hồ.';
 const EINK_TEST_IDENTITY={
-  webBuild:'D13B-DAILY-20260722',
+  webBuild:'D13C-AUTO-WEATHER-20260723',
   expectedFirmware:'D8A00001',
   expectedRuntime:'D8A1',
   expectedSourceId:'D8A00001',
   expectedBin:'BUILD-SPECIFIC',
-  label:'D13B DAILY BRIEFING'
+  label:'D13C AUTO WEATHER'
 };
 window.EINK_TEST_IDENTITY=EINK_TEST_IDENTITY;
 
@@ -207,6 +208,7 @@ let selectedClockProfile=0,activeClockProfile=0,persistedClockProfile=0xFF;
 let selectedHourMode=0,activeHourMode=0,persistedHourMode=0xFF;
 let selectedRefreshMinutes=5,activeRefreshMinutes=5,persistedRefreshMinutes=0xFF;
 let dailyContextState=0,dailyContextFlags=0;
+let dailyWeatherRunning=false;
 
 function setupProductMode(){
   const main=document.querySelector('main');
@@ -265,7 +267,7 @@ function setupProductMode(){
   dailyContextPanel.id='dailyContextPanel';
   dailyContextPanel.className='dailyContextPanel';
   dailyContextPanel.hidden=true;
-  dailyContextPanel.innerHTML='<h3>Th\u1eddi ti\u1ebft v\u00e0 l\u1ecbch h\u00f4m nay</h3><div class="dailyContextGrid"><label><span><input id="dailyWeatherEnabled" type="checkbox"> C\u00f3 th\u1eddi ti\u1ebft</span></label><label>Tr\u1ea1ng th\u00e1i<select id="dailyWeatherCode"><option value="0">N\u1eafng</option><option value="1">Nhi\u1ec1u m\u00e2y</option><option value="2">M\u01b0a</option><option value="3">Gi\u00f4ng</option><option value="4">S\u01b0\u01a1ng m\u00f9</option><option value="5">Gi\u00f3</option><option value="6">N\u00f3ng</option></select></label><label>Nhi\u1ec7t \u0111\u1ed9 C<input id="dailyTemperature" type="number" min="-40" max="80" inputmode="numeric" placeholder="27"></label><label>M\u01b0a %<input id="dailyPrecipitation" type="number" min="0" max="100" inputmode="numeric" placeholder="0"></label><label>Gi\u1edd 1<input id="dailyAgendaTime0" type="time"></label><label>M\u00e3 1<input id="dailyAgendaLabel0" maxlength="3" autocomplete="off" placeholder="HOP"></label><label>Gi\u1edd 2<input id="dailyAgendaTime1" type="time"></label><label>M\u00e3 2<input id="dailyAgendaLabel1" maxlength="3" autocomplete="off" placeholder="GYM"></label></div><p class="preferenceHint">M\u00e3 l\u1ecbch t\u1ed1i \u0111a 3 k\u00fd t\u1ef1 A-Z, 0-9. D\u1eef li\u1ec7u ch\u1ec9 gi\u1eef trong RAM v\u00e0 h\u1ebft h\u1ea1n khi sang ng\u00e0y.</p><div id="dailyContextStatus" class="profileStatus" role="status" aria-live="polite">Ch\u01b0a g\u1eedi d\u1eef li\u1ec7u trong ng\u00e0y.</div>';
+  dailyContextPanel.innerHTML='<h3>Th\u1eddi ti\u1ebft t\u1ef1 \u0111\u1ed9ng v\u00e0 l\u1ecbch t\u00f9y ch\u1ecdn</h3><div class="row weatherAutoRow"><label><input id="dailyAutoWeather" type="checkbox" checked> T\u1ef1 l\u1ea5y theo v\u1ecb tr\u00ed \u0111i\u1ec7n tho\u1ea1i</label><button id="dailyWeatherRefresh" type="button">L\u1ea5y th\u1eddi ti\u1ebft ngay</button></div><div id="dailyWeatherStatus" class="weatherAutoStatus" role="status" aria-live="polite">Ch\u01b0a l\u1ea5y v\u1ecb tr\u00ed.</div><div class="dailyContextGrid"><label><span><input id="dailyWeatherEnabled" type="checkbox"> C\u00f3 th\u1eddi ti\u1ebft</span></label><label>Tr\u1ea1ng th\u00e1i<select id="dailyWeatherCode"><option value="0">N\u1eafng</option><option value="1">Nhi\u1ec1u m\u00e2y</option><option value="2">M\u01b0a</option><option value="3">Gi\u00f4ng</option><option value="4">S\u01b0\u01a1ng m\u00f9</option><option value="5">Gi\u00f3</option><option value="6">N\u00f3ng</option></select></label><label>Nhi\u1ec7t \u0111\u1ed9 C<input id="dailyTemperature" type="number" min="-40" max="80" inputmode="numeric" placeholder="27"></label><label>M\u01b0a %<input id="dailyPrecipitation" type="number" min="0" max="100" inputmode="numeric" placeholder="0"></label><label>Gi\u1edd 1 (t\u00f9y ch\u1ecdn)<input id="dailyAgendaTime0" type="time"></label><label>M\u00e3 1<input id="dailyAgendaLabel0" maxlength="3" autocomplete="off" placeholder="HOP"></label><label>Gi\u1edd 2 (t\u00f9y ch\u1ecdn)<input id="dailyAgendaTime1" type="time"></label><label>M\u00e3 2<input id="dailyAgendaLabel1" maxlength="3" autocomplete="off" placeholder="GYM"></label></div><p class="preferenceHint">Hai d\u00f2ng l\u1ecbch c\u00f3 th\u1ec3 \u0111\u1ec3 tr\u1ed1ng. V\u1ecb tr\u00ed ch\u1ec9 d\u00f9ng \u0111\u1ec3 l\u1ea5y th\u1eddi ti\u1ebft, kh\u00f4ng l\u01b0u tr\u00ean web.</p><p class="preferenceHint">D\u1eef li\u1ec7u th\u1eddi ti\u1ebft: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>.</p><div id="dailyContextStatus" class="profileStatus" role="status" aria-live="polite">Ch\u01b0a g\u1eedi d\u1eef li\u1ec7u trong ng\u00e0y.</div>';
   presetCard.append(dailyContextPanel);
 
   const preferencePanel=document.createElement('div');
@@ -1002,7 +1004,7 @@ function controls(){
   const connected=!!server?.connected;
   const e5Complete=e5Success && (browserCrc === latestFwCrc);
   const renderInProgress=productD2RenderState===0x01||productD2RenderState===0x02;
-  const locked=busy||e6Running||oneTapRunning||d2Running||batteryRunning||renderInProgress;
+  const locked=busy||e6Running||oneTapRunning||d2Running||batteryRunning||dailyWeatherRunning||renderInProgress;
   const identityBlocked=connected&&identityCompatibility!=='compatible';
   $('connect').disabled=connected||locked;
   $('disconnect').disabled=!connected||locked;
@@ -1025,6 +1027,7 @@ function controls(){
   $('updateClock').disabled=locked;
   $('dailyCalendar').disabled=locked;
   $('dailyBriefing').disabled=locked;
+  $('dailyWeatherRefresh').disabled=locked;
   for(const input of document.querySelectorAll('#dailyContextPanel input,#dailyContextPanel select'))input.disabled=locked;
   $('sample').disabled=locked;
   $('addText').disabled=locked;
@@ -1259,6 +1262,96 @@ function buildD2SetPreferencePacket(hourMode,refreshMinutes){
 
 function buildD2GetPreferencePacket(){
   return Uint8Array.of(0xD2,0x07);
+}
+
+function mapOpenMeteoWeatherCode(wmoCode,temperature,windSpeed){
+  if([95,96,99].includes(wmoCode))return 3;
+  if([45,48].includes(wmoCode))return 4;
+  if([51,53,55,56,57,61,63,65,66,67,71,73,75,77,80,81,82,85,86].includes(wmoCode))return 2;
+  if(windSpeed>=35)return 5;
+  if(temperature>=35)return 6;
+  return wmoCode===0?0:1;
+}
+
+function getPhoneWeatherPosition(){
+  return new Promise((resolve,reject)=>{
+    if(!navigator.geolocation){reject(Error('Tr\u00ecnh duy\u1ec7t kh\u00f4ng h\u1ed7 tr\u1ee3 v\u1ecb tr\u00ed.'));return;}
+    navigator.geolocation.getCurrentPosition(resolve,error=>{
+      const reason=error.code===1?'Ch\u01b0a \u0111\u01b0\u1ee3c c\u1ea5p quy\u1ec1n v\u1ecb tr\u00ed.':'Kh\u00f4ng l\u1ea5y \u0111\u01b0\u1ee3c v\u1ecb tr\u00ed \u0111i\u1ec7n tho\u1ea1i.';
+      reject(Error(reason));
+    },{enableHighAccuracy:false,timeout:10000,maximumAge:900000});
+  });
+}
+
+async function fetchPhoneWeather(latitude,longitude){
+  const url=new URL('https://api.open-meteo.com/v1/forecast');
+  url.searchParams.set('latitude',latitude.toFixed(4));
+  url.searchParams.set('longitude',longitude.toFixed(4));
+  url.searchParams.set('current','temperature_2m,weather_code,wind_speed_10m');
+  url.searchParams.set('daily','precipitation_probability_max');
+  url.searchParams.set('timezone','auto');
+  url.searchParams.set('forecast_days','1');
+  const controller=new AbortController();
+  const timeout=setTimeout(()=>controller.abort(),12000);
+  try{
+    const response=await fetch(url,{signal:controller.signal,cache:'no-store'});
+    if(!response.ok)throw Error(`D\u1ecbch v\u1ee5 th\u1eddi ti\u1ebft tr\u1ea3 m\u00e3 ${response.status}.`);
+    const data=await response.json();
+    const rawTemperature=Number(data.current?.temperature_2m);
+    const wmoCode=Number(data.current?.weather_code);
+    const windSpeed=Number(data.current?.wind_speed_10m||0);
+    const rawPrecipitation=Number(data.daily?.precipitation_probability_max?.[0]??0);
+    if(!Number.isFinite(rawTemperature)||!Number.isInteger(wmoCode)||!Number.isFinite(rawPrecipitation)){
+      throw Error('D\u1eef li\u1ec7u th\u1eddi ti\u1ebft kh\u00f4ng h\u1ee3p l\u1ec7.');
+    }
+    const temperature=Math.max(-40,Math.min(80,Math.round(rawTemperature)));
+    const precipitation=Math.max(0,Math.min(100,Math.round(rawPrecipitation)));
+    return{
+      weatherCode:mapOpenMeteoWeatherCode(wmoCode,temperature,windSpeed),
+      temperature,
+      precipitation
+    };
+  }finally{
+    clearTimeout(timeout);
+  }
+}
+
+function setDailyWeatherStatus(text,kind=''){
+  const status=$('dailyWeatherStatus');
+  status.textContent=text;
+  status.className=`weatherAutoStatus ${kind}`.trim();
+}
+
+async function refreshDailyWeatherFromPhone(){
+  if(dailyWeatherRunning)throw Error('Th\u1eddi ti\u1ebft \u0111ang \u0111\u01b0\u1ee3c c\u1eadp nh\u1eadt.');
+  dailyWeatherRunning=true;
+  setDailyWeatherStatus('\u0110ang l\u1ea5y v\u1ecb tr\u00ed v\u00e0 th\u1eddi ti\u1ebft...');
+  controls();
+  try{
+    const position=await getPhoneWeatherPosition();
+    const weather=await fetchPhoneWeather(position.coords.latitude,position.coords.longitude);
+    $('dailyWeatherEnabled').checked=true;
+    $('dailyWeatherCode').value=String(weather.weatherCode);
+    $('dailyTemperature').value=String(weather.temperature);
+    $('dailyPrecipitation').value=String(weather.precipitation);
+    setDailyWeatherStatus(`\u0110\u00e3 c\u1eadp nh\u1eadt ${weather.temperature} C, m\u01b0a ${weather.precipitation}%.`,'ok');
+    if(selectedClockProfile===2)drawDailyBriefingPreview();
+    return weather;
+  }catch(error){
+    setDailyWeatherStatus(error.name==='AbortError'?'H\u1ebft th\u1eddi gian l\u1ea5y th\u1eddi ti\u1ebft.':error.message,'bad');
+    throw error;
+  }finally{
+    dailyWeatherRunning=false;
+    controls();
+  }
+}
+
+async function runDailyWeatherRefresh(){
+  try{
+    await refreshDailyWeatherFromPhone();
+  }catch(error){
+    log(`Weather update failed: ${error.message}`,'ERROR');
+  }
 }
 
 function dailyDayKey(date=new Date()){
@@ -1738,7 +1831,10 @@ async function d2GetClockProfile(){
 }
 
 async function d2ApplyClockProfile(){
-  if(selectedClockProfile===2)await d2SetDailyContext();
+  if(selectedClockProfile===2){
+    if($('dailyAutoWeather').checked)await refreshDailyWeatherFromPhone();
+    await d2SetDailyContext();
+  }
   let status=parseD2ProfileStatus(await request(
     buildD2SetProfilePacket(selectedClockProfile),
     a=>a[0]===0xD2&&a[1]===0x84,
@@ -2206,6 +2302,10 @@ $('invert').onclick=invertCanvas;
 $('updateClock').onclick=()=>selectClockProfile(1);
 $('dailyCalendar').onclick=()=>selectClockProfile(0);
 $('dailyBriefing').onclick=()=>selectClockProfile(2);
+$('dailyWeatherRefresh').onclick=runDailyWeatherRefresh;
+$('dailyAutoWeather').onchange=()=>setDailyWeatherStatus(
+  $('dailyAutoWeather').checked?'S\u1ebd t\u1ef1 l\u1ea5y khi \u00e1p d\u1ee5ng.':'Ch\u1ebf \u0111\u1ed9 nh\u1eadp th\u1eddi ti\u1ebft th\u1ee7 c\u00f4ng.'
+);
 for(const input of document.querySelectorAll('#dailyContextPanel input,#dailyContextPanel select')){
   input.addEventListener('input',()=>{if(selectedClockProfile===2)drawDailyBriefingPreview()});
 }
@@ -2239,7 +2339,7 @@ resetD2UiDisconnected();
 controls();
 markLayoutHealth();
 window.addEventListener('resize',markLayoutHealth);
-log('TASK D13B ready. Daily briefing uses D2 08/09/88.');
+log('TASK D13C ready. Phone weather uses geolocation and Open-Meteo.');
 </script>
 </body>
 </html>
