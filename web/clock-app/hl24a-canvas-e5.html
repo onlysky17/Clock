@@ -188,12 +188,12 @@ const GOOGLE_CALENDAR_CLIENT_ID=(
   ''
 ).trim();
 const EINK_TEST_IDENTITY={
-  webBuild:'D15E-GOOGLE-SESSION-20260727',
+  webBuild:'D15F-RESTORE-AGENDA-20260727',
   expectedFirmware:'D8A00001',
   expectedRuntime:'D8A1',
   expectedSourceId:'D8A00001',
   expectedBin:'BUILD-SPECIFIC',
-  label:'D15E PHIÊN LỊCH GOOGLE'
+  label:'D15F KHÔI PHỤC LỊCH GOOGLE'
 };
 window.EINK_TEST_IDENTITY=EINK_TEST_IDENTITY;
 
@@ -3090,7 +3090,8 @@ resetD2UiDisconnected();
 if(!googleCalendarConfigured()){
   setGoogleCalendarStatus('Google Calendar ch\u01b0a c\u00f3 m\u00e3 k\u1ebft n\u1ed1i cho trang n\u00e0y.','bad');
 }else if(restoreGoogleCalendarSession()){
-  setGoogleCalendarStatus('\u0110\u00e3 kh\u00f4i ph\u1ee5c quy\u1ec1n l\u1ecbch trong tab n\u00e0y.','ok');
+  setGoogleCalendarStatus('\u0110ang kh\u00f4i ph\u1ee5c l\u1ecbch h\u00f4m nay trong tab n\u00e0y.','ok');
+  setTimeout(fetchGoogleCalendarToday,0);
 }
 controls();
 markLayoutHealth();
@@ -3106,7 +3107,7 @@ document.addEventListener('visibilitychange',()=>{
     scheduleAutomaticWeatherCheck('page visible');
   }
 });
-log('TASK D15E s\u1eb5n s\u00e0ng. Quy\u1ec1n l\u1ecbch ng\u1eafn h\u1ea1n \u0111\u01b0\u1ee3c gi\u1eef trong c\u00f9ng tab.');
+log('TASK D15F s\u1eb5n s\u00e0ng. T\u1ea3i l\u1ea1i c\u00f9ng tab s\u1ebd t\u1ef1 l\u1ea5y l\u1ecbch h\u00f4m nay.');
 </script>
 </body>
 </html>
