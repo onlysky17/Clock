@@ -3,7 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TASK D14B - Tự động cập nhật thời tiết</title>
+<meta name="google-calendar-client-id" content="64961652220-4b2s7mnvqfut2fsu213gokbi28qs74t6.apps.googleusercontent.com">
+<title>TASK D15B - Lịch Google hôm nay</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
 :root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;--bg:#07101b;--card:#111c2c;--line:#2a3d59;--text:#f4f8ff;--muted:#9fb1c8;--ok:#45d99c;--warn:#ffd166;--bad:#ff6b86}
 *{box-sizing:border-box}body{margin:0;background:linear-gradient(#050a12,#101a2a);color:var(--text)}main{max-width:1040px;margin:auto;padding:20px}
@@ -18,6 +20,7 @@
 .preferencePanel{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}.preferencePanel h3{margin:0 0 9px;font-size:1rem}.preferenceRow{margin-bottom:9px}.preferenceRow button{min-width:92px}.preferenceHint{margin:4px 0 9px;font-size:.85rem}
 .dailyContextPanel{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}.dailyContextPanel[hidden]{display:none}.dailyContextPanel h3{margin:0 0 9px;font-size:1rem}.dailyContextGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:9px}.dailyContextGrid label{display:grid;gap:5px;color:var(--muted);font-size:.82rem}.dailyContextGrid input,.dailyContextGrid select{width:100%}
 .weatherAutoRow{margin:0 0 10px}.weatherAutoStatus{margin:8px 0;color:var(--muted);font-size:.85rem}.weatherAutoStatus.ok{color:var(--ok)}.weatherAutoStatus.bad{color:var(--bad)}
+.calendarImportPanel{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}.calendarImportActions{margin:9px 0}.calendarAgendaRows{display:grid;gap:8px}.calendarAgendaRow{display:grid;grid-template-columns:minmax(110px,.7fr) minmax(100px,.5fr) minmax(0,1fr);gap:8px;align-items:end}.calendarAgendaRow label{display:grid;gap:4px;color:var(--muted);font-size:.82rem}.calendarAgendaRow input{width:100%}.calendarAgendaTitle{min-width:0;padding:10px 0;color:var(--muted);overflow-wrap:anywhere}.calendarPrivacy{margin:8px 0 0;font-size:.82rem}
 .advanced{margin:18px 0;border:1px solid var(--line);border-radius:12px;background:rgba(11,20,33,.96);overflow:hidden}
 .advanced>summary{cursor:pointer;list-style:none;padding:15px 16px;font-weight:850;color:#dbeafe}.advanced>summary::-webkit-details-marker{display:none}
 .advanced>summary:focus-visible{outline:2px solid #93c5fd;outline-offset:3px}.advancedBody{padding:0 16px 16px}.advancedBody .card{border-radius:10px;background:#0e1928}
@@ -31,7 +34,7 @@ button{cursor:pointer}button.primary{background:#1d4ed8}button.good{background:#
 canvas{display:block;width:min(100%,500px);height:auto;image-rendering:pixelated;background:#fff;touch-action:none;border:1px solid #62708a}
 progress{width:100%;height:17px;margin-top:12px}textarea{width:100%;min-height:260px;padding:12px;border:1px solid var(--line);border-radius:10px;background:#050910;color:#cfe2ff;font:12px/1.5 ui-monospace,Consolas,monospace}
 small{color:var(--muted)}
-@media(max-width:420px){main{padding:12px}.identityCard{min-width:0}.identityGrid,.compatibilityState{grid-template-columns:minmax(0,1fr)}.compatibilityState small{grid-column:auto}.stat strong{overflow-wrap:anywhere}}
+@media(max-width:420px){main{padding:12px}.identityCard{min-width:0}.identityGrid,.compatibilityState,.calendarAgendaRow{grid-template-columns:minmax(0,1fr)}.compatibilityState small{grid-column:auto}.stat strong{overflow-wrap:anywhere}.calendarAgendaTitle{padding:0 0 8px}}
 </style>
 </head>
 <body><main>
@@ -176,13 +179,19 @@ const D2_STALE_PRESENT_FLAG=0x80;
 const D2_STALE_WARNING='Thiết bị đang giữ giờ cũ. Hãy đồng bộ giờ hiện tại để tiếp tục chạy đồng hồ.';
 const AUTO_WEATHER_INTERVAL_MS=30*60*1000;
 const AUTO_WEATHER_RETRY_MS=60*1000;
+const GOOGLE_CALENDAR_SCOPE='https://www.googleapis.com/auth/calendar.readonly';
+const GOOGLE_CALENDAR_CLIENT_ID=(
+  window.EINK_GOOGLE_CALENDAR_CLIENT_ID||
+  document.querySelector('meta[name="google-calendar-client-id"]')?.content||
+  ''
+).trim();
 const EINK_TEST_IDENTITY={
-  webBuild:'D14B-AUTO-WEATHER-20260727',
+  webBuild:'D15B-GOOGLE-CALENDAR-20260727',
   expectedFirmware:'D8A00001',
   expectedRuntime:'D8A1',
   expectedSourceId:'D8A00001',
   expectedBin:'BUILD-SPECIFIC',
-  label:'D14B TỰ ĐỘNG CẬP NHẬT THỜI TIẾT'
+  label:'D15B LỊCH GOOGLE HÔM NAY'
 };
 window.EINK_TEST_IDENTITY=EINK_TEST_IDENTITY;
 
@@ -214,6 +223,7 @@ let dailyWeatherRunning=false;
 let autoWeatherTimer=0,autoWeatherRetryTimer=0,autoWeatherRunning=false;
 let autoWeatherRetryUsed=false,autoWeatherLastSuccessAt=0,autoWeatherLastDayKey=-1;
 let autoWeatherLastPacket=null,lastDailyStatus=null;
+let googleCalendarToken='',googleCalendarTokenClient=null,googleCalendarRunning=false;
 
 function setupProductMode(){
   const main=document.querySelector('main');
@@ -273,6 +283,27 @@ function setupProductMode(){
   dailyContextPanel.className='dailyContextPanel';
   dailyContextPanel.hidden=true;
   dailyContextPanel.innerHTML='<h3>Th\u1eddi ti\u1ebft t\u1ef1 \u0111\u1ed9ng v\u00e0 l\u1ecbch th\u00e1ng</h3><div class="row weatherAutoRow"><label><input id="dailyAutoWeather" type="checkbox"> T\u1ef1 c\u1eadp nh\u1eadt m\u1ed7i 30 ph\u00fat khi \u0111ang k\u1ebft n\u1ed1i</label><button id="dailyWeatherRefresh" type="button">L\u1ea5y th\u1eddi ti\u1ebft ngay</button></div><div id="dailyAutoWeatherStatus" class="weatherAutoStatus" role="status" aria-live="polite">T\u1ef1 \u0111\u1ed9ng \u0111ang t\u1eaft.</div><div id="dailyWeatherStatus" class="weatherAutoStatus" role="status" aria-live="polite">Ch\u01b0a l\u1ea5y v\u1ecb tr\u00ed.</div><div class="dailyContextGrid"><label><span><input id="dailyWeatherEnabled" type="checkbox"> Hi\u1ec3n th\u1eddi ti\u1ebft</span></label><label>Th\u1eddi ti\u1ebft<select id="dailyWeatherCode"><option value="0">N\u1eafng</option><option value="1">Nhi\u1ec1u m\u00e2y</option><option value="2">M\u01b0a</option><option value="3">Gi\u00f4ng</option><option value="4">S\u01b0\u01a1ng m\u00f9</option><option value="5">Gi\u00f3</option><option value="6">N\u00f3ng</option></select></label><label>Nhi\u1ec7t \u0111\u1ed9 (C)<input id="dailyTemperature" type="number" min="-40" max="80" inputmode="numeric" placeholder="27"></label><label>Kh\u1ea3 n\u0103ng m\u01b0a (%)<input id="dailyPrecipitation" type="number" min="0" max="100" inputmode="numeric" placeholder="0"></label></div><input id="dailyAgendaTime0" type="hidden"><input id="dailyAgendaLabel0" type="hidden"><input id="dailyAgendaTime1" type="hidden"><input id="dailyAgendaLabel1" type="hidden"><p class="preferenceHint">T\u1ef1 \u0111\u1ed9ng ch\u1ec9 ch\u1ea1y khi trang \u0111ang m\u1edf, BLE \u0111\u00e3 k\u1ebft n\u1ed1i v\u00e0 m\u1eb7t T\u00f3m t\u1eaft trong ng\u00e0y \u0111ang \u00e1p d\u1ee5ng. V\u1ecb tr\u00ed kh\u00f4ng \u0111\u01b0\u1ee3c l\u01b0u.</p><p class="preferenceHint">D\u1eef li\u1ec7u th\u1eddi ti\u1ebft: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>.</p><div id="dailyContextStatus" class="profileStatus" role="status" aria-live="polite">Ch\u01b0a g\u1eedi th\u1eddi ti\u1ebft h\u00f4m nay.</div>';
+  const calendarImportPanel=document.createElement('div');
+  calendarImportPanel.className='calendarImportPanel';
+  calendarImportPanel.innerHTML='<h3>L\u1ecbch Google h\u00f4m nay</h3><div class="row calendarImportActions"><button id="googleCalendarConnect" type="button">K\u1ebft n\u1ed1i Google Calendar</button><button id="googleCalendarFetch" type="button">L\u1ea5y l\u1ecbch h\u00f4m nay</button><button id="googleCalendarDisconnect" type="button">Ng\u1eaft quy\u1ec1n l\u1ecbch</button></div><div id="googleCalendarStatus" class="weatherAutoStatus" role="status" aria-live="polite">Ch\u01b0a k\u1ebft n\u1ed1i Google Calendar.</div><div id="calendarAgendaRows" class="calendarAgendaRows"></div><p class="calendarPrivacy">Ch\u1ec9 \u0111\u1ecdc l\u1ecbch sau khi b\u1ea1n cho ph\u00e9p. Token v\u00e0 s\u1ef1 ki\u1ec7n ch\u1ec9 gi\u1eef trong tab n\u00e0y; t\u1ea3i l\u1ea1i trang s\u1ebd x\u00f3a.</p>';
+  const agendaRows=calendarImportPanel.querySelector('#calendarAgendaRows');
+  for(const index of [0,1]){
+    const time=dailyContextPanel.querySelector(`#dailyAgendaTime${index}`);
+    const label=dailyContextPanel.querySelector(`#dailyAgendaLabel${index}`);
+    time.type='time';
+    time.setAttribute('aria-label',`Gi\u1edd l\u1ecbch ${index+1}`);
+    label.type='text';
+    label.maxLength=3;
+    label.placeholder='M\u00e3';
+    label.setAttribute('aria-label',`M\u00e3 l\u1ecbch ${index+1}`);
+    const row=document.createElement('div');
+    row.className='calendarAgendaRow';
+    row.innerHTML=`<label>Gi\u1edd ${index+1}</label><label>M\u00e3 ${index+1}</label><span id="dailyAgendaTitle${index}" class="calendarAgendaTitle">Ch\u01b0a c\u00f3</span>`;
+    row.children[0].append(time);
+    row.children[1].append(label);
+    agendaRows.append(row);
+  }
+  dailyContextPanel.insertBefore(calendarImportPanel,dailyContextPanel.querySelector('.preferenceHint'));
   presetCard.append(dailyContextPanel);
 
   const preferencePanel=document.createElement('div');
@@ -1004,7 +1035,7 @@ function controls(){
   const connected=!!server?.connected;
   const e5Complete=e5Success && (browserCrc === latestFwCrc);
   const renderInProgress=productD2RenderState===0x01||productD2RenderState===0x02;
-  const locked=busy||e6Running||oneTapRunning||d2Running||batteryRunning||dailyWeatherRunning||autoWeatherRunning||renderInProgress;
+  const locked=busy||e6Running||oneTapRunning||d2Running||batteryRunning||dailyWeatherRunning||autoWeatherRunning||googleCalendarRunning||renderInProgress;
   const identityBlocked=connected&&identityCompatibility!=='compatible';
   $('connect').disabled=connected||locked;
   $('disconnect').disabled=!connected||locked;
@@ -1028,6 +1059,9 @@ function controls(){
   $('dailyCalendar').disabled=locked;
   $('dailyBriefing').disabled=locked;
   $('dailyWeatherRefresh').disabled=locked;
+  $('googleCalendarConnect').disabled=locked||!googleCalendarConfigured()||!!googleCalendarToken;
+  $('googleCalendarFetch').disabled=locked||!googleCalendarToken;
+  $('googleCalendarDisconnect').disabled=locked||!googleCalendarToken;
   for(const input of document.querySelectorAll('#dailyContextPanel input,#dailyContextPanel select'))input.disabled=locked;
   $('sample').disabled=locked;
   $('addText').disabled=locked;
@@ -1710,6 +1744,197 @@ async function runDailyWeatherRefresh(){
     log(`Weather update failed: ${error.message}`,'ERROR');
   }
 }
+
+function googleCalendarConfigured(){
+  return GOOGLE_CALENDAR_CLIENT_ID.endsWith('.apps.googleusercontent.com');
+}
+
+function setGoogleCalendarStatus(text,kind=''){
+  const status=$('googleCalendarStatus');
+  status.textContent=text;
+  status.className=`weatherAutoStatus ${kind}`.trim();
+}
+
+function normalizeGoogleAgendaLabel(summary){
+  return String(summary||'')
+    .replace(/\u0110/g,'D')
+    .replace(/\u0111/g,'d')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g,'')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g,'')
+    .slice(0,3);
+}
+
+function googleCalendarDayBounds(now=new Date()){
+  const start=new Date(now);
+  start.setHours(0,0,0,0);
+  const end=new Date(start);
+  end.setDate(end.getDate()+1);
+  return{start,end};
+}
+
+function selectGoogleAgendaEvents(items,now=new Date()){
+  const{start,end}=googleCalendarDayBounds(now);
+  const candidates=(Array.isArray(items)?items:[])
+    .filter(event=>event?.status!=='cancelled'&&event?.start?.dateTime)
+    .map(event=>({
+      start:new Date(event.start.dateTime),
+      end:new Date(event.end?.dateTime||event.start.dateTime),
+      summary:String(event.summary||'').trim()
+    }))
+    .filter(event=>
+      Number.isFinite(event.start.getTime())&&
+      event.start>=start&&event.start<end&&
+      normalizeGoogleAgendaLabel(event.summary)
+    )
+    .sort((left,right)=>left.start-right.start);
+  const active=candidates.filter(event=>event.end>now);
+  const earlier=candidates.filter(event=>event.end<=now).reverse();
+  const selected=[];
+  const minuteKeys=new Set();
+  for(const event of [...active,...earlier]){
+    const minute=(event.start.getHours()*60)+event.start.getMinutes();
+    if(minuteKeys.has(minute))continue;
+    minuteKeys.add(minute);
+    selected.push(event);
+    if(selected.length===2)break;
+  }
+  return selected.sort((left,right)=>left.start-right.start);
+}
+
+function applyGoogleAgendaEvents(events){
+  for(const index of [0,1]){
+    $(`dailyAgendaTime${index}`).value='';
+    $(`dailyAgendaLabel${index}`).value='';
+    $(`dailyAgendaTitle${index}`).textContent='Ch\u01b0a c\u00f3';
+  }
+  events.forEach((event,index)=>{
+    const hour=String(event.start.getHours()).padStart(2,'0');
+    const minute=String(event.start.getMinutes()).padStart(2,'0');
+    $(`dailyAgendaTime${index}`).value=`${hour}:${minute}`;
+    $(`dailyAgendaLabel${index}`).value=normalizeGoogleAgendaLabel(event.summary);
+    $(`dailyAgendaTitle${index}`).textContent=event.summary;
+  });
+  if(selectedClockProfile===2)drawDailyBriefingPreview();
+}
+
+async function waitForGoogleIdentity(){
+  for(let attempt=0;attempt<50;attempt++){
+    if(window.google?.accounts?.oauth2)return window.google.accounts.oauth2;
+    await sleep(100);
+  }
+  throw Error('Kh\u00f4ng t\u1ea3i \u0111\u01b0\u1ee3c k\u1ebft n\u1ed1i Google. H\u00e3y ki\u1ec3m tra m\u1ea1ng r\u1ed3i th\u1eed l\u1ea1i.');
+}
+
+async function requestGoogleCalendarToken(){
+  if(!googleCalendarConfigured()){
+    throw Error('Google Calendar ch\u01b0a \u0111\u01b0\u1ee3c c\u1ea5u h\u00ecnh cho trang n\u00e0y.');
+  }
+  const oauth2=await waitForGoogleIdentity();
+  if(!googleCalendarTokenClient){
+    googleCalendarTokenClient=oauth2.initTokenClient({
+      client_id:GOOGLE_CALENDAR_CLIENT_ID,
+      scope:GOOGLE_CALENDAR_SCOPE,
+      callback:()=>{}
+    });
+  }
+  return new Promise((resolve,reject)=>{
+    googleCalendarTokenClient.callback=response=>{
+      if(response?.error){
+        reject(Error(response.error_description||response.error));
+        return;
+      }
+      googleCalendarToken=response?.access_token||'';
+      if(!googleCalendarToken){
+        reject(Error('Google kh\u00f4ng tr\u1ea3 v\u1ec1 quy\u1ec1n \u0111\u1ecdc l\u1ecbch.'));
+        return;
+      }
+      resolve(googleCalendarToken);
+    };
+    googleCalendarTokenClient.requestAccessToken({
+      prompt:googleCalendarToken?'':'consent'
+    });
+  });
+}
+
+async function connectGoogleCalendar(){
+  if(googleCalendarRunning)return;
+  googleCalendarRunning=true;
+  setGoogleCalendarStatus('\u0110ang m\u1edf quy\u1ec1n ch\u1ec9 \u0111\u1ecdc Google Calendar...');
+  controls();
+  try{
+    await requestGoogleCalendarToken();
+    setGoogleCalendarStatus('\u0110\u00e3 k\u1ebft n\u1ed1i. B\u1ea5m L\u1ea5y l\u1ecbch h\u00f4m nay.','ok');
+    log('Google Calendar connected with read-only page-session access.','CALENDAR');
+  }catch(error){
+    setGoogleCalendarStatus(`Kh\u00f4ng k\u1ebft n\u1ed1i \u0111\u01b0\u1ee3c: ${error.message}`,'bad');
+    log(`Google Calendar connect failed: ${error.message}`,'ERROR');
+  }finally{
+    googleCalendarRunning=false;
+    controls();
+  }
+}
+
+async function fetchGoogleCalendarToday(){
+  if(googleCalendarRunning)return;
+  googleCalendarRunning=true;
+  setGoogleCalendarStatus('\u0110ang \u0111\u1ecdc l\u1ecbch h\u00f4m nay...');
+  controls();
+  try{
+    if(!googleCalendarToken)await requestGoogleCalendarToken();
+    const{start,end}=googleCalendarDayBounds(new Date());
+    const params=new URLSearchParams({
+      timeMin:start.toISOString(),
+      timeMax:end.toISOString(),
+      singleEvents:'true',
+      orderBy:'startTime',
+      maxResults:'20'
+    });
+    const response=await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/primary/events?${params}`,
+      {headers:{Authorization:`Bearer ${googleCalendarToken}`}}
+    );
+    if(response.status===401)googleCalendarToken='';
+    if(!response.ok){
+      const detail=await response.json().catch(()=>null);
+      throw Error(detail?.error?.message||`Google Calendar l\u1ed7i ${response.status}.`);
+    }
+    const data=await response.json();
+    const events=selectGoogleAgendaEvents(data.items,new Date());
+    applyGoogleAgendaEvents(events);
+    setGoogleCalendarStatus(
+      events.length
+        ?`\u0110\u00e3 l\u1ea5y ${events.length} l\u1ecbch. Ki\u1ec3m tra m\u00e3 r\u1ed3i b\u1ea5m \u00c1p d\u1ee5ng l\u00ean m\u00e0n.`
+        :'H\u00f4m nay kh\u00f4ng c\u00f3 l\u1ecbch c\u00f3 gi\u1edd.',
+      'ok'
+    );
+    log(`Google Calendar loaded ${events.length} bounded agenda row(s).`,'CALENDAR');
+  }catch(error){
+    setGoogleCalendarStatus(`Kh\u00f4ng l\u1ea5y \u0111\u01b0\u1ee3c l\u1ecbch: ${error.message}`,'bad');
+    log(`Google Calendar fetch failed: ${error.message}`,'ERROR');
+  }finally{
+    googleCalendarRunning=false;
+    controls();
+  }
+}
+
+async function disconnectGoogleCalendar(){
+  const accessToken=googleCalendarToken;
+  googleCalendarToken='';
+  googleCalendarTokenClient=null;
+  if(accessToken&&window.google?.accounts?.oauth2){
+    await new Promise(resolve=>window.google.accounts.oauth2.revoke(accessToken,resolve));
+  }
+  setGoogleCalendarStatus('\u0110\u00e3 ng\u1eaft quy\u1ec1n l\u1ecbch trong tab n\u00e0y.');
+  controls();
+}
+
+window.EINK_GOOGLE_CALENDAR_TEST={
+  normalizeGoogleAgendaLabel,
+  googleCalendarDayBounds,
+  selectGoogleAgendaEvents
+};
 
 function dailyDayKey(date=new Date()){
   return Math.floor((Date.UTC(date.getFullYear(),date.getMonth(),date.getDate())-Date.UTC(2024,0,1))/86400000);
@@ -2688,6 +2913,9 @@ $('dailyCalendar').onclick=()=>selectClockProfile(0);
 $('dailyBriefing').onclick=()=>selectClockProfile(2);
 $('dailyWeatherRefresh').onclick=runDailyWeatherRefresh;
 $('dailyAutoWeather').onchange=toggleAutomaticWeather;
+$('googleCalendarConnect').onclick=connectGoogleCalendar;
+$('googleCalendarFetch').onclick=fetchGoogleCalendarToday;
+$('googleCalendarDisconnect').onclick=disconnectGoogleCalendar;
 for(const input of document.querySelectorAll('#dailyContextPanel input,#dailyContextPanel select')){
   input.addEventListener('input',()=>{if(selectedClockProfile===2)drawDailyBriefingPreview()});
 }
@@ -2718,6 +2946,9 @@ $('clearLog').onclick=()=>{$('log').value=''};
 clearWhite();
 drawDailyCalendar();
 resetD2UiDisconnected();
+if(!googleCalendarConfigured()){
+  setGoogleCalendarStatus('Google Calendar ch\u01b0a c\u00f3 m\u00e3 k\u1ebft n\u1ed1i cho trang n\u00e0y.','bad');
+}
 controls();
 markLayoutHealth();
 window.addEventListener('resize',markLayoutHealth);
@@ -2732,7 +2963,7 @@ document.addEventListener('visibilitychange',()=>{
     scheduleAutomaticWeatherCheck('page visible');
   }
 });
-log('TASK D14B s\u1eb5n s\u00e0ng. T\u1ef1 \u0111\u1ed9ng th\u1eddi ti\u1ebft m\u1ed7i 30 ph\u00fat khi \u0111ang k\u1ebft n\u1ed1i.');
+log('TASK D15B s\u1eb5n s\u00e0ng. Google Calendar ch\u1ec9 \u0111\u1ecdc v\u00e0 ch\u1ec9 gi\u1eef d\u1eef li\u1ec7u trong tab.');
 </script>
 </body>
 </html>

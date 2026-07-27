@@ -2,11 +2,16 @@
 
 ## Status
 
-`DESIGN COMPLETE - NO RUNTIME CHANGE`
+`DESIGN COMPLETE - ANDROID OWNER FLOW SUPERSEDED BY D15B`
 
 D15A defines a safe source for the two existing agenda rows in Product Mode.
 It changes no firmware, web runtime, BLE protocol, panel renderer, or persisted
 device data.
+
+Owner follow-up on Android found that exporting `.ics` from the phone is too
+awkward for the normal workflow. D15B therefore promotes explicit read-only
+Google Calendar OAuth to the primary source and keeps local `.ics` as a
+fallback policy. See `TASK_D15B_GOOGLE_CALENDAR_AGENDA.md`.
 
 Canonical URL:
 
