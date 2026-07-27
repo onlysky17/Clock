@@ -55,31 +55,27 @@ Web/layout milestone cuoi da dong:
 
 ## Current Finding
 
-- D13D is CLOSED / MERGED / SPI PHYSICAL PASS.
-- PR #81 merge commit: `caf39289afa7bfb3c1ca3436bcc7a2dcb5390dc7`.
-- SPI Burn/Verify, cold boot, approximately one-second PRIME recovery, and x=6 weather-row alignment are PASS.
-- Confirmed flow: `Lấy thời tiết ngay` -> `Áp dụng lên màn`.
-- `Đồng bộ giờ` alone does not display weather.
-- Rain threshold is `>= 0.20 mm`; `0.10 mm` maps to `MÂY`.
-- Final package: `D:\EINK\Clock\_incoming\D13D_FIX1_FINAL_SPI_20260723_160645`.
-- Packed file: `firmware\D13D_FIX1_FINAL_PACKED_256KB.bin`.
-- Packed size: `262144` bytes.
-- Packed SHA256: `4C926E52B38D594BDC7E45CE30EEC51CD09D418E572987AC0B871E36E1065FF9`.
+- D14B is CLOSED / MERGED / OWNER PASS.
+- Feature commit: `aa26b3cd92055bbca22b859244122a8e37b5c942`.
+- PR #84 merge commit: `ba786fac946105576863ebba1385bcdf88a40cc1`.
+- Explicit enablement starts an eligible weather update immediately.
+- Owner confirmed weather displayed correctly after enabling the automatic flow.
+- Later successful checks use a 30-minute minimum interval.
+- BLE disconnect or a hidden page pauses automation without auto-connect.
+- D14B changed no firmware, BLE protocol, `test.html`, or panel layout.
 
 ## Next Canonical Action
 
-`TASK D14B - IMPLEMENT CONNECTED AUTO WEATHER REFRESH`
+`TASK D15A - PHONE CALENDAR AGENDA INPUT POLICY DESIGN`
 
-- Implement the approved D14A policy in canonical Product Mode.
-- Auto weather defaults OFF, requires explicit owner enablement, and runs only
-  while the page is visible and BLE is connected.
-- Use a 30-minute minimum successful fetch interval, force one check at local
-  day rollover, skip unchanged `FRESH` payloads, and retry at most once.
-- Keep `D2 08/09/88` and `D2 02` unchanged; do not modify firmware or `test.html`.
+- Audit browser-supported, owner-controlled ways to obtain phone calendar events.
+- Define permission, privacy, expiry, duplicate, timezone, and fallback behavior.
+- Preserve the existing two optional agenda rows until a source policy is approved.
+- Keep D15A design-only; do not modify firmware, BLE protocol, or web runtime.
 
 ## Guardrails For The Next Task
 
-1. Start from clean `main` after D14A merge and preserve D13D as the firmware rollback baseline.
+1. Start from clean `main` after D14B closeout and preserve D13D as the firmware rollback baseline.
 2. Preserve the final geometry contract: logical `250 x 122`, controller RAM `122 x 250`, stride `16`, payload `4000` bytes.
 3. Keep the canonical web URL as `https://onlysky17.github.io/Clock/test.html`.
 4. Do not use the old `104 x 212` golden geometry for this physical panel.

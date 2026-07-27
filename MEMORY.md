@@ -11,6 +11,16 @@
   - `docs/agent/AUTOMATION_MODE.md`
 - Canonical web URL: `https://onlysky17.github.io/Clock/test.html`
 
+D14B current web automation milestone:
+- `TASK D14B` connected automatic weather refresh is CLOSED / MERGED / OWNER PASS.
+- Feature commit: `aa26b3cd92055bbca22b859244122a8e37b5c942`.
+- PR #84 merge commit: `ba786fac946105576863ebba1385bcdf88a40cc1`.
+- Automatic weather defaults OFF and runs only while the page is visible and BLE is connected.
+- Enabling automatic weather runs one eligible update immediately; later successful checks use a 30-minute minimum interval.
+- Owner confirmed the first automatic update displayed weather correctly on the panel.
+- Disconnect pauses automation without auto-connect; reconnect resumes eligibility checks.
+- Firmware, BLE protocol, `test.html`, and panel renderer are unchanged.
+
 D13D current persistent firmware milestone:
 - `TASK D13D` Vietnamese weather calendar is CLOSED / MERGED / SPI PHYSICAL PASS.
 - Feature commit: `3d8ad577a8d359dfc7dba7c2fbbb26212b52ff70`.
@@ -43,7 +53,7 @@ D12C current persistent firmware milestone:
 - Keil `0 errors`, `0 warnings`; legacy font symbols absent.
 - SmartSnippets Burn/Verify, cold boot, preference restore, immediate render, scheduler, and BLE reconnect: PASS.
 - D12C supersedes D11C as the latest known-good persistent SPI baseline.
-- Next action: `TASK D14A - AUTOMATIC WEATHER REFRESH POLICY DESIGN`.
+- Next action: `TASK D15A - PHONE CALENDAR AGENDA INPUT POLICY DESIGN`.
 
 Firmware milestone cuối đã đóng:
 - `TASK D11C` clock profiles persistent SPI final is CLOSED / MERGED / PHYSICAL PASS.
@@ -126,9 +136,9 @@ Product and web milestones:
 - Separate finding: Web Product Mode can show `Có lỗi` even when the D2 log reports OK/SYNCED/COMPLETE; this did not block D6C firmware merge or physical PASS.
 
 Next canonical action:
-- `TASK D14A - AUTOMATIC WEATHER REFRESH POLICY DESIGN`.
-- Define when the connected web app refreshes phone weather and sends D2 daily data.
-- Keep D14A design-only; do not change firmware, BLE protocol, or panel refresh behavior yet.
+- `TASK D15A - PHONE CALENDAR AGENDA INPUT POLICY DESIGN`.
+- Audit safe, owner-controlled ways to populate the two agenda rows from a phone calendar.
+- Keep D15A design-only; do not change firmware, BLE protocol, or calendar data without an approved source and privacy policy.
 
 ## Historical Milestones
 
