@@ -111,6 +111,10 @@ events.
 - The expiry supplied by Google is preserved with a one-minute safety margin.
 - This reduces repeated sign-in prompts but does not bypass Google's OAuth
   consent, test-user, or application-verification rules.
+- D15F automatically fetches today's agenda when that valid token is restored.
+- The restored agenda only repopulates the review controls. It never sends BLE
+  data or refreshes the panel until the owner presses `Áp dụng lên màn`.
+- Event titles remain RAM-only and are fetched again from Google after reload.
 
 ## Validation
 
@@ -124,6 +128,10 @@ lengths.
 D15E session recovery is validated by:
 
 `node scripts/task-d15e-google-session-access-smoke.mjs`
+
+D15F agenda restoration is validated by:
+
+`node scripts/task-d15f-restore-google-agenda-smoke.mjs`
 
 Official references:
 
