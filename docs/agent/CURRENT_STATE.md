@@ -92,6 +92,14 @@ Historical firmware milestone:
 
 Product and web milestones:
 
+- `TASK D14B` connected automatic weather refresh is CLOSED / MERGED / OWNER PASS.
+- Feature commit: `aa26b3cd92055bbca22b859244122a8e37b5c942`.
+- PR #84 merge commit: `ba786fac946105576863ebba1385bcdf88a40cc1`.
+- Automatic weather defaults OFF, starts immediately when explicitly enabled and eligible, then uses a 30-minute minimum successful interval.
+- Owner confirmed the first automatic weather update displayed correctly on the panel.
+- Hidden-page and BLE-disconnect states pause automation; no auto-connect or auto-reconnect is attempted.
+- Unchanged `FRESH` payloads skip D2 SET and physical render; one weather retry is bounded to 60 seconds.
+- Firmware, BLE protocol, `test.html`, and the physical renderer are unchanged.
 - `TASK D4A` stale recovery UX decision is CLOSED and approved by Owner.
 - `TASK D4B` stale recovery CTA implementation and physical validation are CLOSED/PASS.
 - D4B implementation commit: `9b4cb9b58907960b3605b4cbf6a62dc39524b89f`.
@@ -130,12 +138,11 @@ Product and web milestones:
 
 Next canonical action:
 
-- `TASK D14A - AUTOMATIC WEATHER REFRESH POLICY DESIGN` is DESIGN COMPLETE.
-- Policy uses explicit opt-in, connected-page automation, a 30-minute minimum
-  successful fetch interval, day-rollover refresh, unchanged-payload
-  suppression, and one bounded retry.
-- D14A changes no firmware, web runtime, BLE protocol, or panel behavior.
-- Next implementation gate: `TASK D14B - IMPLEMENT CONNECTED AUTO WEATHER REFRESH`.
+- `TASK D15A - PHONE CALENDAR AGENDA INPUT POLICY DESIGN`.
+- Audit which phone-calendar source is feasible from the canonical web page,
+  including permission, privacy, browser support, and owner-controlled fallback.
+- Keep D15A design-only. Do not change firmware, BLE protocol, or the existing
+  two agenda rows before the source and privacy policy are approved.
 
 ## Historical Project State
 

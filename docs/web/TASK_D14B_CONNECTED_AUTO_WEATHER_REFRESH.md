@@ -2,10 +2,13 @@
 
 ## Status
 
-`IMPLEMENTED - AUTOMATED WEB GATES PASS`
+`CLOSED - MERGED - OWNER PASS`
 
 D14B implements the D14A policy in canonical Product Mode without changing
 firmware or BLE protocol.
+
+- Feature commit: `aa26b3cd92055bbca22b859244122a8e37b5c942`.
+- PR #84 merge commit: `ba786fac946105576863ebba1385bcdf88a40cc1`.
 
 Canonical URL:
 
@@ -66,6 +69,11 @@ Canonical URL:
 
 ## Owner Gate
 
-No firmware build or panel test is required. After the web PR is merged, test
-from the canonical URL by connecting BLE, selecting `Tom tat trong ngay`,
-enabling automatic weather, and applying the profile once.
+Owner post-merge validation PASS:
+
+- Canonical Product Mode loaded the merged D14B web build.
+- BLE connection and the daily briefing profile remained compatible.
+- Explicitly enabling automatic weather triggered the first eligible update
+  immediately; no 30-minute wait was required for the first cycle.
+- The updated weather displayed correctly on the panel.
+- No firmware rebuild, flash, or protocol change was required.
