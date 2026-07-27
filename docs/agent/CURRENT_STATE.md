@@ -92,6 +92,16 @@ Historical firmware milestone:
 
 Product and web milestones:
 
+- `TASK D15A` through `TASK D15H` Google agenda support is CLOSED / MERGED / OWNER PASS.
+- Merge lineage: D15A `b371021`, D15B `57abfcd`, D15C `91e86be`, D15D `7c15f99`,
+  D15E `1b0a154`, D15F `d1b748a`, D15G `a23ed7c`, and D15H `78c4401`.
+- Google Calendar access is read-only and explicitly owner-authorized.
+- The web keeps at most two upcoming timed events, removes ended events, restores agenda access
+  within the current tab after reload, and refreshes at most every 15 minutes while visible.
+- Product Mode reports the last successful agenda update and whether automatic refresh is active
+  or paused.
+- Owner confirmed weather and agenda rows render together on the physical e-ink panel.
+- D15D through D15H changed no firmware, BLE protocol, canonical `test.html`, or SPI package.
 - `TASK D14B` connected automatic weather refresh is CLOSED / MERGED / OWNER PASS.
 - Feature commit: `aa26b3cd92055bbca22b859244122a8e37b5c942`.
 - PR #84 merge commit: `ba786fac946105576863ebba1385bcdf88a40cc1`.
@@ -138,11 +148,11 @@ Product and web milestones:
 
 Next canonical action:
 
-- `TASK D15A - PHONE CALENDAR AGENDA INPUT POLICY DESIGN`.
-- Audit which phone-calendar source is feasible from the canonical web page,
-  including permission, privacy, browser support, and owner-controlled fallback.
-- Keep D15A design-only. Do not change firmware, BLE protocol, or the existing
-  two agenda rows before the source and privacy policy are approved.
+- `TASK D16A - NEXT-DAY AGENDA AUTONOMY POLICY DESIGN`.
+- Define what the device should show after midnight when the browser is closed or BLE is
+  disconnected and no fresh Google agenda is available.
+- Audit bounded expiry, day rollover, stale-row removal, reconnect refresh, and privacy behavior.
+- Keep D16A design-only; do not change firmware, BLE protocol, Google OAuth, or panel rendering.
 
 ## Historical Project State
 

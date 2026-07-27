@@ -25,7 +25,10 @@ assert(web.includes('function updateGoogleCalendarRefreshStatus'),'refresh statu
 assert(web.includes('C\\u1eadp nh\\u1eadt g\\u1ea7n nh\\u1ea5t ${time}'),'last refresh time missing');
 assert(web.includes('T\\u1ef1 l\\u00e0m m\\u1edbi t\\u1ed1i \\u0111a m\\u1ed7i 15 ph\\u00fat'),'15-minute status missing');
 assert(web.includes("document.visibilityState!=='visible'"),'hidden-page state missing');
-assert(web.includes("document.addEventListener('visibilitychange',()=>{\n  updateGoogleCalendarRefreshStatus();"),'visibility refresh missing');
+assert(
+  /document\.addEventListener\('visibilitychange',\(\)=>\{\r?\n\s+updateGoogleCalendarRefreshStatus\(\);/.test(web),
+  'visibility refresh missing'
+);
 assert(web.includes("if(background&&(!googleCalendarToken||document.visibilityState!=='visible'))return;"),'background safety guard missing');
 assert(/if\(background\)return;\r?\n\s+await requestGoogleCalendarToken\(\);/.test(web),'background OAuth guard missing');
 assert(docs.includes('D15H shows the automatic-refresh state'),'D15H docs missing');

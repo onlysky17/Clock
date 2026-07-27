@@ -55,27 +55,29 @@ Web/layout milestone cuoi da dong:
 
 ## Current Finding
 
-- D14B is CLOSED / MERGED / OWNER PASS.
-- Feature commit: `aa26b3cd92055bbca22b859244122a8e37b5c942`.
-- PR #84 merge commit: `ba786fac946105576863ebba1385bcdf88a40cc1`.
-- Explicit enablement starts an eligible weather update immediately.
-- Owner confirmed weather displayed correctly after enabling the automatic flow.
-- Later successful checks use a 30-minute minimum interval.
-- BLE disconnect or a hidden page pauses automation without auto-connect.
-- D14B changed no firmware, BLE protocol, `test.html`, or panel layout.
+- D15A through D15H are CLOSED / MERGED / OWNER PASS.
+- D15 merge lineage: `b371021`, `57abfcd`, `91e86be`, `7c15f99`, `1b0a154`,
+  `d1b748a`, `a23ed7c`, and `78c4401`.
+- Google Calendar access is read-only and owner-authorized.
+- At most two upcoming timed events are selected; ended events are removed.
+- Access and agenda rows restore within the current tab after reload.
+- Agenda refresh runs at most every 15 minutes while the page is visible.
+- Product Mode shows the last successful refresh and active/paused state.
+- Owner confirmed weather and agenda display together on the physical panel.
+- D15D through D15H changed no firmware, BLE protocol, canonical `test.html`, or SPI package.
 
 ## Next Canonical Action
 
-`TASK D15A - PHONE CALENDAR AGENDA INPUT POLICY DESIGN`
+`TASK D16A - NEXT-DAY AGENDA AUTONOMY POLICY DESIGN`
 
-- Audit browser-supported, owner-controlled ways to obtain phone calendar events.
-- Define permission, privacy, expiry, duplicate, timezone, and fallback behavior.
-- Preserve the existing two optional agenda rows until a source policy is approved.
-- Keep D15A design-only; do not modify firmware, BLE protocol, or web runtime.
+- Define device behavior after midnight when the browser is closed or BLE is disconnected.
+- Specify bounded agenda expiry, stale-row removal, reconnect refresh, timezone, and privacy rules.
+- Preserve the current two optional agenda rows and never auto-connect BLE.
+- Keep D16A design-only; do not modify firmware, BLE protocol, Google OAuth, or web runtime.
 
 ## Guardrails For The Next Task
 
-1. Start from clean `main` after D14B closeout and preserve D13D as the firmware rollback baseline.
+1. Start from clean `main` after D15 closeout and preserve D13D as the firmware rollback baseline.
 2. Preserve the final geometry contract: logical `250 x 122`, controller RAM `122 x 250`, stride `16`, payload `4000` bytes.
 3. Keep the canonical web URL as `https://onlysky17.github.io/Clock/test.html`.
 4. Do not use the old `104 x 212` golden geometry for this physical panel.
