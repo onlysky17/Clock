@@ -1479,6 +1479,8 @@ static void hink_d13b_draw_daily_briefing(uint8_t h, uint8_t m, uint16_t sy,
 	uint8_t pos;
 	uint8_t i;
 	uint8_t mua_char_index;
+	uint8_t row_x;
+	uint8_t row_y;
 
 	/* Keep the proven monthly calendar and add a compact Vietnamese weather row. */
 	hink_bitmap_draw_clock(h, m, sy, sm, sd, sw, lunar_valid, lm, ld, ampm);
@@ -1487,46 +1489,90 @@ static void hink_d13b_draw_daily_briefing(uint8_t h, uint8_t m, uint16_t sy,
 	{
 		return;
 	}
-	if (hink_daily_flags & HINK_DAILY_WEATHER_VALID)
+	if (hink_daily_flags & HINK_DAILY_AGENDA_VALID)
 	{
-		                pos = 0U;
-                for (i = 0U; weather_tokens[hink_daily_weather][i] != 0; i++)
-                {
-                        buf[pos++] = weather_tokens[hink_daily_weather][i];
-                }
+		hink_d7a_box(3, 20, 99, 120, WHITE);
+		hink_d7a_draw_hhmm(((h / 10U) == 1U) ? 4U : 10U, 24, h, m, BLACK);
+		hink_d9a_draw_lunar(26, 68, lunar_valid, lm, ld);
+		if (ampm != 0U)
+		{
+			buf[0] = (ampm == 2U) ? 'P' : 'A';
+			buf[1] = 'M';
+			buf[2] = 0;
+			draw_text(80, 60, buf, BLACK);
+		}
+	}
+	if ((hink_daily_flags & HINK_DAILY_WEATHER_VALID) &&
+	    !((hink_daily_flags & HINK_DAILY_AGENDA_VALID) &&
+	      (hink_daily_agenda_count > 1U)))
+	{
+		pos = 0U;
+		for (i = 0U; weather_tokens[hink_daily_weather][i] != 0; i++)
+		{
+			buf[pos++] = weather_tokens[hink_daily_weather][i];
+		}
 
-                /* Explicit separation between condition and temperature. */
-                buf[pos++] = ' ';
+		buf[pos++] = ' ';
+		if (hink_daily_temperature < 0)
+		{
+			buf[pos++] = '-';
+			value = (uint8_t)(-hink_daily_temperature);
+		}
+		else
+		{
+			value = (uint8_t)hink_daily_temperature;
+		}
+		if (value >= 10U)
+		{
+			buf[pos++] = (char)('0' + (value / 10U));
+		}
+		buf[pos++] = (char)('0' + (value % 10U));
+		buf[pos++] = 'C';
+		buf[pos] = 0;
 
-                if (hink_daily_temperature < 0)
-                {
-                        buf[pos++] = '-';
-                        value = (uint8_t)(-hink_daily_temperature);
-                }
-                else
-                {
-                        value = (uint8_t)hink_daily_temperature;
-                }
+		if ((hink_daily_flags & HINK_DAILY_AGENDA_VALID) &&
+		    (hink_daily_agenda_count == 1U))
+		{
+			row_x = (uint8_t)((101U - (pos * 6U)) / 2U);
+			row_y = 87U;
+		}
+		else
+		{
+			row_x = HINK_D13D_WEATHER_X;
+			row_y = 112U;
+		}
+		draw_text(row_x, row_y, buf, BLACK);
+		hink_d13d_draw_weather_marks(
+			hink_daily_weather,
+			row_x,
+			row_y
+		);
+	}
 
-                if (value >= 10U)
-                {
-                        buf[pos++] = (char)('0' + (value / 10U));
-                }
-                buf[pos++] = (char)('0' + (value % 10U));
-                buf[pos++] = 'C';
-                buf[pos] = 0;
-
-                /*
-                 * Baseline 112 keeps Vietnamese marks away from the lunar row.
-                 * Longest output is "SUONG 30C", safely inside the left pane.
-                 */
-                                draw_text(HINK_D13D_WEATHER_X, 112, buf, BLACK);
-                hink_d13d_draw_weather_marks(
-                        hink_daily_weather,
-                        HINK_D13D_WEATHER_X,
-                        112U
-                );
-        }
+	if (hink_daily_flags & HINK_DAILY_AGENDA_VALID)
+	{
+		for (i = 0U; i < hink_daily_agenda_count; i++)
+		{
+			value = (uint8_t)(hink_daily_agenda_minute[i] / 60U);
+			hink_put_2(&buf[0], value);
+			buf[2] = ':';
+			value = (uint8_t)(hink_daily_agenda_minute[i] % 60U);
+			hink_put_2(&buf[3], value);
+			buf[5] = ' ';
+			buf[6] = hink_daily_agenda_label[i][0];
+			buf[7] = hink_daily_agenda_label[i][1];
+			buf[8] = hink_daily_agenda_label[i][2];
+			buf[9] = 0;
+			row_y = (hink_daily_agenda_count == 1U) ?
+			        105U : (uint8_t)(88U + (i * 16U));
+			draw_text(23, row_y, buf, BLACK);
+			if ((buf[6] == 'H') && (buf[7] == 'O') && (buf[8] == 'P'))
+			{
+				hink_d7a_pixel(67, (int)row_y + 8, BLACK);
+				hink_d7a_pixel(68, (int)row_y + 8, BLACK);
+			}
+		}
+	}
 }
 
 static void hink_bitmap_draw_clock(uint8_t h, uint8_t m, uint16_t sy, uint8_t sm,

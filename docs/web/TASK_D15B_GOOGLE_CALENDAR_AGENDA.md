@@ -73,8 +73,20 @@ The D2 daily packet remains unchanged:
 - Reloading or closing the tab clears the token and events.
 - `Ngắt quyền lịch` revokes the current access token.
 - Only two reviewed bounded agenda rows are sent to the device.
-- No firmware, BLE protocol, scheduler, weather, or panel renderer change.
-- Không đổi BLE protocol hoặc firmware.
+- The D15C follow-up restores device rendering for the agenda bytes already
+  carried by this unchanged D2 packet.
+- No BLE protocol, scheduler, weather source, or browser storage change.
+- Không đổi BLE protocol.
+
+## Device rendering
+
+The `DAILY_BRIEFING` face keeps the monthly calendar and renders imported agenda
+rows below the left clock pane. With one agenda row, the compact weather row
+remains visible. The lunar, weather, and agenda rows are centered with balanced
+vertical spacing, and the large clock moves upward to use the left pane evenly.
+The common `HOP` code is rendered visually as Vietnamese `HỌP` without changing
+the three-byte BLE label. With two agenda rows, both compact lines are used for
+events.
 
 ## Validation
 
