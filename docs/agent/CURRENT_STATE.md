@@ -130,9 +130,12 @@ Product and web milestones:
 
 Next canonical action:
 
-- `TASK D14A - AUTOMATIC WEATHER REFRESH POLICY DESIGN`.
-- Define a bounded connected-web policy for refreshing phone weather and sending D2 daily data.
-- D14A is design-only and must not change firmware, BLE protocol, or panel refresh behavior.
+- `TASK D14A - AUTOMATIC WEATHER REFRESH POLICY DESIGN` is DESIGN COMPLETE.
+- Policy uses explicit opt-in, connected-page automation, a 30-minute minimum
+  successful fetch interval, day-rollover refresh, unchanged-payload
+  suppression, and one bounded retry.
+- D14A changes no firmware, web runtime, BLE protocol, or panel behavior.
+- Next implementation gate: `TASK D14B - IMPLEMENT CONNECTED AUTO WEATHER REFRESH`.
 
 ## Historical Project State
 

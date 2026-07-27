@@ -68,15 +68,18 @@ Web/layout milestone cuoi da dong:
 
 ## Next Canonical Action
 
-`TASK D14A - AUTOMATIC WEATHER REFRESH POLICY DESIGN`
+`TASK D14B - IMPLEMENT CONNECTED AUTO WEATHER REFRESH`
 
-- Decide when the connected web app should fetch fresh phone weather and send the existing D2 daily payload.
-- Define permission, freshness, reconnect, retry, battery, and duplicate-refresh rules.
-- Keep D14A design-only: no firmware, web runtime, BLE protocol, EPD, build, or flash changes.
+- Implement the approved D14A policy in canonical Product Mode.
+- Auto weather defaults OFF, requires explicit owner enablement, and runs only
+  while the page is visible and BLE is connected.
+- Use a 30-minute minimum successful fetch interval, force one check at local
+  day rollover, skip unchanged `FRESH` payloads, and retry at most once.
+- Keep `D2 08/09/88` and `D2 02` unchanged; do not modify firmware or `test.html`.
 
 ## Guardrails For The Next Task
 
-1. Start from clean `main` after D13D closeout and preserve D13D as the rollback baseline.
+1. Start from clean `main` after D14A merge and preserve D13D as the firmware rollback baseline.
 2. Preserve the final geometry contract: logical `250 x 122`, controller RAM `122 x 250`, stride `16`, payload `4000` bytes.
 3. Keep the canonical web URL as `https://onlysky17.github.io/Clock/test.html`.
 4. Do not use the old `104 x 212` golden geometry for this physical panel.
