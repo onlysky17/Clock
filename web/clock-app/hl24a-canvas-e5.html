@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TASK D13D - Lịch tháng và thời tiết tiếng Việt</title>
+<title>TASK D14B - Tự động cập nhật thời tiết</title>
 <style>
 :root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;--bg:#07101b;--card:#111c2c;--line:#2a3d59;--text:#f4f8ff;--muted:#9fb1c8;--ok:#45d99c;--warn:#ffd166;--bad:#ff6b86}
 *{box-sizing:border-box}body{margin:0;background:linear-gradient(#050a12,#101a2a);color:var(--text)}main{max-width:1040px;margin:auto;padding:20px}
@@ -174,13 +174,15 @@ const BATTERY_SERVICE=0xFF00;
 const BATTERY_CHARACTERISTIC=0xFF02;
 const D2_STALE_PRESENT_FLAG=0x80;
 const D2_STALE_WARNING='Thiết bị đang giữ giờ cũ. Hãy đồng bộ giờ hiện tại để tiếp tục chạy đồng hồ.';
+const AUTO_WEATHER_INTERVAL_MS=30*60*1000;
+const AUTO_WEATHER_RETRY_MS=60*1000;
 const EINK_TEST_IDENTITY={
-  webBuild:'D13D-VI-WEATHER-20260723',
+  webBuild:'D14B-AUTO-WEATHER-20260727',
   expectedFirmware:'D8A00001',
   expectedRuntime:'D8A1',
   expectedSourceId:'D8A00001',
   expectedBin:'BUILD-SPECIFIC',
-  label:'D13D LỊCH THÁNG VÀ THỜI TIẾT'
+  label:'D14B TỰ ĐỘNG CẬP NHẬT THỜI TIẾT'
 };
 window.EINK_TEST_IDENTITY=EINK_TEST_IDENTITY;
 
@@ -209,6 +211,9 @@ let selectedHourMode=0,activeHourMode=0,persistedHourMode=0xFF;
 let selectedRefreshMinutes=5,activeRefreshMinutes=5,persistedRefreshMinutes=0xFF;
 let dailyContextState=0,dailyContextFlags=0;
 let dailyWeatherRunning=false;
+let autoWeatherTimer=0,autoWeatherRetryTimer=0,autoWeatherRunning=false;
+let autoWeatherRetryUsed=false,autoWeatherLastSuccessAt=0,autoWeatherLastDayKey=-1;
+let autoWeatherLastPacket=null,lastDailyStatus=null;
 
 function setupProductMode(){
   const main=document.querySelector('main');
@@ -267,7 +272,7 @@ function setupProductMode(){
   dailyContextPanel.id='dailyContextPanel';
   dailyContextPanel.className='dailyContextPanel';
   dailyContextPanel.hidden=true;
-  dailyContextPanel.innerHTML='<h3>Th\u1eddi ti\u1ebft t\u1ef1 \u0111\u1ed9ng v\u00e0 l\u1ecbch th\u00e1ng</h3><div class="row weatherAutoRow"><label><input id="dailyAutoWeather" type="checkbox" checked> T\u1ef1 l\u1ea5y theo v\u1ecb tr\u00ed \u0111i\u1ec7n tho\u1ea1i</label><button id="dailyWeatherRefresh" type="button">L\u1ea5y th\u1eddi ti\u1ebft ngay</button></div><div id="dailyWeatherStatus" class="weatherAutoStatus" role="status" aria-live="polite">Ch\u01b0a l\u1ea5y v\u1ecb tr\u00ed.</div><div class="dailyContextGrid"><label><span><input id="dailyWeatherEnabled" type="checkbox"> Hi\u1ec3n th\u1eddi ti\u1ebft</span></label><label>Th\u1eddi ti\u1ebft<select id="dailyWeatherCode"><option value="0">N\u1eafng</option><option value="1">Nhi\u1ec1u m\u00e2y</option><option value="2">M\u01b0a</option><option value="3">Gi\u00f4ng</option><option value="4">S\u01b0\u01a1ng m\u00f9</option><option value="5">Gi\u00f3</option><option value="6">N\u00f3ng</option></select></label><label>Nhi\u1ec7t \u0111\u1ed9 (C)<input id="dailyTemperature" type="number" min="-40" max="80" inputmode="numeric" placeholder="27"></label><label>Kh\u1ea3 n\u0103ng m\u01b0a (%)<input id="dailyPrecipitation" type="number" min="0" max="100" inputmode="numeric" placeholder="0"></label></div><input id="dailyAgendaTime0" type="hidden"><input id="dailyAgendaLabel0" type="hidden"><input id="dailyAgendaTime1" type="hidden"><input id="dailyAgendaLabel1" type="hidden"><p class="preferenceHint">M\u00e0n h\u00ecnh gi\u1eef nguy\u00ean l\u1ecbch th\u00e1ng v\u00e0 th\u00eam th\u1eddi ti\u1ebft b\u1eb1ng ti\u1ebfng Vi\u1ec7t. V\u1ecb tr\u00ed ch\u1ec9 d\u00f9ng \u0111\u1ec3 l\u1ea5y th\u1eddi ti\u1ebft, kh\u00f4ng l\u01b0u tr\u00ean web.</p><p class="preferenceHint">D\u1eef li\u1ec7u th\u1eddi ti\u1ebft: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>.</p><div id="dailyContextStatus" class="profileStatus" role="status" aria-live="polite">Ch\u01b0a g\u1eedi th\u1eddi ti\u1ebft h\u00f4m nay.</div>';
+  dailyContextPanel.innerHTML='<h3>Th\u1eddi ti\u1ebft t\u1ef1 \u0111\u1ed9ng v\u00e0 l\u1ecbch th\u00e1ng</h3><div class="row weatherAutoRow"><label><input id="dailyAutoWeather" type="checkbox"> T\u1ef1 c\u1eadp nh\u1eadt m\u1ed7i 30 ph\u00fat khi \u0111ang k\u1ebft n\u1ed1i</label><button id="dailyWeatherRefresh" type="button">L\u1ea5y th\u1eddi ti\u1ebft ngay</button></div><div id="dailyAutoWeatherStatus" class="weatherAutoStatus" role="status" aria-live="polite">T\u1ef1 \u0111\u1ed9ng \u0111ang t\u1eaft.</div><div id="dailyWeatherStatus" class="weatherAutoStatus" role="status" aria-live="polite">Ch\u01b0a l\u1ea5y v\u1ecb tr\u00ed.</div><div class="dailyContextGrid"><label><span><input id="dailyWeatherEnabled" type="checkbox"> Hi\u1ec3n th\u1eddi ti\u1ebft</span></label><label>Th\u1eddi ti\u1ebft<select id="dailyWeatherCode"><option value="0">N\u1eafng</option><option value="1">Nhi\u1ec1u m\u00e2y</option><option value="2">M\u01b0a</option><option value="3">Gi\u00f4ng</option><option value="4">S\u01b0\u01a1ng m\u00f9</option><option value="5">Gi\u00f3</option><option value="6">N\u00f3ng</option></select></label><label>Nhi\u1ec7t \u0111\u1ed9 (C)<input id="dailyTemperature" type="number" min="-40" max="80" inputmode="numeric" placeholder="27"></label><label>Kh\u1ea3 n\u0103ng m\u01b0a (%)<input id="dailyPrecipitation" type="number" min="0" max="100" inputmode="numeric" placeholder="0"></label></div><input id="dailyAgendaTime0" type="hidden"><input id="dailyAgendaLabel0" type="hidden"><input id="dailyAgendaTime1" type="hidden"><input id="dailyAgendaLabel1" type="hidden"><p class="preferenceHint">T\u1ef1 \u0111\u1ed9ng ch\u1ec9 ch\u1ea1y khi trang \u0111ang m\u1edf, BLE \u0111\u00e3 k\u1ebft n\u1ed1i v\u00e0 m\u1eb7t T\u00f3m t\u1eaft trong ng\u00e0y \u0111ang \u00e1p d\u1ee5ng. V\u1ecb tr\u00ed kh\u00f4ng \u0111\u01b0\u1ee3c l\u01b0u.</p><p class="preferenceHint">D\u1eef li\u1ec7u th\u1eddi ti\u1ebft: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>.</p><div id="dailyContextStatus" class="profileStatus" role="status" aria-live="polite">Ch\u01b0a g\u1eedi th\u1eddi ti\u1ebft h\u00f4m nay.</div>';
   presetCard.append(dailyContextPanel);
 
   const preferencePanel=document.createElement('div');
@@ -999,7 +1004,7 @@ function controls(){
   const connected=!!server?.connected;
   const e5Complete=e5Success && (browserCrc === latestFwCrc);
   const renderInProgress=productD2RenderState===0x01||productD2RenderState===0x02;
-  const locked=busy||e6Running||oneTapRunning||d2Running||batteryRunning||dailyWeatherRunning||renderInProgress;
+  const locked=busy||e6Running||oneTapRunning||d2Running||batteryRunning||dailyWeatherRunning||autoWeatherRunning||renderInProgress;
   const identityBlocked=connected&&identityCompatibility!=='compatible';
   $('connect').disabled=connected||locked;
   $('disconnect').disabled=!connected||locked;
@@ -1131,6 +1136,11 @@ function resetD2UiDisconnected(){
   persistedRefreshMinutes=0xFF;
   dailyContextState=0;
   dailyContextFlags=0;
+  lastDailyStatus=null;
+  clearAutomaticWeatherTimers();
+  setAutomaticWeatherStatus(
+    $('dailyAutoWeather').checked?'Đang chờ kết nối BLE.':'Tự động đang tắt.'
+  );
   $('dailyContextStatus').textContent='Ch\u01b0a \u0111\u1ecdc d\u1eef li\u1ec7u trong ng\u00e0y.';
   $('dailyContextStatus').className='profileStatus';
   setD2Status('DISCONNECTED','warn');
@@ -1398,6 +1408,217 @@ function setDailyWeatherStatus(text,kind=''){
   status.className=`weatherAutoStatus ${kind}`.trim();
 }
 
+function setAutomaticWeatherStatus(text,kind=''){
+  const status=$('dailyAutoWeatherStatus');
+  status.textContent=text;
+  status.className=`weatherAutoStatus ${kind}`.trim();
+}
+
+function clearAutomaticWeatherTimers(){
+  clearTimeout(autoWeatherTimer);
+  clearTimeout(autoWeatherRetryTimer);
+  autoWeatherTimer=0;
+  autoWeatherRetryTimer=0;
+}
+
+function millisecondsUntilLocalDayRollover(now=new Date()){
+  const next=new Date(now);
+  next.setHours(24,0,1,0);
+  return Math.max(1000,next.getTime()-now.getTime());
+}
+
+function automaticWeatherBlocked(){
+  const renderInProgress=productD2RenderState===0x01||productD2RenderState===0x02;
+  return busy||e6Running||oneTapRunning||d2Running||batteryRunning||
+    dailyWeatherRunning||autoWeatherRunning||renderInProgress||!!pending;
+}
+
+function automaticWeatherEligible(){
+  return $('dailyAutoWeather').checked&&
+    document.visibilityState==='visible'&&
+    !!server?.connected&&
+    identityCompatibility==='compatible'&&
+    productD2State!==null&&productD2State!==0&&
+    activeClockProfile===2;
+}
+
+function packetEquals(left,right){
+  return !!left&&!!right&&left.length===right.length&&
+    left.every((value,index)=>value===right[index]);
+}
+
+function dailyStatusMatchesPacket(status,packet){
+  if(!status||status.result!==0||status.state!==1)return false;
+  const flags=packet[3];
+  const weatherValid=(flags&0x01)!==0;
+  const agendaValid=(flags&0x02)!==0;
+  if(
+    status.dayKey!==u16(packet[4],packet[5])||
+    status.weatherValid!==weatherValid||
+    status.agendaValid!==agendaValid||
+    status.agendaCount!==packet[9]
+  )return false;
+  if(weatherValid&&(
+    status.weather!==packet[6]||
+    status.temperature!==(packet[7]&0x80?packet[7]-0x100:packet[7])||
+    status.precipitation!==packet[8]
+  ))return false;
+  const packetLabel=offset=>String.fromCharCode(
+    packet[offset],packet[offset+1],packet[offset+2]
+  ).trim();
+  for(let index=0;index<status.agendaCount;index++){
+    const minuteOffset=10+(index*5);
+    const labelOffset=12+(index*5);
+    if(
+      status.entries[index].minute!==u16(packet[minuteOffset],packet[minuteOffset+1])||
+      status.entries[index].label!==packetLabel(labelOffset)
+    )return false;
+  }
+  return true;
+}
+
+function rememberAutomaticWeatherSuccess(packet){
+  autoWeatherLastPacket=new Uint8Array(packet);
+  autoWeatherLastSuccessAt=Date.now();
+  autoWeatherLastDayKey=dailyDayKey(new Date());
+  autoWeatherRetryUsed=false;
+}
+
+function automaticWeatherNextDelay(){
+  const now=new Date();
+  const intervalDelay=autoWeatherLastSuccessAt
+    ?Math.max(0,AUTO_WEATHER_INTERVAL_MS-(now.getTime()-autoWeatherLastSuccessAt))
+    :0;
+  return Math.min(intervalDelay,millisecondsUntilLocalDayRollover(now));
+}
+
+function scheduleAutomaticWeatherCheck(reason,delay=null){
+  clearTimeout(autoWeatherTimer);
+  autoWeatherTimer=0;
+  if(!$('dailyAutoWeather').checked){
+    setAutomaticWeatherStatus('Tự động đang tắt.');
+    return;
+  }
+  if(document.visibilityState!=='visible'){
+    setAutomaticWeatherStatus('Tạm dừng khi trang không hiển thị.');
+    return;
+  }
+  if(!server?.connected){
+    setAutomaticWeatherStatus('Đang chờ kết nối BLE.');
+    return;
+  }
+  if(identityCompatibility!=='compatible'){
+    setAutomaticWeatherStatus('Đang chờ xác minh thiết bị.');
+    return;
+  }
+  if(productD2State===null||productD2State===0){
+    setAutomaticWeatherStatus('Cần đồng bộ giờ trước.');
+    return;
+  }
+  if(activeClockProfile!==2){
+    setAutomaticWeatherStatus('Cần áp dụng mặt Tóm tắt trong ngày.');
+    return;
+  }
+  const wait=delay===null?automaticWeatherNextDelay():Math.max(0,delay);
+  autoWeatherTimer=setTimeout(()=>{
+    autoWeatherTimer=0;
+    runAutomaticWeatherCycle(reason);
+  },wait);
+  const minutes=Math.max(0,Math.ceil(wait/60000));
+  setAutomaticWeatherStatus(
+    wait===0?'Sẵn sàng cập nhật thời tiết.':`Lần tự động kế tiếp trong khoảng ${minutes} phút.`,
+    wait===0?'':'ok'
+  );
+}
+
+function toggleAutomaticWeather(){
+  clearAutomaticWeatherTimers();
+  autoWeatherRetryUsed=false;
+  if($('dailyAutoWeather').checked){
+    setAutomaticWeatherStatus('Đã bật. Chỉ chạy khi trang mở và BLE kết nối.','ok');
+    scheduleAutomaticWeatherCheck('owner enabled',0);
+  }else{
+    setAutomaticWeatherStatus('Tự động đang tắt.');
+  }
+  controls();
+}
+
+async function runAutomaticWeatherCycle(reason='timer'){
+  if(!automaticWeatherEligible())return;
+  if(automaticWeatherBlocked()){
+    setAutomaticWeatherStatus('Đang chờ thao tác hiện tại hoàn tất.');
+    return;
+  }
+
+  autoWeatherRunning=true;
+  let weatherFetched=false;
+  let d2Started=false;
+  let terminalFailure=false;
+  clearTimeout(autoWeatherRetryTimer);
+  autoWeatherRetryTimer=0;
+  setAutomaticWeatherStatus('Đang tự động lấy thời tiết...');
+  controls();
+
+  try{
+    await refreshDailyWeatherFromPhone();
+    weatherFetched=true;
+    const packet=buildD2SetDailyPacket(new Date());
+    if(
+      dailyStatusMatchesPacket(lastDailyStatus,packet)||
+      (
+        dailyContextState===1&&
+        autoWeatherLastDayKey===dailyDayKey(new Date())&&
+        packetEquals(autoWeatherLastPacket,packet)
+      )
+    ){
+      rememberAutomaticWeatherSuccess(packet);
+      setAutomaticWeatherStatus('Thời tiết không đổi, không refresh màn.','ok');
+      log(`Auto weather skipped unchanged payload (${reason})`,'WEATHER');
+      return;
+    }
+
+    d2Running=true;
+    d2Started=true;
+    controls();
+    const status=await d2SetDailyContext(packet);
+    if(status.state!==1)throw Error('Dữ liệu thời tiết chưa ở trạng thái hôm nay.');
+    await d2RenderClockFromDevice();
+    rememberAutomaticWeatherSuccess(packet);
+    setAutomaticWeatherStatus('Đã tự cập nhật thời tiết lên màn.','ok');
+    log(`Auto weather applied and rendered (${reason})`,'WEATHER');
+  }catch(error){
+    if(
+      !weatherFetched&&
+      !autoWeatherRetryUsed&&
+      $('dailyAutoWeather').checked&&
+      document.visibilityState==='visible'&&
+      server?.connected
+    ){
+      autoWeatherRetryUsed=true;
+      setAutomaticWeatherStatus('Lấy thời tiết lỗi, sẽ thử lại một lần sau 60 giây.','bad');
+      autoWeatherRetryTimer=setTimeout(()=>{
+        autoWeatherRetryTimer=0;
+        runAutomaticWeatherCycle('retry');
+      },AUTO_WEATHER_RETRY_MS);
+    }else{
+      terminalFailure=true;
+      setAutomaticWeatherStatus(`Tự động dừng: ${error.message}`,'bad');
+    }
+    log(`Auto weather failed: ${error.message}`,'ERROR');
+  }finally{
+    if(d2Started)d2Running=false;
+    autoWeatherRunning=false;
+    controls();
+    if(terminalFailure){
+      scheduleAutomaticWeatherCheck('next window',AUTO_WEATHER_INTERVAL_MS);
+    }else if(
+      autoWeatherLastSuccessAt&&
+      $('dailyAutoWeather').checked&&
+      !autoWeatherRetryTimer
+    )scheduleAutomaticWeatherCheck('next interval');
+  }
+}
+
 async function refreshDailyWeatherFromPhone(){
   if(dailyWeatherRunning){
     throw Error('Th\u1eddi ti\u1ebft \u0111ang \u0111\u01b0\u1ee3c c\u1eadp nh\u1eadt.');
@@ -1480,7 +1701,11 @@ async function refreshDailyWeatherFromPhone(){
 }
 async function runDailyWeatherRefresh(){
   try{
-    await refreshDailyWeatherFromPhone();
+    if($('dailyAutoWeather').checked&&automaticWeatherEligible()){
+      await runAutomaticWeatherCycle('owner fetch');
+    }else{
+      await refreshDailyWeatherFromPhone();
+    }
   }catch(error){
     log(`Weather update failed: ${error.message}`,'ERROR');
   }
@@ -1667,6 +1892,7 @@ function parseD2DailyStatus(bytes){
 }
 
 function renderD2DailyStatus(status){
+  lastDailyStatus=status;
   dailyContextState=status.state;
   dailyContextFlags=(status.weatherValid?1:0)|(status.agendaValid?2:0);
   const stateName=['Ch\u01b0a c\u00f3','H\u00f4m nay','\u0110\u00e3 h\u1ebft h\u1ea1n'][status.state]||`State ${status.state}`;
@@ -1799,7 +2025,10 @@ function handleD2Notify(bytes){
         markProductError(`D2 render ${d2ResultName(status.result)} / ${d2RenderStateName(status.state)}`);
       }
       log(`D2 render result=${d2ResultName(status.result)} state=${d2RenderStateName(status.state)}`,'D2');
-      if(complete)scheduleIdentityHealthRefresh('render complete');
+      if(complete){
+        scheduleIdentityHealthRefresh('render complete');
+        if(!autoWeatherRunning)scheduleAutomaticWeatherCheck('render complete');
+      }
     }else if(bytes[1]===0x83){
       const identity=parseD2Identity(bytes);
       renderD2Identity(identity);
@@ -1847,6 +2076,11 @@ async function connect(){
     e6Running=false;
     $('ble').textContent='Disconnected';
     stopAutoSync('Auto sync đang tắt');
+    clearAutomaticWeatherTimers();
+    autoWeatherRetryUsed=false;
+    setAutomaticWeatherStatus(
+      $('dailyAutoWeather').checked?'Đang chờ kết nối BLE.':'Tự động đang tắt.'
+    );
     resetD2UiDisconnected();
     log('Disconnected');
   });
@@ -1877,6 +2111,7 @@ async function connect(){
   }catch(error){
     log(`Clock profile unavailable: ${error.message}`,'D2');
   }
+  scheduleAutomaticWeatherCheck('connect');
 }
 
 async function openE4(){
@@ -1905,6 +2140,11 @@ async function runD2Flow(action){
   }finally{
     d2Running=false;
     controls();
+    if(
+      $('dailyAutoWeather').checked&&
+      !autoWeatherTimer&&!autoWeatherRetryTimer&&
+      !autoWeatherRunning
+    )scheduleAutomaticWeatherCheck('BLE flow complete');
   }
 }
 
@@ -1917,7 +2157,10 @@ async function d2SetCurrentTime(options={}){
   );
   const status=parseD2Status(response);
   renderD2Status(status,options);
-  if(status.result===0x00)scheduleIdentityHealthRefresh('time sync');
+  if(status.result===0x00){
+    scheduleIdentityHealthRefresh('time sync');
+    scheduleAutomaticWeatherCheck('time sync',0);
+  }
   return status;
 }
 
@@ -1962,9 +2205,12 @@ async function d2GetClockProfile(){
 }
 
 async function d2ApplyClockProfile(){
+  let dailyPacket=null;
   if(selectedClockProfile===2){
     if($('dailyAutoWeather').checked)await refreshDailyWeatherFromPhone();
-    await d2SetDailyContext();
+    dailyPacket=buildD2SetDailyPacket(new Date());
+    const dailyStatus=await d2SetDailyContext(dailyPacket);
+    if(dailyStatus.state!==1)throw Error('Dữ liệu thời tiết chưa ở trạng thái hôm nay.');
   }
   let status=parseD2ProfileStatus(await request(
     buildD2SetProfilePacket(selectedClockProfile),
@@ -1988,6 +2234,10 @@ async function d2ApplyClockProfile(){
   renderD2ProfileStatus(status);
   if(status.result!==0x00)throw Error(`D2 profile rejected: ${d2ResultName(status.result)}`);
   await d2RenderClockFromDevice();
+  if(dailyPacket&&$('dailyAutoWeather').checked){
+    rememberAutomaticWeatherSuccess(dailyPacket);
+    scheduleAutomaticWeatherCheck('profile apply');
+  }
   $('profileStatus').textContent=`Đã áp dụng: ${clockProfileName(activeClockProfile)}`;
 }
 
@@ -2039,8 +2289,7 @@ async function d2GetDailyContext(){
   return status;
 }
 
-async function d2SetDailyContext(){
-  const packet=buildD2SetDailyPacket(new Date());
+async function d2SetDailyContext(packet=buildD2SetDailyPacket(new Date())){
   let status=parseD2DailyStatus(await request(
     packet,
     a=>a[0]===0xD2&&a[1]===0x88,
@@ -2422,6 +2671,10 @@ async function safe(fn){
     alert(error.message);
   }finally{
     setBusy(false);
+    if(
+      $('dailyAutoWeather').checked&&
+      !autoWeatherTimer&&!autoWeatherRetryTimer
+    )scheduleAutomaticWeatherCheck('operation complete');
   }
 }
 
@@ -2434,9 +2687,7 @@ $('updateClock').onclick=()=>selectClockProfile(1);
 $('dailyCalendar').onclick=()=>selectClockProfile(0);
 $('dailyBriefing').onclick=()=>selectClockProfile(2);
 $('dailyWeatherRefresh').onclick=runDailyWeatherRefresh;
-$('dailyAutoWeather').onchange=()=>setDailyWeatherStatus(
-  $('dailyAutoWeather').checked?'S\u1ebd t\u1ef1 l\u1ea5y khi \u00e1p d\u1ee5ng.':'Ch\u1ebf \u0111\u1ed9 nh\u1eadp th\u1eddi ti\u1ebft th\u1ee7 c\u00f4ng.'
-);
+$('dailyAutoWeather').onchange=toggleAutomaticWeather;
 for(const input of document.querySelectorAll('#dailyContextPanel input,#dailyContextPanel select')){
   input.addEventListener('input',()=>{if(selectedClockProfile===2)drawDailyBriefingPreview()});
 }
@@ -2470,7 +2721,18 @@ resetD2UiDisconnected();
 controls();
 markLayoutHealth();
 window.addEventListener('resize',markLayoutHealth);
-log('TASK D13D s\u1eb5n s\u00e0ng. L\u1ecbch th\u00e1ng v\u00e0 th\u1eddi ti\u1ebft ti\u1ebfng Vi\u1ec7t.');
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState!=='visible'){
+    clearAutomaticWeatherTimers();
+    if($('dailyAutoWeather').checked){
+      setAutomaticWeatherStatus('Tạm dừng khi trang không hiển thị.');
+    }
+  }else{
+    autoWeatherRetryUsed=false;
+    scheduleAutomaticWeatherCheck('page visible');
+  }
+});
+log('TASK D14B s\u1eb5n s\u00e0ng. T\u1ef1 \u0111\u1ed9ng th\u1eddi ti\u1ebft m\u1ed7i 30 ph\u00fat khi \u0111ang k\u1ebft n\u1ed1i.');
 </script>
 </body>
 </html>
