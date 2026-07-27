@@ -121,6 +121,12 @@ events.
   while the page is hidden.
 - After the owner has applied the daily briefing once, changed upcoming rows may
   reuse the existing guarded D15D device-update path.
+- D15H shows the automatic-refresh state directly below the Google Calendar
+  connection status.
+- The status reports the last successful fetch time, the 15-minute cadence, and
+  whether refresh is paused while the page is hidden.
+- The status is informational only; it never starts OAuth, BLE, or a panel
+  refresh by itself.
 
 ## Validation
 
@@ -142,6 +148,10 @@ D15F agenda restoration is validated by:
 D15G automatic refresh is validated by:
 
 `node scripts/task-d15g-auto-refresh-google-agenda-smoke.mjs`
+
+D15H visible refresh status is validated by:
+
+`node scripts/task-d15h-agenda-refresh-status-smoke.mjs`
 
 Official references:
 
