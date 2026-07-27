@@ -12,6 +12,23 @@ E1A automatic foundation is merged into `main`.
   - `docs/agent/AUTOMATION_MODE.md`
 - Canonical web URL: `https://onlysky17.github.io/Clock/test.html`
 
+Current final firmware milestone:
+
+- `TASK D13D` Vietnamese weather calendar is CLOSED / MERGED / SPI PHYSICAL PASS.
+- Feature commit: `3d8ad577a8d359dfc7dba7c2fbbb26212b52ff70`.
+- PR #81 merge commit: `caf39289afa7bfb3c1ca3436bcc7a2dcb5390dc7`.
+- SPI Burn PASS, SPI Verify PASS, and cold boot PASS.
+- PRIME recovery is approximately one second.
+- Weather row is shifted right to x=6 and its first character is not clipped.
+- Confirmed flow: `Lấy thời tiết ngay` -> `Áp dụng lên màn`.
+- `Đồng bộ giờ` alone does not display the weather row; this is the confirmed current behavior.
+- Rain threshold is `>= 0.20 mm`; `0.10 mm` maps to `MÂY`.
+- Final package: `D:\EINK\Clock\_incoming\D13D_FIX1_FINAL_SPI_20260723_160645`.
+- Packed file: `firmware\D13D_FIX1_FINAL_PACKED_256KB.bin`.
+- Packed size: `262144` bytes.
+- Packed SHA256: `4C926E52B38D594BDC7E45CE30EEC51CD09D418E572987AC0B871E36E1065FF9`.
+- No BIN is committed.
+
 Current persistent firmware milestone:
 
 - `TASK D12C` clock display preferences SPI final is CLOSED / MERGED / SPI PHYSICAL PASS.
@@ -113,10 +130,9 @@ Product and web milestones:
 
 Next canonical action:
 
-- `TASK D12A - Clock preference policy design` is complete on its task branch.
-- Policy defines 24-hour default, optional 12-hour display, and 1/5/10-minute cadence with five minutes recommended.
-- D2 `06/07/86` and persistence bytes `17..18` are reserved for implementation; D11C runtime is unchanged.
-- Next implementation gate: `TASK D12B - IMPLEMENT CLOCK PREFERENCES`.
+- `TASK D14A - AUTOMATIC WEATHER REFRESH POLICY DESIGN`.
+- Define a bounded connected-web policy for refreshing phone weather and sending D2 daily data.
+- D14A is design-only and must not change firmware, BLE protocol, or panel refresh behavior.
 
 ## Historical Project State
 
