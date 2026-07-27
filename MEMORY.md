@@ -11,6 +11,17 @@
   - `docs/agent/AUTOMATION_MODE.md`
 - Canonical web URL: `https://onlysky17.github.io/Clock/test.html`
 
+D15 Google agenda milestone:
+- `TASK D15A` through `TASK D15H` are CLOSED / MERGED / OWNER PASS.
+- D15A policy merge: `b371021`; D15B import merge: `57abfcd`; D15C device render merge: `91e86be`.
+- D15D current-event filter merge: `7c15f99`; D15E tab access merge: `1b0a154`; D15F reload restore merge: `d1b748a`.
+- D15G visible-page automatic refresh merge: `a23ed7c`; D15H visible refresh-status merge: `78c4401`.
+- Google Calendar access is read-only and owner-authorized. The web selects at most two upcoming timed events and removes events that have ended.
+- Agenda access and rows are restored within the current browser tab, then refreshed at most every 15 minutes while the page is visible.
+- Product Mode shows the last successful agenda fetch and whether automatic refresh is active or paused.
+- Owner confirmed weather and Google agenda can display together on the physical panel.
+- Firmware, BLE protocol, canonical `test.html`, and SPI package were not changed by D15D through D15H.
+
 D14B current web automation milestone:
 - `TASK D14B` connected automatic weather refresh is CLOSED / MERGED / OWNER PASS.
 - Feature commit: `aa26b3cd92055bbca22b859244122a8e37b5c942`.
@@ -53,7 +64,7 @@ D12C current persistent firmware milestone:
 - Keil `0 errors`, `0 warnings`; legacy font symbols absent.
 - SmartSnippets Burn/Verify, cold boot, preference restore, immediate render, scheduler, and BLE reconnect: PASS.
 - D12C supersedes D11C as the latest known-good persistent SPI baseline.
-- Next action: `TASK D15A - PHONE CALENDAR AGENDA INPUT POLICY DESIGN`.
+- Next action: `TASK D16A - NEXT-DAY AGENDA AUTONOMY POLICY DESIGN`.
 
 Firmware milestone cuối đã đóng:
 - `TASK D11C` clock profiles persistent SPI final is CLOSED / MERGED / PHYSICAL PASS.
