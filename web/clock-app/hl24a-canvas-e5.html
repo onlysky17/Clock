@@ -181,18 +181,19 @@ const AUTO_WEATHER_INTERVAL_MS=30*60*1000;
 const AUTO_WEATHER_RETRY_MS=60*1000;
 const GOOGLE_AGENDA_CURRENT_INTERVAL_MS=30*1000;
 const GOOGLE_CALENDAR_SCOPE='https://www.googleapis.com/auth/calendar.readonly';
+const GOOGLE_CALENDAR_SESSION_KEY='eink.google-calendar.token.v1';
 const GOOGLE_CALENDAR_CLIENT_ID=(
   window.EINK_GOOGLE_CALENDAR_CLIENT_ID||
   document.querySelector('meta[name="google-calendar-client-id"]')?.content||
   ''
 ).trim();
 const EINK_TEST_IDENTITY={
-  webBuild:'D15D-CURRENT-AGENDA-20260727',
+  webBuild:'D15E-GOOGLE-SESSION-20260727',
   expectedFirmware:'D8A00001',
   expectedRuntime:'D8A1',
   expectedSourceId:'D8A00001',
   expectedBin:'BUILD-SPECIFIC',
-  label:'D15D LỊCH GOOGLE THEO GIỜ'
+  label:'D15E PHIÊN LỊCH GOOGLE'
 };
 window.EINK_TEST_IDENTITY=EINK_TEST_IDENTITY;
 
@@ -225,6 +226,7 @@ let autoWeatherTimer=0,autoWeatherRetryTimer=0,autoWeatherRunning=false;
 let autoWeatherRetryUsed=false,autoWeatherLastSuccessAt=0,autoWeatherLastDayKey=-1;
 let autoWeatherLastPacket=null,lastDailyStatus=null;
 let googleCalendarToken='',googleCalendarTokenClient=null,googleCalendarRunning=false;
+let googleCalendarTokenExpiresAt=0;
 let googleCalendarItems=[],googleCalendarLoaded=false,googleAgendaTimer=0;
 let googleAgendaUiSignature='',googleAgendaDeviceSignature='',googleAgendaAutoArmed=false;
 
@@ -1752,6 +1754,52 @@ function googleCalendarConfigured(){
   return GOOGLE_CALENDAR_CLIENT_ID.endsWith('.apps.googleusercontent.com');
 }
 
+function clearGoogleCalendarSession(){
+  googleCalendarToken='';
+  googleCalendarTokenExpiresAt=0;
+  try{
+    sessionStorage.removeItem(GOOGLE_CALENDAR_SESSION_KEY);
+  }catch{}
+}
+
+function saveGoogleCalendarSession(token,expiresInSeconds){
+  const lifetime=Math.max(0,Number(expiresInSeconds)||0)*1000;
+  googleCalendarToken=String(token||'');
+  googleCalendarTokenExpiresAt=Date.now()+Math.max(0,lifetime-60000);
+  if(!googleCalendarToken||googleCalendarTokenExpiresAt<=Date.now()){
+    clearGoogleCalendarSession();
+    return false;
+  }
+  try{
+    sessionStorage.setItem(GOOGLE_CALENDAR_SESSION_KEY,JSON.stringify({
+      token:googleCalendarToken,
+      expiresAt:googleCalendarTokenExpiresAt
+    }));
+  }catch{}
+  return true;
+}
+
+function restoreGoogleCalendarSession(){
+  try{
+    const saved=JSON.parse(sessionStorage.getItem(GOOGLE_CALENDAR_SESSION_KEY)||'null');
+    if(
+      typeof saved?.token!=='string'||
+      !saved.token||
+      !Number.isFinite(saved.expiresAt)||
+      saved.expiresAt<=Date.now()
+    ){
+      clearGoogleCalendarSession();
+      return false;
+    }
+    googleCalendarToken=saved.token;
+    googleCalendarTokenExpiresAt=saved.expiresAt;
+    return true;
+  }catch{
+    clearGoogleCalendarSession();
+    return false;
+  }
+}
+
 function setGoogleCalendarStatus(text,kind=''){
   const status=$('googleCalendarStatus');
   status.textContent=text;
@@ -1918,7 +1966,7 @@ async function requestGoogleCalendarToken(){
         return;
       }
       googleCalendarToken=response?.access_token||'';
-      if(!googleCalendarToken){
+      if(!saveGoogleCalendarSession(googleCalendarToken,response.expires_in)){
         reject(Error('Google kh\u00f4ng tr\u1ea3 v\u1ec1 quy\u1ec1n \u0111\u1ecdc l\u1ecbch.'));
         return;
       }
@@ -1967,7 +2015,7 @@ async function fetchGoogleCalendarToday(){
       `https://www.googleapis.com/calendar/v3/calendars/primary/events?${params}`,
       {headers:{Authorization:`Bearer ${googleCalendarToken}`}}
     );
-    if(response.status===401)googleCalendarToken='';
+    if(response.status===401)clearGoogleCalendarSession();
     if(!response.ok){
       const detail=await response.json().catch(()=>null);
       throw Error(detail?.error?.message||`Google Calendar l\u1ed7i ${response.status}.`);
@@ -1998,7 +2046,7 @@ async function fetchGoogleCalendarToday(){
 
 async function disconnectGoogleCalendar(){
   const accessToken=googleCalendarToken;
-  googleCalendarToken='';
+  clearGoogleCalendarSession();
   googleCalendarTokenClient=null;
   googleCalendarItems=[];
   googleCalendarLoaded=false;
@@ -3041,6 +3089,8 @@ drawDailyCalendar();
 resetD2UiDisconnected();
 if(!googleCalendarConfigured()){
   setGoogleCalendarStatus('Google Calendar ch\u01b0a c\u00f3 m\u00e3 k\u1ebft n\u1ed1i cho trang n\u00e0y.','bad');
+}else if(restoreGoogleCalendarSession()){
+  setGoogleCalendarStatus('\u0110\u00e3 kh\u00f4i ph\u1ee5c quy\u1ec1n l\u1ecbch trong tab n\u00e0y.','ok');
 }
 controls();
 markLayoutHealth();
@@ -3056,7 +3106,7 @@ document.addEventListener('visibilitychange',()=>{
     scheduleAutomaticWeatherCheck('page visible');
   }
 });
-log('TASK D15B s\u1eb5n s\u00e0ng. Google Calendar ch\u1ec9 \u0111\u1ecdc v\u00e0 ch\u1ec9 gi\u1eef d\u1eef li\u1ec7u trong tab.');
+log('TASK D15E s\u1eb5n s\u00e0ng. Quy\u1ec1n l\u1ecbch ng\u1eafn h\u1ea1n \u0111\u01b0\u1ee3c gi\u1eef trong c\u00f9ng tab.');
 </script>
 </body>
 </html>

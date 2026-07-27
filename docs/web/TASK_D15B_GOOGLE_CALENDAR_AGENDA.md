@@ -68,10 +68,13 @@ The D2 daily packet remains unchanged:
 ## Privacy And Lifetime
 
 - OAuth is an explicit owner action.
-- Access token and event data stay in page-session RAM.
-- No `localStorage`, session storage, IndexedDB, cookie, SPI, or NVDS storage.
-- Reloading or closing the tab clears the token and events.
-- `Ngắt quyền lịch` revokes the current access token.
+- The short-lived access token is kept in `sessionStorage`, never
+  `localStorage`, so a reload in the same tab can reuse it until Google expiry.
+- Closing the tab, `Ngắt quyền lịch`, malformed/expired session data, or an HTTP
+  401 response clears the saved token.
+- Calendar events and titles remain RAM-only and are fetched again after reload.
+- No event data is stored in browser storage, SPI, or NVDS.
+- `Ngắt quyền lịch` clears the tab session and revokes the current access token.
 - Only two reviewed bounded agenda rows are sent to the device.
 - The D15C follow-up restores device rendering for the agenda bytes already
   carried by this unchanged D2 packet.
@@ -101,6 +104,14 @@ events.
 - Google Calendar is not queried every 30 seconds. The timer filters only the
   page-session data already fetched by the owner.
 
+## Same-tab access recovery
+
+- D15E restores a valid short-lived Google access token after reload in the
+  same open tab.
+- The expiry supplied by Google is preserved with a one-minute safety margin.
+- This reduces repeated sign-in prompts but does not bypass Google's OAuth
+  consent, test-user, or application-verification rules.
+
 ## Validation
 
 `node scripts/task-d15b-google-calendar-agenda-smoke.mjs`
@@ -109,6 +120,10 @@ The smoke uses a browser-side mock for Google OAuth and Calendar REST. It
 checks desktop/mobile layout, two-row selection, Vietnamese normalization,
 all-day exclusion, page-session-only state, and unchanged D2 packet IDs and
 lengths.
+
+D15E session recovery is validated by:
+
+`node scripts/task-d15e-google-session-access-smoke.mjs`
 
 Official references:
 
