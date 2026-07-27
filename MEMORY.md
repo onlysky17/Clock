@@ -11,6 +11,22 @@
   - `docs/agent/AUTOMATION_MODE.md`
 - Canonical web URL: `https://onlysky17.github.io/Clock/test.html`
 
+D13D current persistent firmware milestone:
+- `TASK D13D` Vietnamese weather calendar is CLOSED / MERGED / SPI PHYSICAL PASS.
+- Feature commit: `3d8ad577a8d359dfc7dba7c2fbbb26212b52ff70`.
+- PR #81 merge commit: `caf39289afa7bfb3c1ca3436bcc7a2dcb5390dc7`.
+- SPI Burn PASS, SPI Verify PASS, and cold boot PASS.
+- PRIME recovery is approximately one second.
+- Weather row starts at x=6, so the first character is no longer clipped.
+- Confirmed Owner flow: `Lấy thời tiết ngay` -> `Áp dụng lên màn`.
+- `Đồng bộ giờ` alone does not display the weather row; this is the confirmed current behavior.
+- Rain threshold is `>= 0.20 mm`; `0.10 mm` maps to `MÂY`.
+- Final package: `D:\EINK\Clock\_incoming\D13D_FIX1_FINAL_SPI_20260723_160645`.
+- Packed file: `firmware\D13D_FIX1_FINAL_PACKED_256KB.bin`.
+- Packed size: `262144` bytes.
+- Packed SHA256: `4C926E52B38D594BDC7E45CE30EEC51CD09D418E572987AC0B871E36E1065FF9`.
+- No BIN from the package is tracked by Git.
+
 D12C current persistent firmware milestone:
 - `TASK D12C` clock display preferences SPI final is CLOSED / MERGED / SPI PHYSICAL PASS.
 - Implementation commit: `6a69ee2b24a8c0f77d59e490a19db5dbef49d4e2`.
@@ -27,7 +43,7 @@ D12C current persistent firmware milestone:
 - Keil `0 errors`, `0 warnings`; legacy font symbols absent.
 - SmartSnippets Burn/Verify, cold boot, preference restore, immediate render, scheduler, and BLE reconnect: PASS.
 - D12C supersedes D11C as the latest known-good persistent SPI baseline.
-- Next action: `TASK D13A - WEATHER AND DAILY AGENDA PROTOCOL DESIGN`.
+- Next action: `TASK D14A - AUTOMATIC WEATHER REFRESH POLICY DESIGN`.
 
 Firmware milestone cuối đã đóng:
 - `TASK D11C` clock profiles persistent SPI final is CLOSED / MERGED / PHYSICAL PASS.
@@ -110,9 +126,9 @@ Product and web milestones:
 - Separate finding: Web Product Mode can show `Có lỗi` even when the D2 log reports OK/SYNCED/COMPLETE; this did not block D6C firmware merge or physical PASS.
 
 Next canonical action:
-- `TASK D12A - Clock preference policy design`.
-- Design 12/24-hour mode and selectable autonomous refresh cadence before implementation.
-- Preserve D11C as the rollback baseline while D12A is design-only.
+- `TASK D14A - AUTOMATIC WEATHER REFRESH POLICY DESIGN`.
+- Define when the connected web app refreshes phone weather and sends D2 daily data.
+- Keep D14A design-only; do not change firmware, BLE protocol, or panel refresh behavior yet.
 
 ## Historical Milestones
 

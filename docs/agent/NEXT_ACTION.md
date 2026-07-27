@@ -55,23 +55,28 @@ Web/layout milestone cuoi da dong:
 
 ## Current Finding
 
-- D12C package is merged at main commit `1107f80f822dac7fdcac73383443463997d3a625`.
-- Owner SPI Burn/Verify, cold boot, 24/12-hour modes, both profiles, AM/PM, 1/5/10-minute cadence, preference restore, scheduler, and reconnect are PASS.
-- Final packed SHA256: `9519751A5875F58DE16EC0F0273AABB1F1F6C50A6941E65017DDCAE587412251`.
-- D12C is the current known-good persistent SPI baseline.
+- D13D is CLOSED / MERGED / SPI PHYSICAL PASS.
+- PR #81 merge commit: `caf39289afa7bfb3c1ca3436bcc7a2dcb5390dc7`.
+- SPI Burn/Verify, cold boot, approximately one-second PRIME recovery, and x=6 weather-row alignment are PASS.
+- Confirmed flow: `Lấy thời tiết ngay` -> `Áp dụng lên màn`.
+- `Đồng bộ giờ` alone does not display weather.
+- Rain threshold is `>= 0.20 mm`; `0.10 mm` maps to `MÂY`.
+- Final package: `D:\EINK\Clock\_incoming\D13D_FIX1_FINAL_SPI_20260723_160645`.
+- Packed file: `firmware\D13D_FIX1_FINAL_PACKED_256KB.bin`.
+- Packed size: `262144` bytes.
+- Packed SHA256: `4C926E52B38D594BDC7E45CE30EEC51CD09D418E572987AC0B871E36E1065FF9`.
 
 ## Next Canonical Action
 
-`TASK D13A - WEATHER AND DAILY AGENDA PROTOCOL DESIGN`
+`TASK D14A - AUTOMATIC WEATHER REFRESH POLICY DESIGN`
 
-- Design a bounded web-to-device payload for daily weather summary and agenda entries.
-- Define exact field sizes, character policy, freshness/expiry, persistence, malformed-input behavior, and reconnect behavior.
-- Keep D13A design-only: no firmware/web implementation, no new font, no framebuffer, and no EPD change.
-- Audit opcode space, SPI journal capacity, firmware size budget, and layout space before D13B implementation.
+- Decide when the connected web app should fetch fresh phone weather and send the existing D2 daily payload.
+- Define permission, freshness, reconnect, retry, battery, and duplicate-refresh rules.
+- Keep D14A design-only: no firmware, web runtime, BLE protocol, EPD, build, or flash changes.
 
 ## Guardrails For The Next Task
 
-1. Start from `main` after D12C closeout and preserve D12C as the rollback baseline.
+1. Start from clean `main` after D13D closeout and preserve D13D as the rollback baseline.
 2. Preserve the final geometry contract: logical `250 x 122`, controller RAM `122 x 250`, stride `16`, payload `4000` bytes.
 3. Keep the canonical web URL as `https://onlysky17.github.io/Clock/test.html`.
 4. Do not use the old `104 x 212` golden geometry for this physical panel.
