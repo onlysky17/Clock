@@ -115,6 +115,12 @@ events.
 - The restored agenda only repopulates the review controls. It never sends BLE
   data or refreshes the panel until the owner presses `Áp dụng lên màn`.
 - Event titles remain RAM-only and are fetched again from Google after reload.
+- D15G refreshes Google Calendar at most once every 15 minutes while the page is
+  visible and the short-lived token remains valid.
+- Background refresh never opens OAuth, never auto-connects BLE, and pauses
+  while the page is hidden.
+- After the owner has applied the daily briefing once, changed upcoming rows may
+  reuse the existing guarded D15D device-update path.
 
 ## Validation
 
@@ -132,6 +138,10 @@ D15E session recovery is validated by:
 D15F agenda restoration is validated by:
 
 `node scripts/task-d15f-restore-google-agenda-smoke.mjs`
+
+D15G automatic refresh is validated by:
+
+`node scripts/task-d15g-auto-refresh-google-agenda-smoke.mjs`
 
 Official references:
 

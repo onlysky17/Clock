@@ -180,6 +180,7 @@ const D2_STALE_WARNING='Thiết bị đang giữ giờ cũ. Hãy đồng bộ gi
 const AUTO_WEATHER_INTERVAL_MS=30*60*1000;
 const AUTO_WEATHER_RETRY_MS=60*1000;
 const GOOGLE_AGENDA_CURRENT_INTERVAL_MS=30*1000;
+const GOOGLE_CALENDAR_REFRESH_INTERVAL_MS=15*60*1000;
 const GOOGLE_CALENDAR_SCOPE='https://www.googleapis.com/auth/calendar.readonly';
 const GOOGLE_CALENDAR_SESSION_KEY='eink.google-calendar.token.v1';
 const GOOGLE_CALENDAR_CLIENT_ID=(
@@ -188,12 +189,12 @@ const GOOGLE_CALENDAR_CLIENT_ID=(
   ''
 ).trim();
 const EINK_TEST_IDENTITY={
-  webBuild:'D15F-RESTORE-AGENDA-20260727',
+  webBuild:'D15G-AUTO-AGENDA-20260727',
   expectedFirmware:'D8A00001',
   expectedRuntime:'D8A1',
   expectedSourceId:'D8A00001',
   expectedBin:'BUILD-SPECIFIC',
-  label:'D15F KHÔI PHỤC LỊCH GOOGLE'
+  label:'D15G TỰ LÀM MỚI LỊCH GOOGLE'
 };
 window.EINK_TEST_IDENTITY=EINK_TEST_IDENTITY;
 
@@ -227,6 +228,7 @@ let autoWeatherRetryUsed=false,autoWeatherLastSuccessAt=0,autoWeatherLastDayKey=
 let autoWeatherLastPacket=null,lastDailyStatus=null;
 let googleCalendarToken='',googleCalendarTokenClient=null,googleCalendarRunning=false;
 let googleCalendarTokenExpiresAt=0;
+let googleCalendarLastFetchAt=0;
 let googleCalendarItems=[],googleCalendarLoaded=false,googleAgendaTimer=0;
 let googleAgendaUiSignature='',googleAgendaDeviceSignature='',googleAgendaAutoArmed=false;
 
@@ -1891,6 +1893,14 @@ function scheduleGoogleAgendaClock(){
 
 async function refreshGoogleAgendaForCurrentTime(){
   if(!googleCalendarLoaded||googleCalendarRunning)return;
+  if(
+    googleCalendarToken&&
+    document.visibilityState==='visible'&&
+    Date.now()-googleCalendarLastFetchAt>=GOOGLE_CALENDAR_REFRESH_INTERVAL_MS
+  ){
+    await fetchGoogleCalendarToday({background:true});
+    return;
+  }
   const events=selectGoogleAgendaEvents(googleCalendarItems,new Date());
   const signature=googleAgendaSignature(events);
   if(signature!==googleAgendaUiSignature){
@@ -1996,13 +2006,18 @@ async function connectGoogleCalendar(){
   }
 }
 
-async function fetchGoogleCalendarToday(){
+async function fetchGoogleCalendarToday({background=false}={}){
   if(googleCalendarRunning)return;
+  if(background&&(!googleCalendarToken||document.visibilityState!=='visible'))return;
   googleCalendarRunning=true;
   setGoogleCalendarStatus('\u0110ang \u0111\u1ecdc l\u1ecbch h\u00f4m nay...');
   controls();
   try{
-    if(!googleCalendarToken)await requestGoogleCalendarToken();
+    if(!googleCalendarToken){
+      if(background)return;
+      await requestGoogleCalendarToken();
+    }
+    const keepAutoArmed=googleAgendaAutoArmed;
     const{start,end}=googleCalendarDayBounds(new Date());
     const params=new URLSearchParams({
       timeMin:start.toISOString(),
@@ -2023,7 +2038,8 @@ async function fetchGoogleCalendarToday(){
     const data=await response.json();
     googleCalendarItems=Array.isArray(data.items)?data.items:[];
     googleCalendarLoaded=true;
-    googleAgendaAutoArmed=false;
+    googleAgendaAutoArmed=background?keepAutoArmed:false;
+    googleCalendarLastFetchAt=Date.now();
     const events=selectGoogleAgendaEvents(googleCalendarItems,new Date());
     applyGoogleAgendaEvents(events);
     googleAgendaUiSignature=googleAgendaSignature(events);
@@ -2035,6 +2051,9 @@ async function fetchGoogleCalendarToday(){
       'ok'
     );
     log(`Google Calendar loaded ${events.length} bounded agenda row(s).`,'CALENDAR');
+    if(background&&googleAgendaAutoArmed){
+      setTimeout(refreshGoogleAgendaForCurrentTime,0);
+    }
   }catch(error){
     setGoogleCalendarStatus(`Kh\u00f4ng l\u1ea5y \u0111\u01b0\u1ee3c l\u1ecbch: ${error.message}`,'bad');
     log(`Google Calendar fetch failed: ${error.message}`,'ERROR');
@@ -2050,6 +2069,7 @@ async function disconnectGoogleCalendar(){
   googleCalendarTokenClient=null;
   googleCalendarItems=[];
   googleCalendarLoaded=false;
+  googleCalendarLastFetchAt=0;
   googleAgendaAutoArmed=false;
   googleAgendaUiSignature='';
   googleAgendaDeviceSignature='';
@@ -3091,7 +3111,7 @@ if(!googleCalendarConfigured()){
   setGoogleCalendarStatus('Google Calendar ch\u01b0a c\u00f3 m\u00e3 k\u1ebft n\u1ed1i cho trang n\u00e0y.','bad');
 }else if(restoreGoogleCalendarSession()){
   setGoogleCalendarStatus('\u0110ang kh\u00f4i ph\u1ee5c l\u1ecbch h\u00f4m nay trong tab n\u00e0y.','ok');
-  setTimeout(fetchGoogleCalendarToday,0);
+  setTimeout(()=>fetchGoogleCalendarToday({background:true}),0);
 }
 controls();
 markLayoutHealth();
@@ -3107,7 +3127,7 @@ document.addEventListener('visibilitychange',()=>{
     scheduleAutomaticWeatherCheck('page visible');
   }
 });
-log('TASK D15F s\u1eb5n s\u00e0ng. T\u1ea3i l\u1ea1i c\u00f9ng tab s\u1ebd t\u1ef1 l\u1ea5y l\u1ecbch h\u00f4m nay.');
+log('TASK D15G s\u1eb5n s\u00e0ng. L\u1ecbch Google t\u1ef1 l\u00e0m m\u1edbi m\u1ed7i 15 ph\u00fat khi trang hi\u1ec3n th\u1ecb.');
 </script>
 </body>
 </html>
