@@ -219,7 +219,7 @@ static uint8_t hink_epd_busy_seen;
 static uint8_t hink_epd_busy_start_polls;
 static uint8_t hink_epd_first_refresh_pending = 1U;
 #define HINK_EPD_BUSY_START_POLL_LIMIT 50U
-#define HINK_EPD_PRIME_RECOVERY_TICKS 2000UL
+#define HINK_EPD_PRIME_RECOVERY_TICKS 100UL
 
 #define HINK_D3D_STORE_SECTOR 0x3B000UL
 #define HINK_D3D_STORE_SLOT_A 0x3B000UL
@@ -1392,39 +1392,96 @@ static void hink_d11b_draw_large_time(uint8_t h, uint8_t m, uint16_t sy,
 	}
 }
 
+
+
+/* D13D: minimal Vietnamese marks for the compact 5x7 font, advance 6 px. */
+static void hink_d13d_mark_circumflex(uint8_t x, uint8_t y)
+{
+        hink_d7a_pixel((int)x + 1, (int)y - 2, BLACK);
+        hink_d7a_pixel((int)x + 2, (int)y - 3, BLACK);
+        hink_d7a_pixel((int)x + 3, (int)y - 2, BLACK);
+}
+
+static void hink_d13d_mark_breve_acute(uint8_t x, uint8_t y)
+{
+        /* Breve over A. */
+        hink_d7a_pixel((int)x + 1, (int)y - 3, BLACK);
+        hink_d7a_pixel((int)x + 2, (int)y - 2, BLACK);
+        hink_d7a_pixel((int)x + 3, (int)y - 2, BLACK);
+        hink_d7a_pixel((int)x + 4, (int)y - 3, BLACK);
+
+        /* Acute above the breve. */
+        hink_d7a_pixel((int)x + 3, (int)y - 5, BLACK);
+        hink_d7a_pixel((int)x + 4, (int)y - 6, BLACK);
+}
+
+static void hink_d13d_mark_acute(uint8_t x, uint8_t y)
+{
+        hink_d7a_pixel((int)x + 2, (int)y - 3, BLACK);
+        hink_d7a_pixel((int)x + 3, (int)y - 4, BLACK);
+}
+
+static void hink_d13d_mark_horn(uint8_t x, uint8_t y)
+{
+        hink_d7a_pixel((int)x + 4, (int)y, BLACK);
+        hink_d7a_pixel((int)x + 5, (int)y - 1, BLACK);
+        hink_d7a_pixel((int)x + 5, (int)y - 2, BLACK);
+}
+
+#define HINK_D13D_WEATHER_X 6U
+
+static void hink_d13d_draw_weather_marks(uint8_t weather, uint8_t x, uint8_t y)
+{
+        /* draw_text() advances exactly 6 pixels per character. */
+        switch (weather)
+        {
+                case 0U: /* NẮNG: A index 1 */
+                        hink_d13d_mark_breve_acute((uint8_t)(x + 6U), y);
+                        break;
+
+                case 1U: /* MÂY: A index 1 */
+                        hink_d13d_mark_circumflex((uint8_t)(x + 6U), y);
+                        break;
+
+                case 2U: /* MƯA: U index 1 */
+                        hink_d13d_mark_horn((uint8_t)(x + 6U), y);
+                        break;
+
+                case 3U: /* GIÔNG: O index 2 */
+                        hink_d13d_mark_circumflex((uint8_t)(x + 12U), y);
+                        break;
+
+                case 4U: /* SƯƠNG: U index 1, O index 2 */
+                        hink_d13d_mark_horn((uint8_t)(x + 6U), y);
+                        hink_d13d_mark_horn((uint8_t)(x + 12U), y);
+                        break;
+
+                case 5U: /* GIÓ: O index 2 */
+                        hink_d13d_mark_acute((uint8_t)(x + 12U), y);
+                        break;
+
+                default: /* NÓNG: O index 1 */
+                        hink_d13d_mark_acute((uint8_t)(x + 6U), y);
+                        break;
+        }
+}
+
 static void hink_d13b_draw_daily_briefing(uint8_t h, uint8_t m, uint16_t sy,
                                           uint8_t sm, uint8_t sd, uint8_t sw,
                                           uint8_t lunar_valid, uint8_t lm,
                                           uint8_t ld, uint8_t ampm)
 {
-	static const char weather_tokens[7][3] = {
-		{'S','U','N'}, {'C','L','D'}, {'R','A','N'}, {'S','T','M'},
-		{'F','O','G'}, {'W','N','D'}, {'H','O','T'}
+	static const char weather_tokens[7][6] = {
+		"NANG", "MAY", "MUA", "GIONG", "SUONG", "GIO", "NONG"
 	};
-	char buf[16];
+	char buf[18];
 	uint8_t value;
 	uint8_t pos;
 	uint8_t i;
+	uint8_t mua_char_index;
 
-	hink_weekday(buf, sw);
-	buf[2] = ' ';
-	hink_put_2(&buf[3], sd);
-	buf[5] = '/';
-	hink_put_2(&buf[6], (uint8_t)(sm + 1U));
-	buf[8] = '/';
-	hink_put_4(&buf[9], sy);
-	buf[13] = 0;
-	draw_text(4, 7, buf, BLACK);
-	hink_d7a_draw_hhmm(11, 34, h, m, BLACK);
-	hink_d9a_draw_lunar(24, 91, lunar_valid, lm, ld);
-	if (ampm != 0U)
-	{
-		buf[0] = (ampm == 2U) ? 'P' : 'A';
-		buf[1] = 'M';
-		buf[2] = 0;
-		draw_text(80, 78, buf, BLACK);
-	}
-	hink_d7a_box(104, 6, 105, 116, BLACK);
+	/* Keep the proven monthly calendar and add a compact Vietnamese weather row. */
+	hink_bitmap_draw_clock(h, m, sy, sm, sd, sw, lunar_valid, lm, ld, ampm);
 
 	if (hink_daily_state() != HINK_DAILY_STATE_FRESH)
 	{
@@ -1432,72 +1489,44 @@ static void hink_d13b_draw_daily_briefing(uint8_t h, uint8_t m, uint16_t sy,
 	}
 	if (hink_daily_flags & HINK_DAILY_WEATHER_VALID)
 	{
-		for (i = 0U; i < 3U; i++)
-		{
-			buf[i] = weather_tokens[hink_daily_weather][i];
-		}
-		buf[3] = ' ';
-		pos = 4U;
-		if (hink_daily_temperature < 0)
-		{
-			buf[pos++] = '-';
-			value = (uint8_t)(-hink_daily_temperature);
-		}
-		else
-		{
-			value = (uint8_t)hink_daily_temperature;
-		}
-		if (value >= 10U)
-		{
-			buf[pos++] = (char)('0' + (value / 10U));
-		}
-		buf[pos++] = (char)('0' + (value % 10U));
-		buf[pos++] = 'C';
-		buf[pos] = 0;
-		draw_text(116, 8, buf, BLACK);
+		                pos = 0U;
+                for (i = 0U; weather_tokens[hink_daily_weather][i] != 0; i++)
+                {
+                        buf[pos++] = weather_tokens[hink_daily_weather][i];
+                }
 
-		buf[0] = 'P';
-		buf[1] = 'O';
-		buf[2] = 'P';
-		buf[3] = ' ';
-		pos = 4U;
-		value = hink_daily_precipitation;
-		if (value == 100U)
-		{
-			buf[pos++] = '1';
-			buf[pos++] = '0';
-			buf[pos++] = '0';
-		}
-		else
-		{
-			if (value >= 10U)
-			{
-				buf[pos++] = (char)('0' + (value / 10U));
-			}
-			buf[pos++] = (char)('0' + (value % 10U));
-		}
-		buf[pos] = 0;
-		draw_text(116, 22, buf, BLACK);
-	}
+                /* Explicit separation between condition and temperature. */
+                buf[pos++] = ' ';
 
-	if (hink_daily_flags & HINK_DAILY_AGENDA_VALID)
-	{
-		draw_text(116, 42, "TODAY", BLACK);
-		for (i = 0U; i < hink_daily_agenda_count; i++)
-		{
-			value = (uint8_t)(hink_daily_agenda_minute[i] / 60U);
-			hink_put_2(&buf[0], value);
-			buf[2] = ':';
-			value = (uint8_t)(hink_daily_agenda_minute[i] % 60U);
-			hink_put_2(&buf[3], value);
-			buf[5] = ' ';
-			buf[6] = hink_daily_agenda_label[i][0];
-			buf[7] = hink_daily_agenda_label[i][1];
-			buf[8] = hink_daily_agenda_label[i][2];
-			buf[9] = 0;
-			draw_text(116, (uint8_t)(58U + (i * 18U)), buf, BLACK);
-		}
-	}
+                if (hink_daily_temperature < 0)
+                {
+                        buf[pos++] = '-';
+                        value = (uint8_t)(-hink_daily_temperature);
+                }
+                else
+                {
+                        value = (uint8_t)hink_daily_temperature;
+                }
+
+                if (value >= 10U)
+                {
+                        buf[pos++] = (char)('0' + (value / 10U));
+                }
+                buf[pos++] = (char)('0' + (value % 10U));
+                buf[pos++] = 'C';
+                buf[pos] = 0;
+
+                /*
+                 * Baseline 112 keeps Vietnamese marks away from the lunar row.
+                 * Longest output is "SUONG 30C", safely inside the left pane.
+                 */
+                                draw_text(HINK_D13D_WEATHER_X, 112, buf, BLACK);
+                hink_d13d_draw_weather_marks(
+                        hink_daily_weather,
+                        HINK_D13D_WEATHER_X,
+                        112U
+                );
+        }
 }
 
 static void hink_bitmap_draw_clock(uint8_t h, uint8_t m, uint16_t sy, uint8_t sm,
