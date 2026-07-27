@@ -88,6 +88,19 @@ The common `HOP` code is rendered visually as Vietnamese `HỌP` without changin
 the three-byte BLE label. With two agenda rows, both compact lines are used for
 events.
 
+## Current-time filtering
+
+- The web keeps only events that are still running or start later today.
+- Ended events are never reused to fill an empty agenda row.
+- After the owner fetches the calendar and applies the daily briefing once, the
+  open page checks the cached event list every 30 seconds.
+- When the visible rows change, an eligible connected daily-briefing device
+  receives the updated rows and one normal render request.
+- The check pauses while disconnected, hidden, busy, incompatible, or on
+  another clock face; it never auto-connects.
+- Google Calendar is not queried every 30 seconds. The timer filters only the
+  page-session data already fetched by the owner.
+
 ## Validation
 
 `node scripts/task-d15b-google-calendar-agenda-smoke.mjs`
