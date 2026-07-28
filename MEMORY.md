@@ -11,6 +11,18 @@
   - `docs/agent/AUTOMATION_MODE.md`
 - Canonical web URL: `https://onlysky17.github.io/Clock/test.html`
 
+D17B unified daily update milestone:
+- `TASK D17B` is CLOSED / MERGED / OWNER WEB+BLE PASS.
+- Feature commit: `692f76cedc90545e4b7e6f6bacdf8b7c03ddb1da`.
+- PR #100 merge commit: `cad429364f72589bf2ace07a6223ad3700112e2a`.
+- Product Mode provides one primary action: `Cập nhật màn hình hôm nay`.
+- The flow updates weather, optional Google agenda, device time, daily context, and then performs exactly one final visible render.
+- Google Calendar remains optional: without authorization the flow skips agenda cleanly, does not request login, and does not mark the run degraded.
+- The web never auto-connects BLE and prevents overlapping unified runs.
+- D17B was web-only; firmware, BLE protocol, `test.html`, BIN, build, pack, flash, and SPI state were unchanged.
+- The agenda-capable firmware has not yet received a persistent SPI final closeout.
+- Next canonical task: `TASK D18A - AGENDA FIRMWARE SPI FINAL AUDIT`.
+
 D15 Google agenda milestone:
 - `TASK D15A` through `TASK D15H` are CLOSED / MERGED / OWNER PASS.
 - D15A policy merge: `b371021`; D15B import merge: `57abfcd`; D15C device render merge: `91e86be`.
@@ -349,4 +361,5 @@ Verified D3D2 historical state:
 - The web must never auto-connect BLE.
 - Existing technical controls remain available under Advanced.
 - No firmware, BLE protocol, web runtime, `test.html`, OAuth, BIN, build, pack, flash, SPI Burn, or physical-device change.
-- Next approved task: `TASK D17B - IMPLEMENT UNIFIED DAILY UPDATE FLOW`.
+- D17B implementation is complete and merged.
+- Next approved task: `TASK D18A - AGENDA FIRMWARE SPI FINAL AUDIT`.

@@ -433,3 +433,23 @@ D17A defines:
 Next canonical task:
 
 - `TASK D17B - IMPLEMENT UNIFIED DAILY UPDATE FLOW`.
+
+## Current D17B closeout state
+
+TASK D17B is CLOSED, MERGED, and Owner-tested.
+
+- PR: #100 - Add unified daily update flow.
+- Feature commit: `692f76cedc90545e4b7e6f6bacdf8b7c03ddb1da`.
+- Merge commit: `cad429364f72589bf2ace07a6223ad3700112e2a`.
+- Post-merge smoke: PASS.
+- Owner web and BLE test: PASS.
+- Canonical URL: `https://onlysky17.github.io/Clock/test.html`.
+- Product Mode exposes `Cập nhật màn hình hôm nay` as the single primary daily action.
+- Weather, optional Google agenda, D2 time sync, daily context, and one final render run in a guarded sequence.
+- Google Calendar is skipped cleanly when not authorized; the unified flow does not force login.
+- The web never auto-connects BLE and does not allow overlapping unified runs.
+- No firmware, BLE protocol, `test.html`, BIN, build, pack, flash, or SPI state changed in D17B.
+
+Next canonical task:
+
+- `TASK D18A - AGENDA FIRMWARE SPI FINAL AUDIT`.
