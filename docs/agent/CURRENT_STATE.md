@@ -1,4 +1,4 @@
-﻿# CURRENT_STATE
+# CURRENT_STATE
 
 ## Canonical Current State
 
@@ -378,3 +378,32 @@ Verified:
 - Stale metadata does not start the dedicated scheduler and does not auto-refresh.
 - SET_TIME again clears stale behavior, returns to RUNNING, and five-minute refresh PASS.
 - D3C dedicated timer, renderer, lunar layout, safe disconnect, and minute-boundary race fix remain valid.
+
+## Current D16B closeout state
+
+TASK D16B is CLOSED and MERGED.
+
+- PR: #96 - Handle next-day agenda rollover.
+- Merge commit: 757bdd3ffa8caee335222f7919a6452671257ec6.
+- D16B smoke: PASS.
+- git diff --check: PASS.
+- Change type: web-only.
+- Firmware and BLE protocol: unchanged.
+- Canonical test.html redirect: unchanged.
+- BIN/build/package/flash/physical device: unchanged.
+
+Confirmed browser-open rollover behavior:
+
+- Detect a new local day while the page remains open.
+- Clear stale previous-day agenda preview immediately.
+- Run one coalesced current-day Google Calendar fetch.
+- Refill only when a compatible device is already connected.
+- Never auto-connect BLE.
+- Preserve the firmware agenda-expiry and forced day-rollover contracts.
+
+Planning state:
+
+- D16A policy design is complete.
+- D16B implementation is complete.
+- No D16C task is defined.
+- Await explicit Owner selection of the next milestone.

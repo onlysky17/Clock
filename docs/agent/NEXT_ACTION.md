@@ -2,84 +2,38 @@
 
 ## Canonical Current State
 
-E1A automatic foundation is merged into `main`.
+- Repository: D:\EINK\Clock
+- Branch baseline: main
+- Canonical web URL: https://onlysky17.github.io/Clock/test.html
+- TASK D16A next-day agenda autonomy policy: CLOSED / MERGED.
+- TASK D16B next-day agenda rollover: CLOSED / MERGED.
+- D16B PR: #96.
+- D16B merge commit: 757bdd3ffa8caee335222f7919a6452671257ec6.
+- D16B smoke: PASS.
 
-- E1A merge baseline commit: `0b5027d3945bc8514a1191a3a37576de8255e489`
-- Canonical web URL: `https://onlysky17.github.io/Clock/test.html`
+D16B final behavior:
 
-Firmware milestone cuoi da dong:
-
-- `TASK D9B` balanced flagship layout persistent SPI final is CLOSED, MERGED, and PHYSICAL PASS.
-- D9A layout implementation commit: `63936eb8a9e2324fac9447319f5e789e1fdd85f7`.
-- D9A merge commit: `246dab2603e4ff9c407b439dd04da9ef82b007e4`.
-- D9B package merge commit: `66625a6d0cb214e0de5184445d8d25a7833d1650`.
-- Final packed SHA256: `51D90603363B9660CC43686E68E93FCAA9668ECB3985FF1CE292A58DB55DD8B2`.
-- SPI Burn/Verify, cold boot, balanced left pane, D2 sync/render, five-minute scheduler, and BLE reconnect: PASS.
-- No blank panel, duplicate refresh, or second black refresh.
-
-Historical D7A lineage:
-
-- `TASK D7A` autonomous flagship daily layout is CLOSED, MERGED, and PHYSICAL PASS.
-- D7A implementation commit: `2308fce61388ef99126cc80a6c81fd9b353baed4`.
-- D7A calendar alignment FIX1 commit: `68a47e5c4ce90c874f9c3c21bdb34754e4444600`.
-- D7A immediate D2 render FIX2 commit: `32fa562d0d36127a3ded4b46bd35148ff3ccc172`.
-- Main merge commit after FIX1/FIX2: `b4e8002774231f197821308d49c11327bda3e550`.
-- Owner physical evidence on `2026-07-20`:
-  - D2 `SYNCED -> RENDERING -> COMPLETE` PASS.
-  - Layout appears immediately after `Dong bo gio` PASS.
-  - No blank panel after D2 COMPLETE PASS.
-  - Header `T2..CN` aligns with date columns PASS.
-  - Current-day invert highlight PASS.
-  - Solar date, large `HH:mm`, and lunar date PASS.
-  - Divider, clipping, and overlap PASS.
-  - BLE-disconnected five-minute scheduler PASS.
-  - No duplicate refresh and no second black refresh PASS.
-  - E6 was NOT RUN during the autonomous test.
-- Final build evidence: Code `41968`, RO-data `3592`, RW-data `552`, ZI-data `22928`, raw BIN `47248` bytes.
-- Final raw BIN SHA256: `14CF053BC1EF88B7CCB7733F8372F6484AD635FE6012613D7024FA07F69CE986`.
-- Keil result: `0 errors`, `0 warnings`.
-- Legacy font symbols remain absent from the active renderer link path.
-- D3E long-run BLE/EPD lifecycle fix and D3D2 persistence remain passed foundation milestones.
-
-Web/layout milestone cuoi da dong:
-
-- `TASK D5A` flagship daily layout is CLOSED.
-- `TASK D5B` bitmap font polish is CLOSED.
-- `TASK D5B-FIX1` Vietnamese glyph/layout fix is CLOSED.
-- `TASK D5B-FIX2` bitmap baseline normalization is CLOSED/PASS.
-- D5B-FIX2 implementation commit: `642738c0b4d4f4bbf763838fe9eb43dca7b4749b`.
-- D5B-FIX2 automated smoke PASS.
-- D5B-FIX2 automated browser/metrics PASS.
-- Owner physical e-ink panel PASS on `2026-07-19`.
-- D7A now owns the final autonomous firmware layout for the physical panel.
-
-## Current Finding
-
-- D15A through D15H are CLOSED / MERGED / OWNER PASS.
-- D15 merge lineage: `b371021`, `57abfcd`, `91e86be`, `7c15f99`, `1b0a154`,
-  `d1b748a`, `a23ed7c`, and `78c4401`.
-- Google Calendar access is read-only and owner-authorized.
-- At most two upcoming timed events are selected; ended events are removed.
-- Access and agenda rows restore within the current tab after reload.
-- Agenda refresh runs at most every 15 minutes while the page is visible.
-- Product Mode shows the last successful refresh and active/paused state.
-- Owner confirmed weather and agenda display together on the physical panel.
-- D15D through D15H changed no firmware, BLE protocol, canonical `test.html`, or SPI package.
+- Browser-open local-day changes clear stale agenda preview immediately.
+- Exactly one coalesced current-day Google Calendar fetch is requested.
+- Device refill is guarded and requires an already-connected compatible device.
+- The web never auto-connects BLE.
+- Firmware agenda expiry and forced day-rollover behavior remain unchanged.
+- No firmware, BLE protocol, test.html redirect, BIN, build, package, flash, or physical-device change.
 
 ## Next Canonical Action
 
-`TASK D16A - NEXT-DAY AGENDA AUTONOMY POLICY DESIGN`
+OWNER DECISION REQUIRED - select the next milestone after D16B.
 
-- Define device behavior after midnight when the browser is closed or BLE is disconnected.
-- Specify bounded agenda expiry, stale-row removal, reconnect refresh, timezone, and privacy rules.
-- Preserve the current two optional agenda rows and never auto-connect BLE.
-- Keep D16A design-only; do not modify firmware, BLE protocol, Google OAuth, or web runtime.
+- D16 currently ends at D16B.
+- No D16C scope has been designed or approved.
+- Do not infer, create, or implement D16C automatically.
+- Do not begin a new feature until the Owner explicitly chooses its task ID, purpose, and scope.
 
-## Guardrails For The Next Task
+## Guardrails
 
-1. Start from clean `main` after D15 closeout and preserve D13D as the firmware rollback baseline.
-2. Preserve the final geometry contract: logical `250 x 122`, controller RAM `122 x 250`, stride `16`, payload `4000` bytes.
-3. Keep the canonical web URL as `https://onlysky17.github.io/Clock/test.html`.
-4. Do not use the old `104 x 212` golden geometry for this physical panel.
-5. Do not commit `.bin` firmware images or build output.
-6. Do not flash, Burn SPI, reset board, run Web Bluetooth physical tests, or claim hardware PASS without Owner evidence.
+1. Start from clean main with HEAD equal to origin/main.
+2. Preserve canonical URL https://onlysky17.github.io/Clock/test.html.
+3. Preserve HINK213 geometry: logical 250 x 122, controller RAM 122 x 250, stride 16, payload 4000 bytes.
+4. Do not commit BIN files or build output.
+5. Do not modify firmware, BLE protocol, OAuth, persistence, scheduler, or panel rendering without a new approved task.
+6. Do not flash, Burn SPI, reset hardware, or claim physical PASS without Owner evidence.
