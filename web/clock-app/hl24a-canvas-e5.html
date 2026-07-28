@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="google-calendar-client-id" content="64961652220-4b2s7mnvqfut2fsu213gokbi28qs74t6.apps.googleusercontent.com">
-<title>TASK D15H - Trạng thái làm mới lịch Google</title>
+<title>TASK D17B - Cập nhật màn hình hôm nay</title>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
 :root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;--bg:#07101b;--card:#111c2c;--line:#2a3d59;--text:#f4f8ff;--muted:#9fb1c8;--ok:#45d99c;--warn:#ffd166;--bad:#ff6b86}
@@ -21,6 +21,7 @@
 .dailyContextPanel{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}.dailyContextPanel[hidden]{display:none}.dailyContextPanel h3{margin:0 0 9px;font-size:1rem}.dailyContextGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:9px}.dailyContextGrid label{display:grid;gap:5px;color:var(--muted);font-size:.82rem}.dailyContextGrid input,.dailyContextGrid select{width:100%}
 .weatherAutoRow{margin:0 0 10px}.weatherAutoStatus{margin:8px 0;color:var(--muted);font-size:.85rem}.weatherAutoStatus.ok{color:var(--ok)}.weatherAutoStatus.bad{color:var(--bad)}
 .calendarImportPanel{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}.calendarImportActions{margin:9px 0}.calendarAgendaRows{display:grid;gap:8px}.calendarAgendaRow{display:grid;grid-template-columns:minmax(110px,.7fr) minmax(100px,.5fr) minmax(0,1fr);gap:8px;align-items:end}.calendarAgendaRow label{display:grid;gap:4px;color:var(--muted);font-size:.82rem}.calendarAgendaRow input{width:100%}.calendarAgendaTitle{min-width:0;padding:10px 0;color:var(--muted);overflow-wrap:anywhere}.calendarPrivacy{margin:8px 0 0;font-size:.82rem}
+.unifiedDailyPanel{margin-top:14px;padding:14px;border:1px solid #2f755d;border-radius:11px;background:#0b211c}.unifiedDailyHeader{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}.unifiedDailyHeader button{flex:1 1 230px}.unifiedDailyResult{flex:1 1 230px;color:var(--muted)}.unifiedDailyResult.success{color:var(--ok)}.unifiedDailyResult.degraded{color:var(--warn)}.unifiedDailyResult.failure{color:var(--bad)}.unifiedDailySteps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:11px}.unifiedDailyStep{min-width:0;padding:9px;border:1px solid var(--line);border-radius:9px;background:#0b1421}.unifiedDailyStep span{display:block;color:var(--muted);font-size:.76rem}.unifiedDailyStep strong{display:block;margin-top:3px;font-size:.88rem;overflow-wrap:anywhere}.unifiedDailyStep.running strong{color:var(--warn)}.unifiedDailyStep.success strong{color:var(--ok)}.unifiedDailyStep.degraded strong{color:var(--warn)}.unifiedDailyStep.failure strong{color:var(--bad)}
 .advanced{margin:18px 0;border:1px solid var(--line);border-radius:12px;background:rgba(11,20,33,.96);overflow:hidden}
 .advanced>summary{cursor:pointer;list-style:none;padding:15px 16px;font-weight:850;color:#dbeafe}.advanced>summary::-webkit-details-marker{display:none}
 .advanced>summary:focus-visible{outline:2px solid #93c5fd;outline-offset:3px}.advancedBody{padding:0 16px 16px}.advancedBody .card{border-radius:10px;background:#0e1928}
@@ -34,7 +35,9 @@ button{cursor:pointer}button.primary{background:#1d4ed8}button.good{background:#
 canvas{display:block;width:min(100%,500px);height:auto;image-rendering:pixelated;background:#fff;touch-action:none;border:1px solid #62708a}
 progress{width:100%;height:17px;margin-top:12px}textarea{width:100%;min-height:260px;padding:12px;border:1px solid var(--line);border-radius:10px;background:#050910;color:#cfe2ff;font:12px/1.5 ui-monospace,Consolas,monospace}
 small{color:var(--muted)}
-@media(max-width:420px){main{padding:12px}.identityCard{min-width:0}.identityGrid,.compatibilityState,.calendarAgendaRow{grid-template-columns:minmax(0,1fr)}.compatibilityState small{grid-column:auto}.stat strong{overflow-wrap:anywhere}.calendarAgendaTitle{padding:0 0 8px}}
+@media(max-width:600px){.unifiedDailySteps{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:420px){main{padding:12px}.identityCard{min-width:0}.identityGrid,.compatibilityState,.calendarAgendaRow{grid-template-columns:minmax(0,1fr)}.compatibilityState small{grid-column:auto}.stat strong{overflow-wrap:anywhere}.calendarAgendaTitle{padding:0 0 8px}.unifiedDailyHeader{align-items:stretch}}
+@media(max-width:360px){.unifiedDailySteps{grid-template-columns:minmax(0,1fr)}}
 </style>
 </head>
 <body><main>
@@ -189,12 +192,12 @@ const GOOGLE_CALENDAR_CLIENT_ID=(
   ''
 ).trim();
 const EINK_TEST_IDENTITY={
-  webBuild:'D16B-DAY-ROLLOVER-20260728',
+  webBuild:'D17B-UNIFIED-DAILY-UPDATE-20260728',
   expectedFirmware:'D8A00001',
   expectedRuntime:'D8A1',
   expectedSourceId:'D8A00001',
   expectedBin:'BUILD-SPECIFIC',
-  label:'D16B CHUYỂN LỊCH SANG NGÀY MỚI'
+  label:'D17B CẬP NHẬT MÀN HÌNH HÔM NAY'
 };
 window.EINK_TEST_IDENTITY=EINK_TEST_IDENTITY;
 
@@ -233,6 +236,7 @@ let googleCalendarItems=[],googleCalendarLoaded=false,googleAgendaTimer=0;
 let googleAgendaUiSignature='',googleAgendaDeviceSignature='',googleAgendaAutoArmed=false;
 let googleAgendaFetchedDayKey=-1,googleAgendaUiDayKey=-1;
 let googleAgendaRolloverAttemptDayKey=-1,googleAgendaRolloverAttemptAt=0;
+let unifiedDailyUpdateRunning=false,unifiedDailyUpdatePromise=null;
 
 function setupProductMode(){
   const main=document.querySelector('main');
@@ -264,7 +268,7 @@ function setupProductMode(){
 
   const statusCard=document.createElement('section');
   statusCard.className='card';
-  statusCard.innerHTML='<h2>Trạng thái</h2><div class="productStatus"><div class="stat"><span>Thiết bị</span><strong id="productState" class="warn">Chưa kết nối</strong></div><div class="stat"><span>Tiến trình</span><span id="productSyncSlot"></span></div></div><div class="row" id="productActionRow"></div>';
+  statusCard.innerHTML='<h2>Trạng thái</h2><div class="productStatus"><div class="stat"><span>Thiết bị</span><strong id="productState" class="warn">Chưa kết nối</strong></div><div class="stat"><span>Tiến trình</span><span id="productSyncSlot"></span></div></div><div class="row" id="productActionRow"></div><div class="unifiedDailyPanel"><div class="unifiedDailyHeader"><button id="unifiedDailyUpdate" class="good heroAction" type="button">Cập nhật màn hình hôm nay</button><strong id="unifiedDailyResult" class="unifiedDailyResult" role="status" aria-live="polite">Sẵn sàng cập nhật.</strong></div><div class="unifiedDailySteps" role="status" aria-live="polite"><div id="unifiedWeatherStep" class="unifiedDailyStep" data-state="waiting"><span>Thời tiết</span><strong>Đang chờ</strong></div><div id="unifiedCalendarStep" class="unifiedDailyStep" data-state="waiting"><span>Lịch hôm nay</span><strong>Đang chờ</strong></div><div id="unifiedTimeStep" class="unifiedDailyStep" data-state="waiting"><span>Đồng bộ giờ</span><strong>Đang chờ</strong></div><div id="unifiedApplyStep" class="unifiedDailyStep" data-state="waiting"><span>Áp dụng lên màn</span><strong>Đang chờ</strong></div></div></div>';
 
   const presetCard=document.createElement('section');
   presetCard.className='card';
@@ -1040,11 +1044,19 @@ function addSimpleText(){
   repack();
 }
 
+function unifiedDailyUpdateConflicting(){
+  const renderInProgress=productD2RenderState===0x01||productD2RenderState===0x02;
+  return busy||e6Running||oneTapRunning||d2Running||batteryRunning||
+    dailyWeatherRunning||autoWeatherRunning||googleCalendarRunning||
+    renderInProgress||!!pending;
+}
+
 function controls(){
   const connected=!!server?.connected;
   const e5Complete=e5Success && (browserCrc === latestFwCrc);
   const renderInProgress=productD2RenderState===0x01||productD2RenderState===0x02;
-  const locked=busy||e6Running||oneTapRunning||d2Running||batteryRunning||dailyWeatherRunning||autoWeatherRunning||googleCalendarRunning||renderInProgress;
+  const conflictingLocked=unifiedDailyUpdateConflicting();
+  const locked=conflictingLocked||unifiedDailyUpdateRunning;
   const identityBlocked=connected&&identityCompatibility!=='compatible';
   $('connect').disabled=connected||locked;
   $('disconnect').disabled=!connected||locked;
@@ -1071,6 +1083,10 @@ function controls(){
   $('googleCalendarConnect').disabled=locked||!googleCalendarConfigured()||!!googleCalendarToken;
   $('googleCalendarFetch').disabled=locked||!googleCalendarToken;
   $('googleCalendarDisconnect').disabled=locked||!googleCalendarToken;
+  $('unifiedDailyUpdate').disabled=!connected||
+    identityCompatibility!=='compatible'||
+    conflictingLocked||
+    unifiedDailyUpdateRunning;
   for(const input of document.querySelectorAll('#dailyContextPanel input,#dailyContextPanel select'))input.disabled=locked;
   $('sample').disabled=locked;
   $('addText').disabled=locked;
@@ -1473,7 +1489,8 @@ function millisecondsUntilLocalDayRollover(now=new Date()){
 function automaticWeatherBlocked(){
   const renderInProgress=productD2RenderState===0x01||productD2RenderState===0x02;
   return busy||e6Running||oneTapRunning||d2Running||batteryRunning||
-    dailyWeatherRunning||autoWeatherRunning||renderInProgress||!!pending;
+    dailyWeatherRunning||autoWeatherRunning||renderInProgress||!!pending||
+    unifiedDailyUpdateRunning;
 }
 
 function automaticWeatherEligible(){
@@ -2073,9 +2090,9 @@ async function connectGoogleCalendar(){
   }
 }
 
-async function fetchGoogleCalendarToday({background=false}={}){
-  if(googleCalendarRunning)return;
-  if(background&&(!googleCalendarToken||document.visibilityState!=='visible'))return;
+async function fetchGoogleCalendarToday({background=false,throwOnError=false}={}){
+  if(googleCalendarRunning)return null;
+  if(background&&(!googleCalendarToken||document.visibilityState!=='visible'))return null;
   googleCalendarRunning=true;
   setGoogleCalendarStatus('\u0110ang \u0111\u1ecdc l\u1ecbch h\u00f4m nay...');
   controls();
@@ -2112,7 +2129,7 @@ async function fetchGoogleCalendarToday({background=false}={}){
       googleAgendaRolloverAttemptAt=0;
       setGoogleCalendarStatus('Ngày đã đổi trong lúc lấy lịch. Đang lấy lại lịch hôm nay.','ok');
       setTimeout(()=>fetchGoogleCalendarToday({background:true}),0);
-      return;
+       return null;
     }
     googleCalendarItems=Array.isArray(data.items)?data.items:[];
     googleCalendarLoaded=true;
@@ -2137,6 +2154,7 @@ async function fetchGoogleCalendarToday({background=false}={}){
     if(background&&googleAgendaAutoArmed){
       setTimeout(refreshGoogleAgendaForCurrentTime,0);
     }
+    return events;
   }catch(error){
     setGoogleCalendarStatus(`Kh\u00f4ng l\u1ea5y \u0111\u01b0\u1ee3c l\u1ecbch: ${error.message}`,'bad');
     if(googleCalendarToken){
@@ -2148,6 +2166,8 @@ async function fetchGoogleCalendarToday({background=false}={}){
       updateGoogleCalendarRefreshStatus();
     }
     log(`Google Calendar fetch failed: ${error.message}`,'ERROR');
+    if(throwOnError)throw error;
+    return null;
   }finally{
     googleCalendarRunning=false;
     controls();
@@ -2599,6 +2619,175 @@ async function openE4(){
   log(`E4 open token=${token}, timeout=${response[4]}s`,'PASS');
 }
 
+function setUnifiedDailyStep(id,text,state='waiting'){
+  const step=$(id);
+  step.dataset.state=state;
+  step.className=`unifiedDailyStep ${state}`.trim();
+  step.querySelector('strong').textContent=text;
+}
+
+function setUnifiedDailyResult(text,state=''){
+  const result=$('unifiedDailyResult');
+  result.textContent=text;
+  result.className=`unifiedDailyResult ${state}`.trim();
+}
+
+function resetUnifiedDailyStatus(){
+  setUnifiedDailyStep('unifiedWeatherStep','Đang chờ');
+  setUnifiedDailyStep('unifiedCalendarStep','Đang chờ');
+  setUnifiedDailyStep('unifiedTimeStep','Đang chờ');
+  setUnifiedDailyStep('unifiedApplyStep','Đang chờ');
+  setUnifiedDailyResult('Đang chuẩn bị cập nhật...');
+}
+
+function prepareUnifiedGoogleAgenda(now=new Date()){
+  const currentDayKey=dailyDayKey(now);
+  const hasCurrentDayCache=
+    googleCalendarLoaded&&googleAgendaFetchedDayKey===currentDayKey;
+  if(hasCurrentDayCache){
+    const events=selectGoogleAgendaEvents(googleCalendarItems,now);
+    applyGoogleAgendaEvents(events);
+    googleAgendaUiSignature=googleAgendaSignature(events);
+    googleAgendaUiDayKey=currentDayKey;
+    return {currentDayKey,hasCurrentDayCache:true,events};
+  }
+
+  googleCalendarItems=[];
+  googleCalendarLoaded=false;
+  googleCalendarLastFetchAt=0;
+  googleAgendaUiSignature='';
+  googleAgendaDeviceSignature='';
+  googleAgendaAutoArmed=false;
+  googleAgendaFetchedDayKey=-1;
+  googleAgendaUiDayKey=currentDayKey;
+  googleAgendaRolloverAttemptDayKey=-1;
+  googleAgendaRolloverAttemptAt=0;
+  stopGoogleAgendaClock();
+  applyGoogleAgendaEvents([]);
+  return {currentDayKey,hasCurrentDayCache:false,events:[]};
+}
+
+async function runUnifiedDailyUpdate(){
+  if(unifiedDailyUpdatePromise)return unifiedDailyUpdatePromise;
+  if(!server?.connected){
+    setUnifiedDailyResult('Chưa kết nối thiết bị.','failure');
+    return null;
+  }
+  if(identityCompatibility!=='compatible'){
+    setUnifiedDailyResult('Thiết bị chưa tương thích.','failure');
+    return null;
+  }
+  if(unifiedDailyUpdateConflicting()){
+    setUnifiedDailyResult('Đang có thao tác khác, hãy chờ hoàn tất.','failure');
+    return null;
+  }
+
+  const run=(async()=>{
+    const degraded=[];
+    let hardStep='unifiedTimeStep';
+    unifiedDailyUpdateRunning=true;
+    resetUnifiedDailyStatus();
+    controls();
+    log('Bắt đầu cập nhật màn hình hôm nay.','DAILY');
+
+    try{
+      setUnifiedDailyStep('unifiedWeatherStep','Đang lấy...','running');
+      try{
+        await refreshDailyWeatherFromPhone();
+        setUnifiedDailyStep('unifiedWeatherStep','Đã cập nhật','success');
+      }catch(error){
+        $('dailyWeatherEnabled').checked=false;
+        if(selectedClockProfile===2)drawDailyBriefingPreview();
+        degraded.push('thời tiết');
+        setUnifiedDailyStep('unifiedWeatherStep','Không có, vẫn tiếp tục','degraded');
+        log(`Unified weather degraded: ${error.message}`,'DAILY');
+      }
+
+      setUnifiedDailyStep('unifiedCalendarStep','Đang lấy...','running');
+      const agendaState=prepareUnifiedGoogleAgenda(new Date());
+      if(googleCalendarToken){
+        try{
+          await fetchGoogleCalendarToday({background:false,throwOnError:true});
+          if(googleAgendaFetchedDayKey!==dailyDayKey(new Date())){
+            throw Error('Lịch trả về không thuộc ngày hiện tại.');
+          }
+          const eventCount=selectGoogleAgendaEvents(googleCalendarItems,new Date()).length;
+          setUnifiedDailyStep(
+            'unifiedCalendarStep',
+            eventCount?`Đã lấy ${eventCount} lịch`:'Hôm nay không có lịch',
+            'success'
+          );
+        }catch(error){
+          const currentCache=
+            agendaState.hasCurrentDayCache&&
+            agendaState.currentDayKey===dailyDayKey(new Date());
+          if(currentCache){
+            applyGoogleAgendaEvents(selectGoogleAgendaEvents(googleCalendarItems,new Date()));
+            setUnifiedDailyStep('unifiedCalendarStep','Dùng lịch đã lưu hôm nay','degraded');
+          }else{
+            prepareUnifiedGoogleAgenda(new Date());
+            setUnifiedDailyStep('unifiedCalendarStep','Không lấy được lịch','degraded');
+          }
+          degraded.push('lịch');
+          log(`Unified calendar degraded: ${error.message}`,'DAILY');
+        }
+      }else{
+        setUnifiedDailyStep(
+          'unifiedCalendarStep',
+          agendaState.hasCurrentDayCache?'Dùng lịch đã lưu hôm nay':'Bỏ qua (không dùng lịch)',
+          'success'
+        );
+      }
+
+      d2Running=true;
+      controls();
+      setUnifiedDailyStep('unifiedTimeStep','Đang đồng bộ...','running');
+      const timeStatus=await d2SetCurrentTime();
+      if(timeStatus.result!==0x00){
+        throw Error(`Đồng bộ giờ bị từ chối: ${d2ResultName(timeStatus.result)}`);
+      }
+      setUnifiedDailyStep('unifiedTimeStep','Đã đồng bộ','success');
+
+      hardStep='unifiedApplyStep';
+      setUnifiedDailyStep('unifiedApplyStep','Đang áp dụng...','running');
+      selectClockProfile(2);
+      await d2ApplyClockProfile({refreshWeather:false});
+      setUnifiedDailyStep('unifiedApplyStep','Đã hiển thị','success');
+      clearProductError();
+      setUnifiedDailyResult(
+        degraded.length
+          ?`Đã cập nhật; thiếu ${degraded.join(' và ')}.`
+          :'Đã cập nhật đầy đủ màn hình hôm nay.',
+        degraded.length?'degraded':'success'
+      );
+      log(
+        degraded.length
+          ?`Unified daily update completed with degraded ${degraded.join(', ')}.`
+          :'Unified daily update completed.',
+        'DAILY'
+      );
+      return true;
+    }catch(error){
+      setUnifiedDailyStep(hardStep,error.message,'failure');
+      setUnifiedDailyResult(`Không thể cập nhật màn: ${error.message}`,'failure');
+      markProductError(error.message);
+      log(`Unified daily update failed: ${error.message}`,'ERROR');
+      return false;
+    }finally{
+      d2Running=false;
+      unifiedDailyUpdateRunning=false;
+      controls();
+    }
+  })();
+
+  unifiedDailyUpdatePromise=run;
+  try{
+    return await run;
+  }finally{
+    unifiedDailyUpdatePromise=null;
+  }
+}
+
 async function runD2Flow(action){
   if(d2Running||busy||e6Running||oneTapRunning)throw Error('Đang có flow BLE khác chạy.');
   if(!server?.connected)throw Error('BLE chưa kết nối. Hãy Connect EINK/HINK trước.');
@@ -2679,10 +2868,10 @@ async function d2GetClockProfile(){
   return status;
 }
 
-async function d2ApplyClockProfile(){
+async function d2ApplyClockProfile({refreshWeather=true}={}){
   let dailyPacket=null;
   if(selectedClockProfile===2){
-    if($('dailyAutoWeather').checked)await refreshDailyWeatherFromPhone();
+    if(refreshWeather&&$('dailyAutoWeather').checked)await refreshDailyWeatherFromPhone();
     dailyPacket=buildD2SetDailyPacket(new Date());
     const dailyStatus=await d2SetDailyContext(dailyPacket);
     if(dailyStatus.state!==1)throw Error('Dữ liệu thời tiết chưa ở trạng thái hôm nay.');
@@ -3176,6 +3365,7 @@ $('dailyAutoWeather').onchange=toggleAutomaticWeather;
 $('googleCalendarConnect').onclick=connectGoogleCalendar;
 $('googleCalendarFetch').onclick=fetchGoogleCalendarToday;
 $('googleCalendarDisconnect').onclick=disconnectGoogleCalendar;
+$('unifiedDailyUpdate').onclick=runUnifiedDailyUpdate;
 for(const input of document.querySelectorAll('#dailyContextPanel input,#dailyContextPanel select')){
   input.addEventListener('input',()=>{if(selectedClockProfile===2)drawDailyBriefingPreview()});
 }
@@ -3229,7 +3419,7 @@ document.addEventListener('visibilitychange',()=>{
     refreshGoogleAgendaForCurrentTime({forceRolloverRetry:true});
   }
 });
-log('TASK D16B s\u1eb5n s\u00e0ng. L\u1ecbch Google t\u1ef1 chuy\u1ec3n sang ng\u00e0y m\u1edbi khi trang \u0111ang m\u1edf.');
+log('TASK D17B s\u1eb5n s\u00e0ng. C\u1eadp nh\u1eadt th\u1eddi ti\u1ebft, l\u1ecbch, gi\u1edd v\u00e0 m\u00e0n h\u00ecnh theo m\u1ed9t lu\u1ed3ng duy nh\u1ea5t.');
 </script>
 </body>
 </html>
