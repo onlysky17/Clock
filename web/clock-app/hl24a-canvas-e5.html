@@ -189,12 +189,12 @@ const GOOGLE_CALENDAR_CLIENT_ID=(
   ''
 ).trim();
 const EINK_TEST_IDENTITY={
-  webBuild:'D15H-AGENDA-STATUS-20260727',
+  webBuild:'D16B-DAY-ROLLOVER-20260728',
   expectedFirmware:'D8A00001',
   expectedRuntime:'D8A1',
   expectedSourceId:'D8A00001',
   expectedBin:'BUILD-SPECIFIC',
-  label:'D15H TRẠNG THÁI LỊCH GOOGLE'
+  label:'D16B CHUYỂN LỊCH SANG NGÀY MỚI'
 };
 window.EINK_TEST_IDENTITY=EINK_TEST_IDENTITY;
 
@@ -231,6 +231,8 @@ let googleCalendarTokenExpiresAt=0;
 let googleCalendarLastFetchAt=0;
 let googleCalendarItems=[],googleCalendarLoaded=false,googleAgendaTimer=0;
 let googleAgendaUiSignature='',googleAgendaDeviceSignature='',googleAgendaAutoArmed=false;
+let googleAgendaFetchedDayKey=-1,googleAgendaUiDayKey=-1;
+let googleAgendaRolloverAttemptDayKey=-1,googleAgendaRolloverAttemptAt=0;
 
 function setupProductMode(){
   const main=document.querySelector('main');
@@ -1895,6 +1897,14 @@ function googleAgendaSignature(events){
   ).join('|');
 }
 
+function googleAgendaDeviceKey(events,date=new Date()){
+  return `${dailyDayKey(date)}:${googleAgendaSignature(events)}`;
+}
+
+function googleAgendaNeedsDayRollover(fetchedDayKey,date=new Date()){
+  return fetchedDayKey>=0&&fetchedDayKey!==dailyDayKey(date);
+}
+
 function applyGoogleAgendaEvents(events){
   for(const index of [0,1]){
     $(`dailyAgendaTime${index}`).value='';
@@ -1925,8 +1935,29 @@ function scheduleGoogleAgendaClock(){
   );
 }
 
-async function refreshGoogleAgendaForCurrentTime(){
-  if(!googleCalendarLoaded||googleCalendarRunning)return;
+async function refreshGoogleAgendaForCurrentTime({forceRolloverRetry=false}={}){
+  if(googleCalendarRunning)return;
+  const now=new Date();
+  const currentDayKey=dailyDayKey(now);
+  if(googleAgendaNeedsDayRollover(googleAgendaFetchedDayKey,now)){
+    if(googleAgendaUiDayKey!==currentDayKey){
+      googleCalendarItems=[];
+      applyGoogleAgendaEvents([]);
+      googleAgendaUiSignature='';
+      googleAgendaUiDayKey=currentDayKey;
+      setGoogleCalendarStatus('Đã sang ngày mới. Đang chờ lịch hôm nay.','ok');
+    }
+    if(!googleCalendarToken||document.visibilityState!=='visible')return;
+    const rolloverRecentlyAttempted=
+      googleAgendaRolloverAttemptDayKey===currentDayKey&&
+      Date.now()-googleAgendaRolloverAttemptAt<GOOGLE_CALENDAR_REFRESH_INTERVAL_MS;
+    if(rolloverRecentlyAttempted&&!forceRolloverRetry)return;
+    googleAgendaRolloverAttemptDayKey=currentDayKey;
+    googleAgendaRolloverAttemptAt=Date.now();
+    await fetchGoogleCalendarToday({background:true});
+    return;
+  }
+  if(!googleCalendarLoaded)return;
   if(
     googleCalendarToken&&
     document.visibilityState==='visible'&&
@@ -1935,8 +1966,9 @@ async function refreshGoogleAgendaForCurrentTime(){
     await fetchGoogleCalendarToday({background:true});
     return;
   }
-  const events=selectGoogleAgendaEvents(googleCalendarItems,new Date());
+  const events=selectGoogleAgendaEvents(googleCalendarItems,now);
   const signature=googleAgendaSignature(events);
+  const deviceKey=googleAgendaDeviceKey(events,now);
   if(signature!==googleAgendaUiSignature){
     applyGoogleAgendaEvents(events);
     googleAgendaUiSignature=signature;
@@ -1947,7 +1979,7 @@ async function refreshGoogleAgendaForCurrentTime(){
       'ok'
     );
   }
-  if(!googleAgendaAutoArmed||signature===googleAgendaDeviceSignature)return;
+  if(!googleAgendaAutoArmed||deviceKey===googleAgendaDeviceSignature)return;
   if(
     document.visibilityState!=='visible'||
     !server?.connected||
@@ -1960,13 +1992,13 @@ async function refreshGoogleAgendaForCurrentTime(){
   d2Running=true;
   controls();
   try{
-    const packet=buildD2SetDailyPacket(new Date());
+    const packet=buildD2SetDailyPacket(now);
     if(!dailyStatusMatchesPacket(lastDailyStatus,packet)){
       const status=await d2SetDailyContext(packet);
       if(status.state!==1)throw Error('Dữ liệu lịch chưa ở trạng thái hôm nay.');
       await d2RenderClockFromDevice();
     }
-    googleAgendaDeviceSignature=signature;
+    googleAgendaDeviceSignature=deviceKey;
     setGoogleCalendarStatus(
       events.length
         ?'Đã tự cập nhật các lịch tiếp theo lên màn.'
@@ -2053,7 +2085,9 @@ async function fetchGoogleCalendarToday({background=false}={}){
       await requestGoogleCalendarToken();
     }
     const keepAutoArmed=googleAgendaAutoArmed;
-    const{start,end}=googleCalendarDayBounds(new Date());
+    const queryNow=new Date();
+    const queryDayKey=dailyDayKey(queryNow);
+    const{start,end}=googleCalendarDayBounds(queryNow);
     const params=new URLSearchParams({
       timeMin:start.toISOString(),
       timeMax:end.toISOString(),
@@ -2071,12 +2105,25 @@ async function fetchGoogleCalendarToday({background=false}={}){
       throw Error(detail?.error?.message||`Google Calendar l\u1ed7i ${response.status}.`);
     }
     const data=await response.json();
+    const responseNow=new Date();
+    if(dailyDayKey(responseNow)!==queryDayKey){
+      googleCalendarLastFetchAt=0;
+      googleAgendaRolloverAttemptDayKey=-1;
+      googleAgendaRolloverAttemptAt=0;
+      setGoogleCalendarStatus('Ngày đã đổi trong lúc lấy lịch. Đang lấy lại lịch hôm nay.','ok');
+      setTimeout(()=>fetchGoogleCalendarToday({background:true}),0);
+      return;
+    }
     googleCalendarItems=Array.isArray(data.items)?data.items:[];
     googleCalendarLoaded=true;
     googleAgendaAutoArmed=background?keepAutoArmed:false;
     googleCalendarLastFetchAt=Date.now();
+    googleAgendaFetchedDayKey=queryDayKey;
+    googleAgendaUiDayKey=queryDayKey;
+    googleAgendaRolloverAttemptDayKey=queryDayKey;
+    googleAgendaRolloverAttemptAt=googleCalendarLastFetchAt;
     updateGoogleCalendarRefreshStatus('ok');
-    const events=selectGoogleAgendaEvents(googleCalendarItems,new Date());
+    const events=selectGoogleAgendaEvents(googleCalendarItems,responseNow);
     applyGoogleAgendaEvents(events);
     googleAgendaUiSignature=googleAgendaSignature(events);
     scheduleGoogleAgendaClock();
@@ -2118,6 +2165,10 @@ async function disconnectGoogleCalendar(){
   googleAgendaAutoArmed=false;
   googleAgendaUiSignature='';
   googleAgendaDeviceSignature='';
+  googleAgendaFetchedDayKey=-1;
+  googleAgendaUiDayKey=-1;
+  googleAgendaRolloverAttemptDayKey=-1;
+  googleAgendaRolloverAttemptAt=0;
   stopGoogleAgendaClock();
   if(accessToken&&window.google?.accounts?.oauth2){
     await new Promise(resolve=>window.google.accounts.oauth2.revoke(accessToken,resolve));
@@ -2130,7 +2181,9 @@ window.EINK_GOOGLE_CALENDAR_TEST={
   normalizeGoogleAgendaLabel,
   googleCalendarDayBounds,
   selectGoogleAgendaEvents,
-  googleAgendaSignature
+  googleAgendaSignature,
+  googleAgendaDeviceKey,
+  googleAgendaNeedsDayRollover
 };
 
 function dailyDayKey(date=new Date()){
@@ -2657,9 +2710,10 @@ async function d2ApplyClockProfile(){
   if(status.result!==0x00)throw Error(`D2 profile rejected: ${d2ResultName(status.result)}`);
   await d2RenderClockFromDevice();
   if(selectedClockProfile===2&&googleCalendarLoaded){
-    const currentEvents=selectGoogleAgendaEvents(googleCalendarItems,new Date());
+    const profileNow=new Date();
+    const currentEvents=selectGoogleAgendaEvents(googleCalendarItems,profileNow);
     googleAgendaUiSignature=googleAgendaSignature(currentEvents);
-    googleAgendaDeviceSignature=googleAgendaUiSignature;
+    googleAgendaDeviceSignature=googleAgendaDeviceKey(currentEvents,profileNow);
     googleAgendaAutoArmed=true;
     scheduleGoogleAgendaClock();
   }else{
@@ -3172,9 +3226,10 @@ document.addEventListener('visibilitychange',()=>{
   }else{
     autoWeatherRetryUsed=false;
     scheduleAutomaticWeatherCheck('page visible');
+    refreshGoogleAgendaForCurrentTime({forceRolloverRetry:true});
   }
 });
-log('TASK D15H s\u1eb5n s\u00e0ng. Tr\u1ea1ng th\u00e1i l\u00e0m m\u1edbi l\u1ecbch Google \u0111\u01b0\u1ee3c hi\u1ec3n th\u1ecb tr\u1ef1c ti\u1ebfp.');
+log('TASK D16B s\u1eb5n s\u00e0ng. L\u1ecbch Google t\u1ef1 chuy\u1ec3n sang ng\u00e0y m\u1edbi khi trang \u0111ang m\u1edf.');
 </script>
 </body>
 </html>
