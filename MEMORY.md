@@ -1,4 +1,4 @@
-﻿# MEMORY
+# MEMORY
 
 ## Canonical Current State
 
@@ -313,3 +313,23 @@ Verified D3D2 historical state:
 - Stale metadata does not start the dedicated scheduler and does not auto-refresh the panel.
 - A new `SET_TIME` clears stale behavior, returns to RUNNING, and five-minute refresh PASS.
 - D3C renderer, lunar date, safe disconnect/re-advertise, and minute-boundary race fix remain intact.
+
+## TASK D16B Next-Day Agenda Rollover Closeout
+
+- Status: CLOSED, MERGED, automated validation PASS.
+- PR: #96 - TASK D16B: Handle next-day agenda rollover.
+- Merge commit: 757bdd3ffa8caee335222f7919a6452671257ec6.
+- Canonical web URL: https://onlysky17.github.io/Clock/test.html
+- Implementation scope was web-only:
+  - web/clock-app/hl24a-canvas-e5.html
+  - scripts/task-d16b-next-day-agenda-rollover-smoke.mjs
+- Browser-open day rollover behavior:
+  - stale previous-day agenda preview is cleared immediately;
+  - one coalesced Google Calendar fetch retrieves the current day;
+  - an already-connected device may receive a guarded refill;
+  - the web never auto-connects BLE.
+- Firmware expiry and forced day-rollover behavior remain authoritative and unchanged.
+- No firmware, BLE protocol, canonical test.html redirect, BIN, build, flash, SPI Burn, or physical-device change.
+- D16 series currently ends at D16B.
+- No D16C scope has been defined.
+- Next milestone requires an explicit Owner decision.
