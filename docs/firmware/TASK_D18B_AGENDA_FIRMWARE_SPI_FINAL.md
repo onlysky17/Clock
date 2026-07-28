@@ -2,7 +2,7 @@
 
 ## Status
 
-`READY FOR OWNER SPI PHYSICAL GATE - NOT YET BURNED`
+`CLOSED - MERGED - SPI PHYSICAL PASS`
 
 D18B rebuilt the merged agenda firmware from the canonical source and prepared
 a verified 256 KB SPI package. No firmware, web, BLE protocol, packer, or
@@ -79,17 +79,23 @@ The package contains the fresh raw BIN and AXF, the verified packed image,
 the canonical golden base, a SHA256 manifest, a package verifier, and the
 Owner SPI Burn checklist. None of these artifacts are tracked by Git.
 
-## Owner Gate
+## Owner Physical Validation
 
-D18B stops before SPI Burn. The Owner gate is:
+The Owner completed the SPI physical gate after PR #103 merged:
 
-1. Burn the packed 256 KB image.
-2. Require SPI Verify PASS.
-3. Require cold-boot BLE scan/connect PASS.
-4. Run the unified daily update at the canonical URL.
-5. Confirm time, optional weather, and up to two agenda rows on the Summary
-   profile.
-6. Confirm disconnected five-minute refresh, BLE reconnect, no duplicate
-   refresh, and no second black refresh.
+1. SPI Burn: PASS.
+2. SPI Verify: PASS.
+3. Cold-boot BLE scan/connect: PASS.
+4. Unified daily update at the canonical URL: PASS.
+5. Time, optional weather, and agenda rows on the Summary profile: PASS.
+6. Disconnected five-minute refresh and BLE reconnect: PASS.
+7. No duplicate refresh and no second black refresh: PASS.
 
-Only after that physical gate passes may D18B be closed.
+D18B is now closed. The packed image remains local under `_incoming`; no BIN,
+AXF, MAP, SDK output, or package artifact is committed.
+
+## Merge Evidence
+
+- Feature commit: `cdf3d1e050b8e236af56c8f26333307880686051`.
+- PR: #103 - Prepare agenda firmware SPI final.
+- Merge commit: `c30b84428767550646b60a28cb5d10e13c8fc8d2`.

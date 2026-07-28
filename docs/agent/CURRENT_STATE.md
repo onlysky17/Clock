@@ -453,3 +453,24 @@ TASK D17B is CLOSED, MERGED, and Owner-tested.
 Next canonical task:
 
 - `TASK D18A - AGENDA FIRMWARE SPI FINAL AUDIT`.
+
+## Current D18B closeout state
+
+TASK D18B is CLOSED, MERGED, and SPI PHYSICAL PASS.
+
+- PR: #103 - Prepare agenda firmware SPI final.
+- Feature commit: `cdf3d1e050b8e236af56c8f26333307880686051`.
+- Merge commit: `c30b84428767550646b60a28cb5d10e13c8fc8d2`.
+- Canonical URL: `https://onlysky17.github.io/Clock/test.html`.
+- Keil build: Code `45232`, RO-data `3632`, RW-data `552`, ZI-data `22956`; 0 errors and 0 warnings.
+- Raw BIN: `50552` bytes with `14976` bytes packer headroom.
+- Raw SHA256: `586DB6FFFAD3B5121982B291E9A32032C73C1878DF199872C414E69C7C434063`.
+- Packed image: `262144` bytes.
+- Packed SHA256: `5790AA976BBC7A57DF63873DCE192F57C606B63A10EDBBD4FFCEE52F9D15F44A`.
+- Package verify, package smoke, post-merge preflight, and post-merge smoke: PASS.
+- Owner confirmed SPI Burn, SPI Verify, cold boot, unified daily update, optional weather and agenda rows, disconnected five-minute refresh, BLE reconnect, and no duplicate or second-black refresh: PASS.
+- No BIN, AXF, MAP, SDK output, or `_incoming` artifact is tracked by this closeout.
+
+Next canonical task:
+
+- `TASK D19A - GOOGLE CALENDAR PRODUCTION AUTH READINESS AUDIT`.

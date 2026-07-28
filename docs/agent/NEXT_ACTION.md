@@ -4,38 +4,36 @@
 
 - Repository: `D:\EINK\Clock`
 - Canonical web URL: `https://onlysky17.github.io/Clock/test.html`
-- TASK D17A unified daily update policy: CLOSED / MERGED.
-- TASK D17B unified daily update implementation: CLOSED / MERGED / OWNER WEB+BLE PASS.
-- D17B feature commit: `692f76cedc90545e4b7e6f6bacdf8b7c03ddb1da`.
-- PR #100 merge commit: `cad429364f72589bf2ace07a6223ad3700112e2a`.
-- Product Mode now provides one guarded `Cập nhật màn hình hôm nay` flow.
-- Google Calendar is optional and is skipped without forcing login when authorization is absent.
-- D17B changed only the web and its smoke; firmware, protocol, `test.html`, BIN, build, pack, flash, and SPI state were unchanged.
+- TASK D18B agenda firmware SPI final: CLOSED / MERGED / SPI PHYSICAL PASS.
+- D18B feature commit: `cdf3d1e050b8e236af56c8f26333307880686051`.
+- PR #103 merge commit: `c30b84428767550646b60a28cb5d10e13c8fc8d2`.
+- Packed image SHA256: `5790AA976BBC7A57DF63873DCE192F57C606B63A10EDBBD4FFCEE52F9D15F44A`.
+- SPI Burn, SPI Verify, cold boot, unified daily update, weather and agenda display, disconnected five-minute refresh, BLE reconnect, and no duplicate or second-black refresh: Owner PASS.
+- No BIN or build artifact is tracked by Git.
 
 ## Next Canonical Action
 
-`TASK D18A - AGENDA FIRMWARE SPI FINAL AUDIT`
+`TASK D19A - GOOGLE CALENDAR PRODUCTION AUTH READINESS AUDIT`
 
 Owner-visible goal:
 
-- Confirm the merged agenda-capable firmware source is the exact canonical baseline.
-- Produce fresh build and size evidence before any persistent SPI package is prepared.
-- Preserve the validated daily layout, weather row, Google agenda rows, D2 time flow, scheduler, and first-refresh recovery.
-- Keep the canonical web URL unchanged.
+- Remove uncertainty around the Google "unverified/test app" warning on Android.
+- Determine the exact Google Cloud publishing and verification requirements for the existing read-only Calendar flow.
+- Preserve optional Calendar behavior: users without Google Calendar must never be forced to sign in.
+- Preserve session privacy and keep OAuth secrets out of Git.
+- Keep the canonical URL and BLE protocol unchanged.
 
 Audit gates:
 
 1. Start from clean `main` with `HEAD == origin/main`.
-2. Confirm all required agenda renderer and protocol commits are in history.
-3. Bootstrap canonical source to the SDK and verify source parity.
-4. Run existing firmware and agenda smoke checks.
-5. Rebuild Keil only after source and size audit passes.
-6. Require 0 errors, 0 warnings, and raw BIN below the packer limit.
-7. Do not pack or Burn SPI before Owner approves the measured build.
-8. Do not commit BIN, AXF, MAP, SDK output, or `_incoming` artifacts.
+2. Audit the current OAuth client, consent-screen audience, test-user state, authorized JavaScript origin, and requested scope.
+3. Confirm which warning can be removed by publishing versus which requires Google verification.
+4. Confirm Android Chrome behavior for sign-in, reload, expiry, revoke, and users who skip Calendar.
+5. Define the smallest safe implementation or console-only change before editing the web.
+6. Do not modify firmware, BLE protocol, `test.html`, BIN, SDK output, or SPI state.
 
 ## Expected Scope
 
-- Audit and evidence first.
-- No feature implementation is authorized by this closeout.
-- Exact D18A tracked files must be defined when that task starts.
+- Audit and design first.
+- No Google client secret may be committed or embedded.
+- No web implementation starts until the production-auth boundary is documented.
