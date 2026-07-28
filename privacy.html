@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Chính sách quyền riêng tư của EINK Clock cho Google Calendar và dữ liệu thiết bị.">
+  <title>Quyền riêng tư - EINK Clock</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, system-ui, sans-serif;
+      --bg: #07101b;
+      --card: #111c2c;
+      --line: #31506f;
+      --text: #f4f8ff;
+      --muted: #b4c2d5;
+      --accent: #68d6a5;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: linear-gradient(#050a12, #101a2a);
+      color: var(--text);
+    }
+    main {
+      width: min(760px, calc(100% - 28px));
+      margin: 0 auto;
+      padding: 28px 0 48px;
+    }
+    header, section {
+      margin-bottom: 14px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(17, 28, 44, .97);
+    }
+    h1, h2 { margin-top: 0; }
+    h1 { font-size: clamp(1.75rem, 5vw, 2.4rem); }
+    h2 { font-size: 1.15rem; }
+    p, li { color: var(--muted); line-height: 1.6; }
+    a { color: var(--accent); }
+    .eyebrow {
+      margin: 0 0 8px;
+      color: var(--accent);
+      font-weight: 800;
+    }
+    .updated { margin-bottom: 0; font-size: .9rem; }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <p class="eyebrow">EINK Clock</p>
+    <h1>Chính sách quyền riêng tư</h1>
+    <p>EINK Clock là trang web điều khiển đồng hồ e-ink cá nhân. Google Calendar là tính năng tùy chọn và chỉ hoạt động khi người dùng chủ động cho phép.</p>
+    <p class="updated">Cập nhật: 28/07/2026</p>
+  </header>
+
+  <section>
+    <h2>Dữ liệu Google Calendar được đọc</h2>
+    <p>Ứng dụng chỉ xin quyền đọc lịch bằng phạm vi <code>calendar.readonly</code>. Ứng dụng đọc các sự kiện có giờ trong ngày từ lịch chính để tạo tối đa hai dòng lịch ngắn trên đồng hồ.</p>
+    <p>Ứng dụng không tạo, sửa hoặc xóa sự kiện Google Calendar.</p>
+  </section>
+
+  <section>
+    <h2>Cách dữ liệu được sử dụng</h2>
+    <ul>
+      <li>Dữ liệu lịch chỉ dùng để hiển thị lịch trong ngày trên trang và gửi phần tóm tắt đã chọn tới đồng hồ qua Bluetooth.</li>
+      <li>Quyền Google Calendar, access token và dữ liệu sự kiện chỉ được giữ trong phiên của tab trình duyệt.</li>
+      <li>Ứng dụng không có máy chủ lưu access token, refresh token hoặc nội dung lịch.</li>
+      <li>Ứng dụng không bán, chia sẻ cho quảng cáo hoặc dùng dữ liệu lịch để theo dõi người dùng.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Vị trí, thời tiết và Bluetooth</h2>
+    <p>Vị trí điện thoại chỉ được dùng khi người dùng yêu cầu lấy thời tiết. Trang không lưu vị trí trên máy chủ. Kết nối Bluetooth chỉ trao đổi trực tiếp giữa trình duyệt và đồng hồ được người dùng chọn.</p>
+  </section>
+
+  <section>
+    <h2>Thu hồi quyền và xóa dữ liệu</h2>
+    <p>Người dùng có thể bấm <strong>Ngắt quyền lịch</strong> trên trang để thu hồi quyền và xóa dữ liệu lịch của phiên hiện tại. Đóng tab cũng xóa access token và dữ liệu phiên. Người dùng còn có thể thu hồi quyền EINK Clock trong phần bảo mật của tài khoản Google.</p>
+  </section>
+
+  <section>
+    <h2>Liên hệ</h2>
+    <p>Phản hồi về quyền riêng tư có thể gửi tại <a href="https://github.com/onlysky17/Clock/issues">trang hỗ trợ EINK Clock trên GitHub</a>.</p>
+    <p><a href="./test.html">Quay lại EINK Clock</a></p>
+  </section>
+</main>
+</body>
+</html>
