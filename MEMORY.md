@@ -333,3 +333,20 @@ Verified D3D2 historical state:
 - D16 series currently ends at D16B.
 - No D16C scope has been defined.
 - Next milestone requires an explicit Owner decision.
+
+## TASK D17A Unified Daily Update Flow Policy Closeout
+
+- Status: CLOSED, MERGED, automated policy validation PASS.
+- PR: #98 - TASK D17A: Define unified daily update flow.
+- Implementation commit: `74348f3569015437940aed84b4b8118d2f574911`.
+- Merge commit: `1af2f6dc22597110fdfc869446bb5ebdac0cc202`.
+- Canonical web URL: `https://onlysky17.github.io/Clock/test.html`.
+- D17A is design-only.
+- Primary Product Mode action defined: `Cập nhật màn hình hôm nay`.
+- Canonical sequence: weather, Google agenda, device time, daily context, then exactly one visible render.
+- Weather and Calendar failures degrade independently.
+- Previous-day agenda must never be reused.
+- The web must never auto-connect BLE.
+- Existing technical controls remain available under Advanced.
+- No firmware, BLE protocol, web runtime, `test.html`, OAuth, BIN, build, pack, flash, SPI Burn, or physical-device change.
+- Next approved task: `TASK D17B - IMPLEMENT UNIFIED DAILY UPDATE FLOW`.

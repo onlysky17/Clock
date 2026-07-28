@@ -407,3 +407,29 @@ Planning state:
 - D16B implementation is complete.
 - No D16C task is defined.
 - Await explicit Owner selection of the next milestone.
+
+## Current D17A closeout state
+
+TASK D17A is CLOSED and MERGED.
+
+- PR: #98 - Define unified daily update flow.
+- Implementation commit: `74348f3569015437940aed84b4b8118d2f574911`.
+- Merge commit: `1af2f6dc22597110fdfc869446bb5ebdac0cc202`.
+- Policy smoke before merge: PASS.
+- Post-merge policy content validation: PASS.
+- Post-merge smoke syntax validation: PASS.
+- Change type: design and automated policy smoke only.
+
+D17A defines:
+
+- One primary Product Mode action: `Cập nhật màn hình hôm nay`.
+- Manual BLE connection only; no browser auto-connect.
+- Weather, agenda, device-time, daily-context, and final-render sequencing.
+- Independent degraded behavior for weather and Calendar failures.
+- Previous-day agenda rejection and controlled same-day cache reuse.
+- One active unified run and exactly one final visible render.
+- Existing diagnostic controls preserved under Advanced.
+
+Next canonical task:
+
+- `TASK D17B - IMPLEMENT UNIFIED DAILY UPDATE FLOW`.
