@@ -363,3 +363,17 @@ Verified D3D2 historical state:
 - No firmware, BLE protocol, web runtime, `test.html`, OAuth, BIN, build, pack, flash, SPI Burn, or physical-device change.
 - D17B implementation is complete and merged.
 - Next approved task: `TASK D18A - AGENDA FIRMWARE SPI FINAL AUDIT`.
+
+## TASK D18B Agenda Firmware SPI Final Closeout
+
+- Status: CLOSED, MERGED, SPI PHYSICAL PASS.
+- PR: #103 - TASK D18B: Prepare agenda firmware SPI final.
+- Feature commit: `cdf3d1e050b8e236af56c8f26333307880686051`.
+- Merge commit: `c30b84428767550646b60a28cb5d10e13c8fc8d2`.
+- Canonical web URL: `https://onlysky17.github.io/Clock/test.html`.
+- Build: Code `45232`, RO-data `3632`, RW-data `552`, ZI-data `22956`.
+- Raw BIN: `50552` bytes, SHA256 `586DB6FFFAD3B5121982B291E9A32032C73C1878DF199872C414E69C7C434063`.
+- Packed image: `262144` bytes, SHA256 `5790AA976BBC7A57DF63873DCE192F57C606B63A10EDBBD4FFCEE52F9D15F44A`.
+- Owner confirmed SPI Burn, SPI Verify, cold boot, unified daily update, agenda/weather display, disconnected five-minute refresh, BLE reconnect, and no duplicate or second-black refresh: PASS.
+- No BIN, AXF, MAP, SDK output, or `_incoming` artifact was committed.
+- Next approved task: `TASK D19A - GOOGLE CALENDAR PRODUCTION AUTH READINESS AUDIT`.
