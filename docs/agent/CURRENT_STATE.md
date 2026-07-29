@@ -474,3 +474,26 @@ TASK D18B is CLOSED, MERGED, and SPI PHYSICAL PASS.
 Next canonical task:
 
 - `TASK D19A - GOOGLE CALENDAR PRODUCTION AUTH READINESS AUDIT`.
+
+## Current D19B production-auth handoff
+
+TASK D19B web preparation is MERGED. Google production approval is not yet
+verified.
+
+- PR #106 feature commit: `07ed843422846558260146d305f35744e08e95bf`.
+- PR #106 merge commit: `8b000d84a5cb9875626216246f7547d99087c96d`.
+- PR #107 feature commit: `244a84c5920dc701f94d7e231aad99b88fbcde40`.
+- PR #107 merge commit: `eab04d49ccb5ff8ab84d73d2b5555b5631db7201`.
+- Canonical app: `https://onlysky17.github.io/Clock/test.html`.
+- Public privacy policy: `https://onlysky17.github.io/Clock/privacy.html`.
+- Product Mode now exposes a visible `Quyền riêng tư` link outside Advanced.
+- Google Calendar stays optional and requests only `calendar.readonly`.
+- Users who skip Calendar retain time sync, weather, BLE, and rendering.
+- No firmware, BLE protocol, `test.html`, BIN, build, pack, flash, or device
+  state changed.
+- Google Cloud production publishing, scope approval, and removal of the
+  unverified-app warning remain Owner verification gates.
+
+Next canonical action:
+
+- `TASK D19C - GOOGLE CALENDAR PRODUCTION APPROVAL GATE`.
