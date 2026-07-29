@@ -25,6 +25,7 @@
 .advanced{margin:18px 0;border:1px solid var(--line);border-radius:12px;background:rgba(11,20,33,.96);overflow:hidden}
 .advanced>summary{cursor:pointer;list-style:none;padding:15px 16px;font-weight:850;color:#dbeafe}.advanced>summary::-webkit-details-marker{display:none}
 .advanced>summary:focus-visible{outline:2px solid #93c5fd;outline-offset:3px}.advancedBody{padding:0 16px 16px}.advancedBody .card{border-radius:10px;background:#0e1928}
+.productPrivacy{margin:16px 0 4px;text-align:center;font-size:.88rem}.productPrivacy a{color:#b5f7dd;font-weight:800;text-underline-offset:3px}
 .row{display:flex;flex-wrap:wrap;gap:9px;align-items:center}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:9px}
 button,input,select{min-height:40px;padding:10px 12px;border:1px solid #526d8f;border-radius:10px;background:#1a2940;color:white;font-weight:750}
 button{cursor:pointer}button.primary{background:#1d4ed8}button.good{background:#066047}button:disabled{opacity:.4;cursor:not-allowed}
@@ -332,9 +333,13 @@ function setupProductMode(){
   advanced.className='advanced';
   advanced.id='advancedPanel';
   advanced.innerHTML='<summary>Kỹ thuật / Nâng cao</summary><div class="advancedBody"></div>';
+  const privacyLink=document.createElement('p');
+  privacyLink.className='productPrivacy';
+  privacyLink.dataset.einkPrivacyLink='D19B';
+  privacyLink.innerHTML='<a href="../../privacy.html" target="_blank" rel="noopener">Quyền riêng tư</a>';
 
   main.innerHTML='';
-  main.append(header,statusCard,presetCard,identityCard,previewCard,advanced);
+  main.append(header,statusCard,presetCard,identityCard,previewCard,advanced,privacyLink);
   $('identityActionRow').append(refs.d2GetIdentity);
 
   $('productConnectRow').append(refs.connect,refs.disconnect);
