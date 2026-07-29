@@ -2,10 +2,18 @@
 
 ## Status
 
-`PUBLIC POLICY READY / OWNER GOOGLE CONSOLE ACTION REQUIRED`
+`MERGED / PUBLIC POLICY READY / OWNER GOOGLE CONSOLE ACTION REQUIRED`
 
 D19B prepares the public information needed for Google OAuth production review.
 It does not claim that Google has approved or verified the application.
+
+Merged evidence:
+
+- PR #106 merge commit:
+  `8b000d84a5cb9875626216246f7547d99087c96d`
+- PR #107 visible privacy-link merge commit:
+  `eab04d49ccb5ff8ab84d73d2b5555b5631db7201`
+- Product Mode exposes `Quyền riêng tư` outside the Advanced section.
 
 Canonical app:
 
@@ -103,7 +111,7 @@ Until then, the truthful state is:
 
 ## Next Action
 
-Owner action:
+Owner action (`TASK D19C - GOOGLE CALENDAR PRODUCTION APPROVAL GATE`):
 
 `PUBLISH D19B PRIVACY PAGE, COMPLETE GOOGLE CLOUD PRODUCTION SETUP, THEN RUN THE ANDROID VERIFICATION MATRIX`
 

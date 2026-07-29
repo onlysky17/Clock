@@ -377,3 +377,14 @@ Verified D3D2 historical state:
 - Owner confirmed SPI Burn, SPI Verify, cold boot, unified daily update, agenda/weather display, disconnected five-minute refresh, BLE reconnect, and no duplicate or second-black refresh: PASS.
 - No BIN, AXF, MAP, SDK output, or `_incoming` artifact was committed.
 - Next approved task: `TASK D19A - GOOGLE CALENDAR PRODUCTION AUTH READINESS AUDIT`.
+
+## TASK D19B Google Calendar Production Auth Handoff
+
+- Status: WEB MERGED / PUBLIC POLICY READY / GOOGLE APPROVAL NOT YET VERIFIED.
+- PR #106 merged production-auth documentation and the public privacy page at merge commit `8b000d84a5cb9875626216246f7547d99087c96d`.
+- PR #107 merged the visible Product Mode privacy link at merge commit `eab04d49ccb5ff8ab84d73d2b5555b5631db7201`.
+- Canonical app: `https://onlysky17.github.io/Clock/test.html`.
+- Public privacy policy: `https://onlysky17.github.io/Clock/privacy.html`.
+- Google Calendar remains optional and read-only; users can use time, weather, BLE, and rendering without signing in.
+- No Google client secret, refresh token, Calendar content, BIN, firmware, or BLE protocol change was committed.
+- Next approved action: `TASK D19C - GOOGLE CALENDAR PRODUCTION APPROVAL GATE`.
