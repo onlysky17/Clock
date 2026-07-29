@@ -1,14 +1,76 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="vi">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="refresh" content="0; url=./web/clock-app/">
-  <title>EINK Clock</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="google-site-verification" content="fOdDONezWAXAhJ6nh9uycBKjko_NOm1bcfpLhsdrTn0">
+  <meta name="description" content="Eink Clock là ứng dụng web điều khiển đồng hồ e-ink, đồng bộ giờ, thời tiết và lịch Google do người dùng chủ động cấp quyền.">
+  <title>Eink Clock</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, system-ui, sans-serif;
+      background: #07101b;
+      color: #f4f8ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      min-height: 100vh;
+      margin: 0;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background: #07101b;
+    }
+    main {
+      width: min(100%, 680px);
+      padding: 28px;
+      border: 1px solid #2a3d59;
+      border-radius: 8px;
+      background: #111c2c;
+    }
+    .badge {
+      display: inline-block;
+      padding: 6px 10px;
+      border: 1px solid #2d6b52;
+      border-radius: 999px;
+      color: #b5f7dd;
+      background: #092a20;
+      font-weight: 800;
+    }
+    h1 { margin: 16px 0 8px; font-size: 2rem; letter-spacing: 0; }
+    p { color: #b8c7db; line-height: 1.6; }
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+    a {
+      display: inline-flex;
+      min-height: 44px;
+      align-items: center;
+      padding: 10px 14px;
+      border: 1px solid #526d8f;
+      border-radius: 8px;
+      color: #f4f8ff;
+      text-decoration: none;
+      font-weight: 750;
+    }
+    a.primary { border-color: #2563eb; background: #1d4ed8; }
+  </style>
 </head>
 <body>
-  <p>Đang chuyển tới app EINK Clock...</p>
-  <script>
-    location.replace("./web/clock-app/");
-  </script>
+  <main>
+    <span class="badge">Eink Clock</span>
+    <h1>Eink Clock</h1>
+    <p>
+      Ứng dụng web dành cho đồng hồ e-ink HINK213: kết nối thiết bị qua Bluetooth,
+      đồng bộ giờ, chọn mặt đồng hồ và cập nhật nội dung hiển thị.
+    </p>
+    <p>
+      Tính năng Google Calendar là tùy chọn. Ứng dụng chỉ đọc các lịch mà người dùng
+      chủ động cho phép để hiển thị lịch hôm nay; không bán hoặc chia sẻ dữ liệu này.
+    </p>
+    <div class="actions">
+      <a class="primary" href="./test.html">Mở Eink Clock</a>
+      <a href="./privacy.html">Chính sách quyền riêng tư</a>
+    </div>
+  </main>
 </body>
 </html>
