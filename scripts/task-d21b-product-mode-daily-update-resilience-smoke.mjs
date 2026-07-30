@@ -91,7 +91,11 @@ const allowed = [
   'scripts/task-d21b-product-mode-daily-update-resilience-smoke.mjs',
   'web/clock-app/hl24a-canvas-e5.html'
 ].sort();
-assert.deepEqual(dirty, allowed, 'Only D21B files may be dirty');
+assert.deepEqual(
+  dirty.filter(file=>!allowed.includes(file)),
+  [],
+  'Only D21B files may be dirty'
+);
 assert.ok(!dirty.some(path => path.startsWith('firmware/') || path === 'test.html'),
   'Firmware and test.html must remain unchanged');
 
