@@ -497,3 +497,27 @@ verified.
 Next canonical action:
 
 - `TASK D19C - GOOGLE CALENDAR PRODUCTION APPROVAL GATE`.
+
+## Current D20C Product Mode usability closeout
+
+TASK D20C is CLOSED after validating the merged D20B Product Mode on the
+canonical public page.
+
+- D20B feature commit: `2b3e92e`.
+- D20B merge commit: `90c42451c595cfc62ed53ca99998824a2807ab3f`.
+- Canonical URL: `https://onlysky17.github.io/Clock/test.html`.
+- Product Mode shows one primary `Cập nhật màn hình hôm nay` action.
+- Clock-face selection remains directly available.
+- Optional weather remains available through `Tóm tắt trong ngày`.
+- `Kỹ thuật / Nâng cao` is closed by default and retains detailed progress,
+  preferences, identity, preview, D2, E5, and E6 controls.
+- Desktop and 360 px mobile canonical-page checks passed without horizontal
+  overflow.
+- Product status mapping and BLE protocol constants are unchanged.
+- Google Calendar is not required by the daily-update action.
+- No firmware, SDK, `test.html`, BIN, build, pack, flash, or physical-device
+  change is part of D20C.
+
+Next canonical action:
+
+- `TASK D21A - PRODUCT MODE DAILY UPDATE RESILIENCE AUDIT`.
