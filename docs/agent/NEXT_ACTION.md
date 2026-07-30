@@ -7,24 +7,28 @@
 - D20A removed Google Calendar from Product Mode and the daily update flow.
 - D20B keeps one clear `Cập nhật màn hình hôm nay` action near the top.
 - D20C canonical desktop and 360 px mobile usability checks passed.
-- Clock-face selection and optional weather remain directly reachable.
-- Detailed progress, preferences, identity, preview, and engineering controls
-  remain available in the closed-by-default advanced section.
+- D21A audited daily-update recovery without changing runtime behavior.
+- Weather failure already degrades to clock update, but transient failure
+  currently clears the Owner's weather choice.
+- BLE disconnect currently leaves an active ACK wait until timeout.
+- Device BUSY handling is duplicated and can skip its wait when cached render
+  state is already COMPLETE.
 - Product status mapping, BLE protocol, firmware, SDK, `test.html`, BIN, build,
-  pack, flash, and physical-device behavior are unchanged.
+  pack, flash, and physical-device behavior remain unchanged.
 
 ## Next Canonical Action
 
-`TASK D21A - PRODUCT MODE DAILY UPDATE RESILIENCE AUDIT`
+`TASK D21B - HARDEN PRODUCT MODE DAILY UPDATE RECOVERY`
 
 Owner-visible goal:
 
-- Audit recovery when weather or location lookup fails.
-- Audit recovery when BLE disconnects or the device reports busy during the
-  daily update.
-- Keep one primary daily action without adding technical buttons to Product
-  Mode.
-- Define the smallest follow-up patch before changing web or firmware.
+- Preserve the Owner's weather selection and valid same-day weather when a
+  transient location or weather lookup fails.
+- Reject the pending BLE wait immediately on disconnect, release Product Mode,
+  and require the Owner to reconnect.
+- Use one bounded BUSY retry after the active device render completes.
+- Keep exactly one primary action and exactly one physical render per successful
+  update.
 
-D21A is audit/design only. Do not change firmware or protocol until its failure
-and retry policy is approved.
+D21B is web-only. Do not change firmware, protocol, scheduler, `test.html`, or
+add technical controls to Product Mode.
