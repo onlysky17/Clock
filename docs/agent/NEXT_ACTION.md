@@ -4,23 +4,27 @@
 
 - Repository: `D:\EINK\Clock`
 - Canonical web URL: `https://onlysky17.github.io/Clock/test.html`
-- D20A removes Google Calendar from Product Mode and the daily update flow.
-- `Cập nhật màn hình hôm nay` uses weather, time sync, and one device render.
-- Weather remains optional.
-- The monthly calendar clock face remains available.
-- Hidden empty agenda fields remain only for BLE packet compatibility.
-- No firmware, BLE protocol, `test.html`, BIN, build, pack, flash, or physical
-  device change is part of D20A.
+- D20A removed Google Calendar from Product Mode and the daily update flow.
+- D20B keeps one clear `Cập nhật màn hình hôm nay` action near the top.
+- Product Mode still exposes connection, status, clock faces, and optional
+  weather.
+- Detailed progress, preferences, identity, preview, and engineering controls
+  remain available in the closed-by-default advanced section.
+- Weather, time sync, device rendering, BLE protocol, and clock-face behavior
+  are unchanged.
+- No firmware, SDK, `test.html`, BIN, build, pack, flash, or physical-device
+  change is part of D20B.
 
 ## Next Canonical Action
 
-`TASK D20B - SIMPLIFY PRODUCT MODE DAILY CONTROLS`
+`TASK D20C - PRODUCT MODE OWNER USABILITY VALIDATION`
 
 Owner-visible goal:
 
-- Keep one clear daily-update action at the top.
-- Reduce technical clutter in Product Mode.
-- Keep advanced BLE and engineering controls available in the advanced section.
-- Preserve weather, time sync, clock-face selection, and rendering behavior.
+- Confirm the canonical mobile page shows one obvious daily-update action.
+- Confirm clock-face selection and optional weather remain easy to reach.
+- Confirm the advanced section is closed by default and still exposes all
+  engineering controls when opened.
+- Close D20B after the merged web page passes this short usability check.
 
-D20B starts only after D20A is merged.
+D20C starts only after D20B is merged.
