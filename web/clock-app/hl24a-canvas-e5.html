@@ -3,9 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="google-calendar-client-id" content="64961652220-4b2s7mnvqfut2fsu213gokbi28qs74t6.apps.googleusercontent.com">
-<title>TASK D17B - Cập nhật màn hình hôm nay</title>
-<script src="https://accounts.google.com/gsi/client" async defer></script>
+<title>TASK D20A - Cập nhật hôm nay không cần lịch</title>
 <style>
 :root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;--bg:#07101b;--card:#111c2c;--line:#2a3d59;--text:#f4f8ff;--muted:#9fb1c8;--ok:#45d99c;--warn:#ffd166;--bad:#ff6b86}
 *{box-sizing:border-box}body{margin:0;background:linear-gradient(#050a12,#101a2a);color:var(--text)}main{max-width:1040px;margin:auto;padding:20px}
@@ -20,8 +18,7 @@
 .preferencePanel{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}.preferencePanel h3{margin:0 0 9px;font-size:1rem}.preferenceRow{margin-bottom:9px}.preferenceRow button{min-width:92px}.preferenceHint{margin:4px 0 9px;font-size:.85rem}
 .dailyContextPanel{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}.dailyContextPanel[hidden]{display:none}.dailyContextPanel h3{margin:0 0 9px;font-size:1rem}.dailyContextGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:9px}.dailyContextGrid label{display:grid;gap:5px;color:var(--muted);font-size:.82rem}.dailyContextGrid input,.dailyContextGrid select{width:100%}
 .weatherAutoRow{margin:0 0 10px}.weatherAutoStatus{margin:8px 0;color:var(--muted);font-size:.85rem}.weatherAutoStatus.ok{color:var(--ok)}.weatherAutoStatus.bad{color:var(--bad)}
-.calendarImportPanel{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}.calendarImportActions{margin:9px 0}.calendarAgendaRows{display:grid;gap:8px}.calendarAgendaRow{display:grid;grid-template-columns:minmax(110px,.7fr) minmax(100px,.5fr) minmax(0,1fr);gap:8px;align-items:end}.calendarAgendaRow label{display:grid;gap:4px;color:var(--muted);font-size:.82rem}.calendarAgendaRow input{width:100%}.calendarAgendaTitle{min-width:0;padding:10px 0;color:var(--muted);overflow-wrap:anywhere}.calendarPrivacy{margin:8px 0 0;font-size:.82rem}
-.unifiedDailyPanel{margin-top:14px;padding:14px;border:1px solid #2f755d;border-radius:11px;background:#0b211c}.unifiedDailyHeader{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}.unifiedDailyHeader button{flex:1 1 230px}.unifiedDailyResult{flex:1 1 230px;color:var(--muted)}.unifiedDailyResult.success{color:var(--ok)}.unifiedDailyResult.degraded{color:var(--warn)}.unifiedDailyResult.failure{color:var(--bad)}.unifiedDailySteps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:11px}.unifiedDailyStep{min-width:0;padding:9px;border:1px solid var(--line);border-radius:9px;background:#0b1421}.unifiedDailyStep span{display:block;color:var(--muted);font-size:.76rem}.unifiedDailyStep strong{display:block;margin-top:3px;font-size:.88rem;overflow-wrap:anywhere}.unifiedDailyStep.running strong{color:var(--warn)}.unifiedDailyStep.success strong{color:var(--ok)}.unifiedDailyStep.degraded strong{color:var(--warn)}.unifiedDailyStep.failure strong{color:var(--bad)}
+.unifiedDailyPanel{margin-top:14px;padding:14px;border:1px solid #2f755d;border-radius:11px;background:#0b211c}.unifiedDailyHeader{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}.unifiedDailyHeader button{flex:1 1 230px}.unifiedDailyResult{flex:1 1 230px;color:var(--muted)}.unifiedDailyResult.success{color:var(--ok)}.unifiedDailyResult.degraded{color:var(--warn)}.unifiedDailyResult.failure{color:var(--bad)}.unifiedDailySteps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:11px}.unifiedDailyStep{min-width:0;padding:9px;border:1px solid var(--line);border-radius:9px;background:#0b1421}.unifiedDailyStep span{display:block;color:var(--muted);font-size:.76rem}.unifiedDailyStep strong{display:block;margin-top:3px;font-size:.88rem;overflow-wrap:anywhere}.unifiedDailyStep.running strong{color:var(--warn)}.unifiedDailyStep.success strong{color:var(--ok)}.unifiedDailyStep.degraded strong{color:var(--warn)}.unifiedDailyStep.failure strong{color:var(--bad)}
 .advanced{margin:18px 0;border:1px solid var(--line);border-radius:12px;background:rgba(11,20,33,.96);overflow:hidden}
 .advanced>summary{cursor:pointer;list-style:none;padding:15px 16px;font-weight:850;color:#dbeafe}.advanced>summary::-webkit-details-marker{display:none}
 .advanced>summary:focus-visible{outline:2px solid #93c5fd;outline-offset:3px}.advancedBody{padding:0 16px 16px}.advancedBody .card{border-radius:10px;background:#0e1928}
@@ -37,7 +34,7 @@ canvas{display:block;width:min(100%,500px);height:auto;image-rendering:pixelated
 progress{width:100%;height:17px;margin-top:12px}textarea{width:100%;min-height:260px;padding:12px;border:1px solid var(--line);border-radius:10px;background:#050910;color:#cfe2ff;font:12px/1.5 ui-monospace,Consolas,monospace}
 small{color:var(--muted)}
 @media(max-width:600px){.unifiedDailySteps{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:420px){main{padding:12px}.identityCard{min-width:0}.identityGrid,.compatibilityState,.calendarAgendaRow{grid-template-columns:minmax(0,1fr)}.compatibilityState small{grid-column:auto}.stat strong{overflow-wrap:anywhere}.calendarAgendaTitle{padding:0 0 8px}.unifiedDailyHeader{align-items:stretch}}
+@media(max-width:420px){main{padding:12px}.identityCard{min-width:0}.identityGrid,.compatibilityState{grid-template-columns:minmax(0,1fr)}.compatibilityState small{grid-column:auto}.stat strong{overflow-wrap:anywhere}.unifiedDailyHeader{align-items:stretch}}
 @media(max-width:360px){.unifiedDailySteps{grid-template-columns:minmax(0,1fr)}}
 </style>
 </head>
@@ -183,22 +180,13 @@ const D2_STALE_PRESENT_FLAG=0x80;
 const D2_STALE_WARNING='Thiết bị đang giữ giờ cũ. Hãy đồng bộ giờ hiện tại để tiếp tục chạy đồng hồ.';
 const AUTO_WEATHER_INTERVAL_MS=30*60*1000;
 const AUTO_WEATHER_RETRY_MS=60*1000;
-const GOOGLE_AGENDA_CURRENT_INTERVAL_MS=30*1000;
-const GOOGLE_CALENDAR_REFRESH_INTERVAL_MS=15*60*1000;
-const GOOGLE_CALENDAR_SCOPE='https://www.googleapis.com/auth/calendar.readonly';
-const GOOGLE_CALENDAR_SESSION_KEY='eink.google-calendar.token.v1';
-const GOOGLE_CALENDAR_CLIENT_ID=(
-  window.EINK_GOOGLE_CALENDAR_CLIENT_ID||
-  document.querySelector('meta[name="google-calendar-client-id"]')?.content||
-  ''
-).trim();
 const EINK_TEST_IDENTITY={
-  webBuild:'D17B-UNIFIED-DAILY-UPDATE-20260728',
+  webBuild:'D20A-CALENDAR-FREE-DAILY-20260730',
   expectedFirmware:'D8A00001',
   expectedRuntime:'D8A1',
   expectedSourceId:'D8A00001',
   expectedBin:'BUILD-SPECIFIC',
-  label:'D17B CẬP NHẬT MÀN HÌNH HÔM NAY'
+  label:'D20A CẬP NHẬT HÔM NAY KHÔNG CẦN LỊCH'
 };
 window.EINK_TEST_IDENTITY=EINK_TEST_IDENTITY;
 
@@ -230,13 +218,6 @@ let dailyWeatherRunning=false;
 let autoWeatherTimer=0,autoWeatherRetryTimer=0,autoWeatherRunning=false;
 let autoWeatherRetryUsed=false,autoWeatherLastSuccessAt=0,autoWeatherLastDayKey=-1;
 let autoWeatherLastPacket=null,lastDailyStatus=null;
-let googleCalendarToken='',googleCalendarTokenClient=null,googleCalendarRunning=false;
-let googleCalendarTokenExpiresAt=0;
-let googleCalendarLastFetchAt=0;
-let googleCalendarItems=[],googleCalendarLoaded=false,googleAgendaTimer=0;
-let googleAgendaUiSignature='',googleAgendaDeviceSignature='',googleAgendaAutoArmed=false;
-let googleAgendaFetchedDayKey=-1,googleAgendaUiDayKey=-1;
-let googleAgendaRolloverAttemptDayKey=-1,googleAgendaRolloverAttemptAt=0;
 let unifiedDailyUpdateRunning=false,unifiedDailyUpdatePromise=null;
 
 function setupProductMode(){
@@ -269,7 +250,7 @@ function setupProductMode(){
 
   const statusCard=document.createElement('section');
   statusCard.className='card';
-  statusCard.innerHTML='<h2>Trạng thái</h2><div class="productStatus"><div class="stat"><span>Thiết bị</span><strong id="productState" class="warn">Chưa kết nối</strong></div><div class="stat"><span>Tiến trình</span><span id="productSyncSlot"></span></div></div><div class="row" id="productActionRow"></div><div class="unifiedDailyPanel"><div class="unifiedDailyHeader"><button id="unifiedDailyUpdate" class="good heroAction" type="button">Cập nhật màn hình hôm nay</button><strong id="unifiedDailyResult" class="unifiedDailyResult" role="status" aria-live="polite">Sẵn sàng cập nhật.</strong></div><div class="unifiedDailySteps" role="status" aria-live="polite"><div id="unifiedWeatherStep" class="unifiedDailyStep" data-state="waiting"><span>Thời tiết</span><strong>Đang chờ</strong></div><div id="unifiedCalendarStep" class="unifiedDailyStep" data-state="waiting"><span>Lịch hôm nay</span><strong>Đang chờ</strong></div><div id="unifiedTimeStep" class="unifiedDailyStep" data-state="waiting"><span>Đồng bộ giờ</span><strong>Đang chờ</strong></div><div id="unifiedApplyStep" class="unifiedDailyStep" data-state="waiting"><span>Áp dụng lên màn</span><strong>Đang chờ</strong></div></div></div>';
+  statusCard.innerHTML='<h2>Trạng thái</h2><div class="productStatus"><div class="stat"><span>Thiết bị</span><strong id="productState" class="warn">Chưa kết nối</strong></div><div class="stat"><span>Tiến trình</span><span id="productSyncSlot"></span></div></div><div class="row" id="productActionRow"></div><div class="unifiedDailyPanel"><div class="unifiedDailyHeader"><button id="unifiedDailyUpdate" class="good heroAction" type="button">Cập nhật màn hình hôm nay</button><strong id="unifiedDailyResult" class="unifiedDailyResult" role="status" aria-live="polite">Sẵn sàng cập nhật.</strong></div><div class="unifiedDailySteps" role="status" aria-live="polite"><div id="unifiedWeatherStep" class="unifiedDailyStep" data-state="waiting"><span>Thời tiết</span><strong>Đang chờ</strong></div><div id="unifiedTimeStep" class="unifiedDailyStep" data-state="waiting"><span>Đồng bộ giờ</span><strong>Đang chờ</strong></div><div id="unifiedApplyStep" class="unifiedDailyStep" data-state="waiting"><span>Áp dụng lên màn</span><strong>Đang chờ</strong></div></div></div>';
 
   const presetCard=document.createElement('section');
   presetCard.className='card';
@@ -297,27 +278,6 @@ function setupProductMode(){
   dailyContextPanel.className='dailyContextPanel';
   dailyContextPanel.hidden=true;
   dailyContextPanel.innerHTML='<h3>Th\u1eddi ti\u1ebft t\u1ef1 \u0111\u1ed9ng v\u00e0 l\u1ecbch th\u00e1ng</h3><div class="row weatherAutoRow"><label><input id="dailyAutoWeather" type="checkbox"> T\u1ef1 c\u1eadp nh\u1eadt m\u1ed7i 30 ph\u00fat khi \u0111ang k\u1ebft n\u1ed1i</label><button id="dailyWeatherRefresh" type="button">L\u1ea5y th\u1eddi ti\u1ebft ngay</button></div><div id="dailyAutoWeatherStatus" class="weatherAutoStatus" role="status" aria-live="polite">T\u1ef1 \u0111\u1ed9ng \u0111ang t\u1eaft.</div><div id="dailyWeatherStatus" class="weatherAutoStatus" role="status" aria-live="polite">Ch\u01b0a l\u1ea5y v\u1ecb tr\u00ed.</div><div class="dailyContextGrid"><label><span><input id="dailyWeatherEnabled" type="checkbox"> Hi\u1ec3n th\u1eddi ti\u1ebft</span></label><label>Th\u1eddi ti\u1ebft<select id="dailyWeatherCode"><option value="0">N\u1eafng</option><option value="1">Nhi\u1ec1u m\u00e2y</option><option value="2">M\u01b0a</option><option value="3">Gi\u00f4ng</option><option value="4">S\u01b0\u01a1ng m\u00f9</option><option value="5">Gi\u00f3</option><option value="6">N\u00f3ng</option></select></label><label>Nhi\u1ec7t \u0111\u1ed9 (C)<input id="dailyTemperature" type="number" min="-40" max="80" inputmode="numeric" placeholder="27"></label><label>Kh\u1ea3 n\u0103ng m\u01b0a (%)<input id="dailyPrecipitation" type="number" min="0" max="100" inputmode="numeric" placeholder="0"></label></div><input id="dailyAgendaTime0" type="hidden"><input id="dailyAgendaLabel0" type="hidden"><input id="dailyAgendaTime1" type="hidden"><input id="dailyAgendaLabel1" type="hidden"><p class="preferenceHint">T\u1ef1 \u0111\u1ed9ng ch\u1ec9 ch\u1ea1y khi trang \u0111ang m\u1edf, BLE \u0111\u00e3 k\u1ebft n\u1ed1i v\u00e0 m\u1eb7t T\u00f3m t\u1eaft trong ng\u00e0y \u0111ang \u00e1p d\u1ee5ng. V\u1ecb tr\u00ed kh\u00f4ng \u0111\u01b0\u1ee3c l\u01b0u.</p><p class="preferenceHint">D\u1eef li\u1ec7u th\u1eddi ti\u1ebft: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>.</p><div id="dailyContextStatus" class="profileStatus" role="status" aria-live="polite">Ch\u01b0a g\u1eedi th\u1eddi ti\u1ebft h\u00f4m nay.</div>';
-  const calendarImportPanel=document.createElement('div');
-  calendarImportPanel.className='calendarImportPanel';
-  calendarImportPanel.innerHTML='<h3>L\u1ecbch Google h\u00f4m nay</h3><div class="row calendarImportActions"><button id="googleCalendarConnect" type="button">K\u1ebft n\u1ed1i Google Calendar</button><button id="googleCalendarFetch" type="button">L\u1ea5y l\u1ecbch h\u00f4m nay</button><button id="googleCalendarDisconnect" type="button">Ng\u1eaft quy\u1ec1n l\u1ecbch</button></div><div id="googleCalendarStatus" class="weatherAutoStatus" role="status" aria-live="polite">Ch\u01b0a k\u1ebft n\u1ed1i Google Calendar.</div><div id="googleCalendarRefreshStatus" class="weatherAutoStatus" role="status" aria-live="polite">T\u1ef1 l\u00e0m m\u1edbi \u0111ang t\u1eaft cho \u0111\u1ebfn khi k\u1ebft n\u1ed1i Google Calendar.</div><div id="calendarAgendaRows" class="calendarAgendaRows"></div><p class="calendarPrivacy">Ch\u1ec9 \u0111\u1ecdc l\u1ecbch sau khi b\u1ea1n cho ph\u00e9p. Quy\u1ec1n truy c\u1eadp ch\u1ec9 gi\u1eef trong tab n\u00e0y; \u0111\u00f3ng tab ho\u1eb7c h\u1ebft h\u1ea1n s\u1ebd c\u1ea7n k\u1ebft n\u1ed1i l\u1ea1i.</p>';
-  const agendaRows=calendarImportPanel.querySelector('#calendarAgendaRows');
-  for(const index of [0,1]){
-    const time=dailyContextPanel.querySelector(`#dailyAgendaTime${index}`);
-    const label=dailyContextPanel.querySelector(`#dailyAgendaLabel${index}`);
-    time.type='time';
-    time.setAttribute('aria-label',`Gi\u1edd l\u1ecbch ${index+1}`);
-    label.type='text';
-    label.maxLength=3;
-    label.placeholder='M\u00e3';
-    label.setAttribute('aria-label',`M\u00e3 l\u1ecbch ${index+1}`);
-    const row=document.createElement('div');
-    row.className='calendarAgendaRow';
-    row.innerHTML=`<label>Gi\u1edd ${index+1}</label><label>M\u00e3 ${index+1}</label><span id="dailyAgendaTitle${index}" class="calendarAgendaTitle">Ch\u01b0a c\u00f3</span>`;
-    row.children[0].append(time);
-    row.children[1].append(label);
-    agendaRows.append(row);
-  }
-  dailyContextPanel.insertBefore(calendarImportPanel,dailyContextPanel.querySelector('.preferenceHint'));
   presetCard.append(dailyContextPanel);
 
   const preferencePanel=document.createElement('div');
@@ -1052,7 +1012,7 @@ function addSimpleText(){
 function unifiedDailyUpdateConflicting(){
   const renderInProgress=productD2RenderState===0x01||productD2RenderState===0x02;
   return busy||e6Running||oneTapRunning||d2Running||batteryRunning||
-    dailyWeatherRunning||autoWeatherRunning||googleCalendarRunning||
+    dailyWeatherRunning||autoWeatherRunning||
     renderInProgress||!!pending;
 }
 
@@ -1085,9 +1045,6 @@ function controls(){
   $('dailyCalendar').disabled=locked;
   $('dailyBriefing').disabled=locked;
   $('dailyWeatherRefresh').disabled=locked;
-  $('googleCalendarConnect').disabled=locked||!googleCalendarConfigured()||!!googleCalendarToken;
-  $('googleCalendarFetch').disabled=locked||!googleCalendarToken;
-  $('googleCalendarDisconnect').disabled=locked||!googleCalendarToken;
   $('unifiedDailyUpdate').disabled=!connected||
     identityCompatibility!=='compatible'||
     conflictingLocked||
@@ -2202,15 +2159,6 @@ async function disconnectGoogleCalendar(){
   controls();
 }
 
-window.EINK_GOOGLE_CALENDAR_TEST={
-  normalizeGoogleAgendaLabel,
-  googleCalendarDayBounds,
-  selectGoogleAgendaEvents,
-  googleAgendaSignature,
-  googleAgendaDeviceKey,
-  googleAgendaNeedsDayRollover
-};
-
 function dailyDayKey(date=new Date()){
   return Math.floor((Date.UTC(date.getFullYear(),date.getMonth(),date.getDate())-Date.UTC(2024,0,1))/86400000);
 }
@@ -2639,37 +2587,9 @@ function setUnifiedDailyResult(text,state=''){
 
 function resetUnifiedDailyStatus(){
   setUnifiedDailyStep('unifiedWeatherStep','Đang chờ');
-  setUnifiedDailyStep('unifiedCalendarStep','Đang chờ');
   setUnifiedDailyStep('unifiedTimeStep','Đang chờ');
   setUnifiedDailyStep('unifiedApplyStep','Đang chờ');
   setUnifiedDailyResult('Đang chuẩn bị cập nhật...');
-}
-
-function prepareUnifiedGoogleAgenda(now=new Date()){
-  const currentDayKey=dailyDayKey(now);
-  const hasCurrentDayCache=
-    googleCalendarLoaded&&googleAgendaFetchedDayKey===currentDayKey;
-  if(hasCurrentDayCache){
-    const events=selectGoogleAgendaEvents(googleCalendarItems,now);
-    applyGoogleAgendaEvents(events);
-    googleAgendaUiSignature=googleAgendaSignature(events);
-    googleAgendaUiDayKey=currentDayKey;
-    return {currentDayKey,hasCurrentDayCache:true,events};
-  }
-
-  googleCalendarItems=[];
-  googleCalendarLoaded=false;
-  googleCalendarLastFetchAt=0;
-  googleAgendaUiSignature='';
-  googleAgendaDeviceSignature='';
-  googleAgendaAutoArmed=false;
-  googleAgendaFetchedDayKey=-1;
-  googleAgendaUiDayKey=currentDayKey;
-  googleAgendaRolloverAttemptDayKey=-1;
-  googleAgendaRolloverAttemptAt=0;
-  stopGoogleAgendaClock();
-  applyGoogleAgendaEvents([]);
-  return {currentDayKey,hasCurrentDayCache:false,events:[]};
 }
 
 async function runUnifiedDailyUpdate(){
@@ -2706,42 +2626,6 @@ async function runUnifiedDailyUpdate(){
         degraded.push('thời tiết');
         setUnifiedDailyStep('unifiedWeatherStep','Không có, vẫn tiếp tục','degraded');
         log(`Unified weather degraded: ${error.message}`,'DAILY');
-      }
-
-      setUnifiedDailyStep('unifiedCalendarStep','Đang lấy...','running');
-      const agendaState=prepareUnifiedGoogleAgenda(new Date());
-      if(googleCalendarToken){
-        try{
-          await fetchGoogleCalendarToday({background:false,throwOnError:true});
-          if(googleAgendaFetchedDayKey!==dailyDayKey(new Date())){
-            throw Error('Lịch trả về không thuộc ngày hiện tại.');
-          }
-          const eventCount=selectGoogleAgendaEvents(googleCalendarItems,new Date()).length;
-          setUnifiedDailyStep(
-            'unifiedCalendarStep',
-            eventCount?`Đã lấy ${eventCount} lịch`:'Hôm nay không có lịch',
-            'success'
-          );
-        }catch(error){
-          const currentCache=
-            agendaState.hasCurrentDayCache&&
-            agendaState.currentDayKey===dailyDayKey(new Date());
-          if(currentCache){
-            applyGoogleAgendaEvents(selectGoogleAgendaEvents(googleCalendarItems,new Date()));
-            setUnifiedDailyStep('unifiedCalendarStep','Dùng lịch đã lưu hôm nay','degraded');
-          }else{
-            prepareUnifiedGoogleAgenda(new Date());
-            setUnifiedDailyStep('unifiedCalendarStep','Không lấy được lịch','degraded');
-          }
-          degraded.push('lịch');
-          log(`Unified calendar degraded: ${error.message}`,'DAILY');
-        }
-      }else{
-        setUnifiedDailyStep(
-          'unifiedCalendarStep',
-          agendaState.hasCurrentDayCache?'Dùng lịch đã lưu hôm nay':'Bỏ qua (không dùng lịch)',
-          'success'
-        );
       }
 
       d2Running=true;
@@ -2903,16 +2787,6 @@ async function d2ApplyClockProfile({refreshWeather=true}={}){
   renderD2ProfileStatus(status);
   if(status.result!==0x00)throw Error(`D2 profile rejected: ${d2ResultName(status.result)}`);
   await d2RenderClockFromDevice();
-  if(selectedClockProfile===2&&googleCalendarLoaded){
-    const profileNow=new Date();
-    const currentEvents=selectGoogleAgendaEvents(googleCalendarItems,profileNow);
-    googleAgendaUiSignature=googleAgendaSignature(currentEvents);
-    googleAgendaDeviceSignature=googleAgendaDeviceKey(currentEvents,profileNow);
-    googleAgendaAutoArmed=true;
-    scheduleGoogleAgendaClock();
-  }else{
-    googleAgendaAutoArmed=false;
-  }
   if(dailyPacket&&$('dailyAutoWeather').checked){
     rememberAutomaticWeatherSuccess(dailyPacket);
     scheduleAutomaticWeatherCheck('profile apply');
@@ -3367,9 +3241,6 @@ $('dailyCalendar').onclick=()=>selectClockProfile(0);
 $('dailyBriefing').onclick=()=>selectClockProfile(2);
 $('dailyWeatherRefresh').onclick=runDailyWeatherRefresh;
 $('dailyAutoWeather').onchange=toggleAutomaticWeather;
-$('googleCalendarConnect').onclick=connectGoogleCalendar;
-$('googleCalendarFetch').onclick=fetchGoogleCalendarToday;
-$('googleCalendarDisconnect').onclick=disconnectGoogleCalendar;
 $('unifiedDailyUpdate').onclick=runUnifiedDailyUpdate;
 for(const input of document.querySelectorAll('#dailyContextPanel input,#dailyContextPanel select')){
   input.addEventListener('input',()=>{if(selectedClockProfile===2)drawDailyBriefingPreview()});
@@ -3401,18 +3272,10 @@ $('clearLog').onclick=()=>{$('log').value=''};
 clearWhite();
 drawDailyCalendar();
 resetD2UiDisconnected();
-if(!googleCalendarConfigured()){
-  setGoogleCalendarStatus('Google Calendar ch\u01b0a c\u00f3 m\u00e3 k\u1ebft n\u1ed1i cho trang n\u00e0y.','bad');
-}else if(restoreGoogleCalendarSession()){
-  setGoogleCalendarStatus('\u0110ang kh\u00f4i ph\u1ee5c l\u1ecbch h\u00f4m nay trong tab n\u00e0y.','ok');
-  updateGoogleCalendarRefreshStatus('ok');
-  setTimeout(()=>fetchGoogleCalendarToday({background:true}),0);
-}
 controls();
 markLayoutHealth();
 window.addEventListener('resize',markLayoutHealth);
 document.addEventListener('visibilitychange',()=>{
-  updateGoogleCalendarRefreshStatus();
   if(document.visibilityState!=='visible'){
     clearAutomaticWeatherTimers();
     if($('dailyAutoWeather').checked){
@@ -3421,10 +3284,9 @@ document.addEventListener('visibilitychange',()=>{
   }else{
     autoWeatherRetryUsed=false;
     scheduleAutomaticWeatherCheck('page visible');
-    refreshGoogleAgendaForCurrentTime({forceRolloverRetry:true});
   }
 });
-log('TASK D17B s\u1eb5n s\u00e0ng. C\u1eadp nh\u1eadt th\u1eddi ti\u1ebft, l\u1ecbch, gi\u1edd v\u00e0 m\u00e0n h\u00ecnh theo m\u1ed9t lu\u1ed3ng duy nh\u1ea5t.');
+log('TASK D20A s\u1eb5n s\u00e0ng. C\u1eadp nh\u1eadt th\u1eddi ti\u1ebft, gi\u1edd v\u00e0 m\u00e0n h\u00ecnh m\u00e0 kh\u00f4ng c\u1ea7n l\u1ecbch Google.');
 </script>
 </body>
 </html>
