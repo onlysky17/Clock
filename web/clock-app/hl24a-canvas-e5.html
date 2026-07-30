@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TASK D20A - Cập nhật hôm nay không cần lịch</title>
+<title>TASK D20B - Product Mode gọn cho cập nhật hằng ngày</title>
 <style>
 :root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;--bg:#07101b;--card:#111c2c;--line:#2a3d59;--text:#f4f8ff;--muted:#9fb1c8;--ok:#45d99c;--warn:#ffd166;--bad:#ff6b86}
 *{box-sizing:border-box}body{margin:0;background:linear-gradient(#050a12,#101a2a);color:var(--text)}main{max-width:1040px;margin:auto;padding:20px}
@@ -18,7 +18,7 @@
 .preferencePanel{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}.preferencePanel h3{margin:0 0 9px;font-size:1rem}.preferenceRow{margin-bottom:9px}.preferenceRow button{min-width:92px}.preferenceHint{margin:4px 0 9px;font-size:.85rem}
 .dailyContextPanel{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}.dailyContextPanel[hidden]{display:none}.dailyContextPanel h3{margin:0 0 9px;font-size:1rem}.dailyContextGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:9px}.dailyContextGrid label{display:grid;gap:5px;color:var(--muted);font-size:.82rem}.dailyContextGrid input,.dailyContextGrid select{width:100%}
 .weatherAutoRow{margin:0 0 10px}.weatherAutoStatus{margin:8px 0;color:var(--muted);font-size:.85rem}.weatherAutoStatus.ok{color:var(--ok)}.weatherAutoStatus.bad{color:var(--bad)}
-.unifiedDailyPanel{margin-top:14px;padding:14px;border:1px solid #2f755d;border-radius:11px;background:#0b211c}.unifiedDailyHeader{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}.unifiedDailyHeader button{flex:1 1 230px}.unifiedDailyResult{flex:1 1 230px;color:var(--muted)}.unifiedDailyResult.success{color:var(--ok)}.unifiedDailyResult.degraded{color:var(--warn)}.unifiedDailyResult.failure{color:var(--bad)}.unifiedDailySteps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:11px}.unifiedDailyStep{min-width:0;padding:9px;border:1px solid var(--line);border-radius:9px;background:#0b1421}.unifiedDailyStep span{display:block;color:var(--muted);font-size:.76rem}.unifiedDailyStep strong{display:block;margin-top:3px;font-size:.88rem;overflow-wrap:anywhere}.unifiedDailyStep.running strong{color:var(--warn)}.unifiedDailyStep.success strong{color:var(--ok)}.unifiedDailyStep.degraded strong{color:var(--warn)}.unifiedDailyStep.failure strong{color:var(--bad)}
+.unifiedDailyPanel{margin-top:14px;padding:14px;border:1px solid #2f755d;border-radius:11px;background:#0b211c}.unifiedDailyHeader{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}.unifiedDailyHeader button{flex:1 1 230px}.unifiedDailyResult{flex:1 1 230px;color:var(--muted)}.unifiedDailyResult.success{color:var(--ok)}.unifiedDailyResult.degraded{color:var(--warn)}.unifiedDailyResult.failure{color:var(--bad)}.unifiedDailySteps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:11px}.unifiedDailyStep{min-width:0;padding:9px;border:1px solid var(--line);border-radius:9px;background:#0b1421}.unifiedDailyStep span{display:block;color:var(--muted);font-size:.76rem}.unifiedDailyStep strong{display:block;margin-top:3px;font-size:.88rem;overflow-wrap:anywhere}.unifiedDailyStep.running strong{color:var(--warn)}.unifiedDailyStep.success strong{color:var(--ok)}.unifiedDailyStep.degraded strong{color:var(--warn)}.unifiedDailyStep.failure strong{color:var(--bad)}.advancedDailyProgress{margin:0 0 14px;padding:12px;border:1px solid var(--line);border-radius:10px;background:#0e1928}.advancedDailyProgress h3{margin:0 0 8px;font-size:1rem}
 .advanced{margin:18px 0;border:1px solid var(--line);border-radius:12px;background:rgba(11,20,33,.96);overflow:hidden}
 .advanced>summary{cursor:pointer;list-style:none;padding:15px 16px;font-weight:850;color:#dbeafe}.advanced>summary::-webkit-details-marker{display:none}
 .advanced>summary:focus-visible{outline:2px solid #93c5fd;outline-offset:3px}.advancedBody{padding:0 16px 16px}.advancedBody .card{border-radius:10px;background:#0e1928}
@@ -181,12 +181,12 @@ const D2_STALE_WARNING='Thiết bị đang giữ giờ cũ. Hãy đồng bộ gi
 const AUTO_WEATHER_INTERVAL_MS=30*60*1000;
 const AUTO_WEATHER_RETRY_MS=60*1000;
 const EINK_TEST_IDENTITY={
-  webBuild:'D20A-CALENDAR-FREE-DAILY-20260730',
+  webBuild:'D20B-SIMPLE-PRODUCT-20260730',
   expectedFirmware:'D8A00001',
   expectedRuntime:'D8A1',
   expectedSourceId:'D8A00001',
   expectedBin:'BUILD-SPECIFIC',
-  label:'D20A CẬP NHẬT HÔM NAY KHÔNG CẦN LỊCH'
+  label:'D20B PRODUCT MODE GỌN'
 };
 window.EINK_TEST_IDENTITY=EINK_TEST_IDENTITY;
 
@@ -250,7 +250,10 @@ function setupProductMode(){
 
   const statusCard=document.createElement('section');
   statusCard.className='card';
-  statusCard.innerHTML='<h2>Trạng thái</h2><div class="productStatus"><div class="stat"><span>Thiết bị</span><strong id="productState" class="warn">Chưa kết nối</strong></div><div class="stat"><span>Tiến trình</span><span id="productSyncSlot"></span></div></div><div class="row" id="productActionRow"></div><div class="unifiedDailyPanel"><div class="unifiedDailyHeader"><button id="unifiedDailyUpdate" class="good heroAction" type="button">Cập nhật màn hình hôm nay</button><strong id="unifiedDailyResult" class="unifiedDailyResult" role="status" aria-live="polite">Sẵn sàng cập nhật.</strong></div><div class="unifiedDailySteps" role="status" aria-live="polite"><div id="unifiedWeatherStep" class="unifiedDailyStep" data-state="waiting"><span>Thời tiết</span><strong>Đang chờ</strong></div><div id="unifiedTimeStep" class="unifiedDailyStep" data-state="waiting"><span>Đồng bộ giờ</span><strong>Đang chờ</strong></div><div id="unifiedApplyStep" class="unifiedDailyStep" data-state="waiting"><span>Áp dụng lên màn</span><strong>Đang chờ</strong></div></div></div>';
+  statusCard.innerHTML='<h2>Hôm nay</h2><div class="productStatus"><div class="stat"><span>Thiết bị</span><strong id="productState" class="warn">Chưa kết nối</strong></div><div class="stat"><span>Tiến trình</span><span id="productSyncSlot"></span></div></div><div class="unifiedDailyPanel"><div class="unifiedDailyHeader"><button id="unifiedDailyUpdate" class="good heroAction" type="button">Cập nhật màn hình hôm nay</button><strong id="unifiedDailyResult" class="unifiedDailyResult" role="status" aria-live="polite">Sẵn sàng cập nhật.</strong></div></div>';
+  const advancedDailyProgress=document.createElement('div');
+  advancedDailyProgress.className='advancedDailyProgress';
+  advancedDailyProgress.innerHTML='<h3>Tiến trình cập nhật chi tiết</h3><div class="unifiedDailySteps" role="status" aria-live="polite"><div id="unifiedWeatherStep" class="unifiedDailyStep" data-state="waiting"><span>Thời tiết</span><strong>Đang chờ</strong></div><div id="unifiedTimeStep" class="unifiedDailyStep" data-state="waiting"><span>Đồng bộ giờ</span><strong>Đang chờ</strong></div><div id="unifiedApplyStep" class="unifiedDailyStep" data-state="waiting"><span>Áp dụng lên màn</span><strong>Đang chờ</strong></div></div>';
 
   const presetCard=document.createElement('section');
   presetCard.className='card';
@@ -283,7 +286,6 @@ function setupProductMode(){
   const preferencePanel=document.createElement('div');
   preferencePanel.className='preferencePanel';
   preferencePanel.innerHTML='<h3>T\u00f9y ch\u1ecdn hi\u1ec3n th\u1ecb</h3><div class="row preferenceRow" id="hourModeRow"><button id="hour24" type="button">24 gi\u1edd</button><button id="hour12" type="button">12 gi\u1edd</button></div><div class="row preferenceRow" id="cadenceRow"><button id="cadence5" type="button">5 ph\u00fat</button><button id="cadence10" type="button">10 ph\u00fat</button><button id="cadence1" type="button">1 ph\u00fat</button></div><p class="preferenceHint">1 ph\u00fat s\u1ebd t\u0103ng m\u1ee9c d\u00f9ng pin v\u00e0 s\u1ed1 l\u1ea7n refresh panel.</p><div class="row"><button id="preferenceApply" class="good" type="button">\u00c1p d\u1ee5ng t\u00f9y ch\u1ecdn</button></div><div id="preferenceStatus" class="profileStatus" role="status" aria-live="polite">Ch\u01b0a \u0111\u1ecdc t\u00f9y ch\u1ecdn t\u1eeb thi\u1ebft b\u1ecb.</div>';
-  presetCard.append(preferencePanel);
 
   const previewCard=document.createElement('section');
   previewCard.className='card';
@@ -299,13 +301,12 @@ function setupProductMode(){
   privacyLink.innerHTML='<a href="../../privacy.html" target="_blank" rel="noopener">Quyền riêng tư</a>';
 
   main.innerHTML='';
-  main.append(header,statusCard,presetCard,identityCard,previewCard,advanced,privacyLink);
+  main.append(header,statusCard,presetCard,advanced,privacyLink);
   $('identityActionRow').append(refs.d2GetIdentity);
 
   $('productConnectRow').append(refs.connect,refs.disconnect);
   refs.connect.textContent='Kết nối';
   refs.disconnect.textContent='Ngắt kết nối';
-  $('productActionRow').append(refs.d2SetTime,refs.syncClock);
   refs.d2SetTime.textContent='Đồng bộ giờ';
   refs.syncClock.textContent='Gửi lên màn';
   $('productPresetRow').append(refs.dailyCalendar,refs.updateClock,dailyBriefing,profileApply);
@@ -313,10 +314,12 @@ function setupProductMode(){
   refs.updateClock.textContent='Giờ đơn giản';
   refs.updateClock.textContent='Gi\u1edd l\u1edbn';
   $('productSyncSlot').append(refs.syncStatus);
-  statusCard.insertBefore(refs.d2StaleBox,$('productActionRow'));
+  statusCard.insertBefore(refs.d2StaleBox,statusCard.querySelector('.unifiedDailyPanel'));
   previewCard.insertBefore(refs.canvasWrap,previewCard.querySelector('p'));
+  const advancedBody=advanced.querySelector('.advancedBody');
+  advancedBody.append(advancedDailyProgress,preferencePanel,identityCard,previewCard);
   for(const section of originalSections){
-    advanced.querySelector('.advancedBody').append(section);
+    advancedBody.append(section);
   }
 }
 
@@ -3286,7 +3289,7 @@ document.addEventListener('visibilitychange',()=>{
     scheduleAutomaticWeatherCheck('page visible');
   }
 });
-log('TASK D20A s\u1eb5n s\u00e0ng. C\u1eadp nh\u1eadt th\u1eddi ti\u1ebft, gi\u1edd v\u00e0 m\u00e0n h\u00ecnh m\u00e0 kh\u00f4ng c\u1ea7n l\u1ecbch Google.');
+log('TASK D20B s\u1eb5n s\u00e0ng. Product Mode gi\u1eef m\u1ed9t n\u00fat c\u1eadp nh\u1eadt h\u00f4m nay; c\u00e1c c\u00f4ng c\u1ee5 k\u1ef9 thu\u1eadt n\u1eb1m trong m\u1ee5c N\u00e2ng cao.');
 </script>
 </body>
 </html>
