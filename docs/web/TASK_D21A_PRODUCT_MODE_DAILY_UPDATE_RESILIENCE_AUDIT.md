@@ -85,3 +85,28 @@ change:
 
 D21B does not require Keil, BIN, BLE, or panel testing because it changes only
 browser-side orchestration around the existing protocol.
+
+## D21B Implementation
+
+D21B implementation complete.
+
+- A transient weather or location failure keeps the Owner's weather selection.
+  Valid same-day weather is reused; without a valid same-day cache, the update
+  continues without weather.
+- BLE disconnect immediately rejects the active request with
+  `Mất kết nối - hãy kết nối lại`; the existing `finally` path releases the UI
+  and operation locks.
+- Profile, preference, and daily-context writes share one BUSY recovery helper.
+  It waits for a fresh render COMPLETE event and performs exactly one bounded
+  retry. Persistent BUSY stops with `Thiết bị đang bận - thử lại`.
+- The successful flow still performs one profile apply and one physical render.
+  No reconnect, second render, E5/E6 action, firmware, or protocol change was
+  added.
+
+Automated validation:
+
+- `node scripts/task-d21b-product-mode-daily-update-resilience-smoke.mjs`
+- `git diff --check`
+- EINK AUTO PREFLIGHT
+
+This web-only recovery patch does not require Keil, BIN, BLE, or panel testing.

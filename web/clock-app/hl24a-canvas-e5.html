@@ -205,6 +205,7 @@ let d2StalePresent=false;
 let d2StaleRecoveryPending=false;
 let productErrorReason='';
 let productD2Result=null,productD2State=null,productD2RenderResult=null,productD2RenderState=null;
+let d2RenderCompletionSerial=0;
 let deviceIdentity=null;
 let identityProbePending=false;
 let identityCompatibility='disconnected';
@@ -1214,6 +1215,14 @@ function waitFor(predicate,timeout=2000,quiet=false){
   });
 }
 
+function rejectPendingBleWait(message='Mất kết nối - hãy kết nối lại'){
+  if(!pending)return;
+  const item=pending;
+  pending=null;
+  clearTimeout(item.timer);
+  item.reject(Error(message));
+}
+
 async function tx(packet,quiet=false){
   if(!quiet)log(`TX: ${hex(packet)}`);
   if(writeChar.writeValueWithResponse){
@@ -1507,6 +1516,24 @@ function rememberAutomaticWeatherSuccess(packet){
   autoWeatherLastSuccessAt=Date.now();
   autoWeatherLastDayKey=dailyDayKey(new Date());
   autoWeatherRetryUsed=false;
+}
+
+function reuseSameDayWeatherCache(date=new Date()){
+  if(
+    !autoWeatherLastPacket||
+    autoWeatherLastDayKey!==dailyDayKey(date)||
+    (autoWeatherLastPacket[3]&0x01)===0
+  )return false;
+  $('dailyWeatherEnabled').checked=true;
+  $('dailyWeatherCode').value=String(autoWeatherLastPacket[6]);
+  $('dailyTemperature').value=String(
+    autoWeatherLastPacket[7]&0x80
+      ?autoWeatherLastPacket[7]-0x100
+      :autoWeatherLastPacket[7]
+  );
+  $('dailyPrecipitation').value=String(autoWeatherLastPacket[8]);
+  if(selectedClockProfile===2)drawDailyBriefingPreview();
+  return true;
 }
 
 function automaticWeatherNextDelay(){
@@ -2182,9 +2209,11 @@ function dailyAgendaRows(){
   return rows;
 }
 
-function buildD2SetDailyPacket(date=new Date()){
+function buildD2SetDailyPacket(date=new Date(),weatherValidOverride=null){
   const packet=new Uint8Array(20);
-  const weatherValid=$('dailyWeatherEnabled').checked;
+  const weatherValid=weatherValidOverride===null
+    ?$('dailyWeatherEnabled').checked
+    :!!weatherValidOverride;
   const rows=dailyAgendaRows();
   packet[0]=0xD2;
   packet[1]=0x08;
@@ -2477,6 +2506,7 @@ function handleD2Notify(bytes){
       }
       log(`D2 render result=${d2ResultName(status.result)} state=${d2RenderStateName(status.state)}`,'D2');
       if(complete){
+        d2RenderCompletionSerial+=1;
         scheduleIdentityHealthRefresh('render complete');
         if(!autoWeatherRunning)scheduleAutomaticWeatherCheck('render complete');
       }
@@ -2520,6 +2550,7 @@ async function connect(){
     optionalServices:[SERVICE,BATTERY_SERVICE]
   });
   device.addEventListener('gattserverdisconnected',()=>{
+    rejectPendingBleWait();
     server=null;
     token=0;
     e5Success=false;
@@ -2612,6 +2643,8 @@ async function runUnifiedDailyUpdate(){
 
   const run=(async()=>{
     const degraded=[];
+    const now=new Date();
+    let weatherValidForRun=false;
     let hardStep='unifiedTimeStep';
     unifiedDailyUpdateRunning=true;
     resetUnifiedDailyStatus();
@@ -2622,12 +2655,17 @@ async function runUnifiedDailyUpdate(){
       setUnifiedDailyStep('unifiedWeatherStep','Đang lấy...','running');
       try{
         await refreshDailyWeatherFromPhone();
+        weatherValidForRun=true;
         setUnifiedDailyStep('unifiedWeatherStep','Đã cập nhật','success');
       }catch(error){
-        $('dailyWeatherEnabled').checked=false;
-        if(selectedClockProfile===2)drawDailyBriefingPreview();
-        degraded.push('thời tiết');
-        setUnifiedDailyStep('unifiedWeatherStep','Không có, vẫn tiếp tục','degraded');
+        weatherValidForRun=reuseSameDayWeatherCache(now);
+        if(weatherValidForRun){
+          degraded.push('thời tiết mới (dùng dữ liệu hôm nay gần nhất)');
+          setUnifiedDailyStep('unifiedWeatherStep','Dùng dữ liệu gần nhất','degraded');
+        }else{
+          degraded.push('thời tiết');
+          setUnifiedDailyStep('unifiedWeatherStep','Không có, vẫn tiếp tục','degraded');
+        }
         log(`Unified weather degraded: ${error.message}`,'DAILY');
       }
 
@@ -2643,7 +2681,8 @@ async function runUnifiedDailyUpdate(){
       hardStep='unifiedApplyStep';
       setUnifiedDailyStep('unifiedApplyStep','Đang áp dụng...','running');
       selectClockProfile(2);
-      await d2ApplyClockProfile({refreshWeather:false});
+      const dailyPacket=buildD2SetDailyPacket(new Date(),weatherValidForRun);
+      await d2ApplyClockProfile({refreshWeather:false,dailyPacket});
       setUnifiedDailyStep('unifiedApplyStep','Đã hiển thị','success');
       clearProductError();
       setUnifiedDailyResult(
@@ -2760,37 +2799,41 @@ async function d2GetClockProfile(){
   return status;
 }
 
-async function d2ApplyClockProfile({refreshWeather=true}={}){
-  let dailyPacket=null;
+async function d2RequestWithOneBusyRetry(packet,predicate,parseStatus,{timeout=5000}={}){
+  const completionSerial=d2RenderCompletionSerial;
+  const send=async()=>parseStatus(await request(packet,predicate,{timeout}));
+  let status=await send();
+  if(status.result!==0x06)return status;
+  if(d2RenderCompletionSerial===completionSerial){
+    const completed=parseD2RenderStatus(await waitFor(
+      a=>a[0]===0xD2&&a[1]===0x82&&a[3]===0x03,
+      35000
+    ));
+    if(completed.result!==0x00)throw Error(`D2 render ${d2ResultName(completed.result)}`);
+  }
+  status=await send();
+  if(status.result===0x06)throw Error('Thiết bị đang bận - thử lại');
+  return status;
+}
+
+async function d2ApplyClockProfile({refreshWeather=true,dailyPacket=null}={}){
   if(selectedClockProfile===2){
-    if(refreshWeather&&$('dailyAutoWeather').checked)await refreshDailyWeatherFromPhone();
-    dailyPacket=buildD2SetDailyPacket(new Date());
+    if(!dailyPacket){
+      if(refreshWeather&&$('dailyAutoWeather').checked)await refreshDailyWeatherFromPhone();
+      dailyPacket=buildD2SetDailyPacket(new Date());
+    }
     const dailyStatus=await d2SetDailyContext(dailyPacket);
     if(dailyStatus.state!==1)throw Error('Dữ liệu thời tiết chưa ở trạng thái hôm nay.');
   }
-  let status=parseD2ProfileStatus(await request(
+  const status=await d2RequestWithOneBusyRetry(
     buildD2SetProfilePacket(selectedClockProfile),
     a=>a[0]===0xD2&&a[1]===0x84,
-    {timeout:5000}
-  ));
-  if(status.result===0x06){
-    if(productD2RenderState!==0x03){
-      const completed=parseD2RenderStatus(await waitFor(
-        a=>a[0]===0xD2&&a[1]===0x82&&a[3]===0x03,
-        35000
-      ));
-      if(completed.result!==0x00)throw Error(`D2 render ${d2ResultName(completed.result)}`);
-    }
-    status=parseD2ProfileStatus(await request(
-      buildD2SetProfilePacket(selectedClockProfile),
-      a=>a[0]===0xD2&&a[1]===0x84,
-      {timeout:5000}
-    ));
-  }
+    parseD2ProfileStatus
+  );
   renderD2ProfileStatus(status);
   if(status.result!==0x00)throw Error(`D2 profile rejected: ${d2ResultName(status.result)}`);
   await d2RenderClockFromDevice();
-  if(dailyPacket&&$('dailyAutoWeather').checked){
+  if(dailyPacket&&(dailyPacket[3]&0x01)!==0){
     rememberAutomaticWeatherSuccess(dailyPacket);
     scheduleAutomaticWeatherCheck('profile apply');
   }
@@ -2809,25 +2852,11 @@ async function d2GetClockPreferences(){
 }
 
 async function d2ApplyClockPreferences(){
-  let status=parseD2PreferenceStatus(await request(
+  const status=await d2RequestWithOneBusyRetry(
     buildD2SetPreferencePacket(selectedHourMode,selectedRefreshMinutes),
     a=>a[0]===0xD2&&a[1]===0x86,
-    {timeout:5000}
-  ));
-  if(status.result===0x06){
-    if(productD2RenderState!==0x03){
-      const completed=parseD2RenderStatus(await waitFor(
-        a=>a[0]===0xD2&&a[1]===0x82&&a[3]===0x03,
-        35000
-      ));
-      if(completed.result!==0x00)throw Error(`D2 render ${d2ResultName(completed.result)}`);
-    }
-    status=parseD2PreferenceStatus(await request(
-      buildD2SetPreferencePacket(selectedHourMode,selectedRefreshMinutes),
-      a=>a[0]===0xD2&&a[1]===0x86,
-      {timeout:5000}
-    ));
-  }
+    parseD2PreferenceStatus
+  );
   renderD2PreferenceStatus(status);
   if(status.result!==0x00)throw Error(`D2 preference rejected: ${d2ResultName(status.result)}`);
   await d2RenderClockFromDevice();
@@ -2846,25 +2875,11 @@ async function d2GetDailyContext(){
 }
 
 async function d2SetDailyContext(packet=buildD2SetDailyPacket(new Date())){
-  let status=parseD2DailyStatus(await request(
+  const status=await d2RequestWithOneBusyRetry(
     packet,
     a=>a[0]===0xD2&&a[1]===0x88,
-    {timeout:5000}
-  ));
-  if(status.result===0x06){
-    if(productD2RenderState!==0x03){
-      const completed=parseD2RenderStatus(await waitFor(
-        a=>a[0]===0xD2&&a[1]===0x82&&a[3]===0x03,
-        35000
-      ));
-      if(completed.result!==0x00)throw Error(`D2 render ${d2ResultName(completed.result)}`);
-    }
-    status=parseD2DailyStatus(await request(
-      packet,
-      a=>a[0]===0xD2&&a[1]===0x88,
-      {timeout:5000}
-    ));
-  }
+    parseD2DailyStatus
+  );
   renderD2DailyStatus(status);
   if(status.result!==0x00)throw Error(`D2 daily rejected: ${d2ResultName(status.result)}`);
   return status;
