@@ -245,6 +245,8 @@ function setupProductMode(){
   productConnectRow.append(refs.connect,refs.disconnect);
   refs.connect.textContent='Kết nối thiết bị';
   refs.disconnect.textContent='Ngắt kết nối';
+  refs.connect.onclick=connectFromProductMode;
+  refs.disconnect.onclick=()=>device?.gatt?.disconnect();
 
   const identityCard=document.createElement('section');
   identityCard.className='card identityCard';
@@ -311,9 +313,6 @@ function setupProductMode(){
   main.append(header,statusCard,presetCard,advanced,privacyLink);
   $('identityActionRow').append(refs.d2GetIdentity);
 
-  $('productConnectRow').append(refs.connect,refs.disconnect);
-  refs.connect.textContent='Kết nối';
-  refs.disconnect.textContent='Ngắt kết nối';
   refs.d2SetTime.textContent='Đồng bộ giờ';
   refs.syncClock.textContent='Gửi lên màn';
   $('productPresetRow').append(refs.dailyCalendar,refs.updateClock,dailyBriefing,profileApply);
@@ -2550,6 +2549,59 @@ function onNotify(event){
   }
 }
 
+function setProductConnectMessage(text,state=""){
+  const target=$("unifiedDailyResult");
+  if(!target)return;
+  target.textContent=text;
+  target.className="unifiedDailyResult"+(state?" "+state:"");
+}
+
+async function connectFromProductMode(){
+  if(busy)return;
+  setProductConnectMessage("Đang mở danh sách thiết bị...");
+
+  if(!window.isSecureContext){
+    setProductConnectMessage("Trang phải chạy bằng HTTPS để dùng Bluetooth.","failure");
+    return;
+  }
+
+  if(!navigator.bluetooth || typeof navigator.bluetooth.requestDevice!=="function"){
+    setProductConnectMessage("Trình duyệt này không hỗ trợ Web Bluetooth. Hãy mở bằng Chrome trên Android.","failure");
+    return;
+  }
+
+  try{
+    setBusy(true);
+    await connect();
+    setProductConnectMessage("Đã kết nối thiết bị.","success");
+  }catch(error){
+    const cancelled=error&&error.name==="NotFoundError";
+    const detail=error&&error.message?error.message:String(error);
+    const message=cancelled
+      ?"Chưa chọn thiết bị hoặc danh sách thiết bị đã đóng."
+      :"Không kết nối được: "+detail;
+
+    if(!cancelled){
+      markProductError(message);
+      setResult("FAIL","bad");
+    }
+
+    setProductConnectMessage(
+      message,
+      cancelled?"degraded":"failure"
+    );
+
+    log(
+      "BLE connect failed ["+
+      (error&&error.name?error.name:"Error")+
+      "]: "+detail,
+      "ERROR"
+    );
+  }finally{
+    setBusy(false);
+  }
+}
+
 async function connect(){
   device=await navigator.bluetooth.requestDevice({
     filters:[{namePrefix:'EINK'},{namePrefix:'HINK'}],
@@ -3272,7 +3324,7 @@ for(const input of document.querySelectorAll('#dailyContextPanel input,#dailyCon
 $('sample').onclick=drawSample;
 $('addText').onclick=addSimpleText;
 $('repack').onclick=repack;
-$('connect').onclick=()=>safe(connect);
+$('connect').onclick=connectFromProductMode;
 $('disconnect').onclick=()=>device?.gatt?.disconnect();
 $('send').onclick=()=>safe(sendFramebuffer);
 $('refresh').onclick=()=>safe(refreshPanel);
