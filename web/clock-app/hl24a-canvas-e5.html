@@ -2604,9 +2604,16 @@ async function connectFromProductMode(){
 
 async function connect(){
   device=await navigator.bluetooth.requestDevice({
-    filters:[{namePrefix:'EINK'},{namePrefix:'HINK'}],
+    acceptAllDevices:true,
     optionalServices:[SERVICE,BATTERY_SERVICE]
   });
+
+  const selectedName=device?.name||"";
+  if(!/^(?:EINK|HINK)/i.test(selectedName)){
+    const wrongName=selectedName||"không có tên";
+    device=null;
+    throw Error("Sai thiết bị: "+wrongName+". Hãy chọn HINK213-CLOCK.");
+  }
   device.addEventListener('gattserverdisconnected',()=>{
     rejectPendingBleWait();
     server=null;
