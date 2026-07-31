@@ -21,7 +21,7 @@
 .unifiedDailyPanel{margin-top:14px;padding:14px;border:1px solid #2f755d;border-radius:11px;background:#0b211c}.unifiedDailyHeader{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}.unifiedDailyHeader button{flex:1 1 230px}.unifiedDailyResult{flex:1 1 230px;color:var(--muted)}.unifiedDailyResult.success{color:var(--ok)}.unifiedDailyResult.degraded{color:var(--warn)}.unifiedDailyResult.failure{color:var(--bad)}.unifiedDailySteps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:11px}.unifiedDailyStep{min-width:0;padding:9px;border:1px solid var(--line);border-radius:9px;background:#0b1421}.unifiedDailyStep span{display:block;color:var(--muted);font-size:.76rem}.unifiedDailyStep strong{display:block;margin-top:3px;font-size:.88rem;overflow-wrap:anywhere}.unifiedDailyStep.running strong{color:var(--warn)}.unifiedDailyStep.success strong{color:var(--ok)}.unifiedDailyStep.degraded strong{color:var(--warn)}.unifiedDailyStep.failure strong{color:var(--bad)}.advancedDailyProgress{margin:0 0 14px;padding:12px;border:1px solid var(--line);border-radius:10px;background:#0e1928}.advancedDailyProgress h3{margin:0 0 8px;font-size:1rem}
 .advanced{margin:18px 0;border:1px solid var(--line);border-radius:12px;background:rgba(11,20,33,.96);overflow:hidden}
 .advanced>summary{cursor:pointer;list-style:none;padding:15px 16px;font-weight:850;color:#dbeafe}.advanced>summary::-webkit-details-marker{display:none}
-.advanced>summary:focus-visible{outline:2px solid #93c5fd;outline-offset:3px}.advancedBody{padding:0 16px 16px}.advancedBody .card{border-radius:10px;background:#0e1928}
+.advanced>summary:focus-visible{outline:2px solid #93c5fd;outline-offset:3px}.advancedToggle{display:block;width:100%;min-height:54px;padding:15px 16px;border:0;border-radius:0;background:transparent;color:#dbeafe;text-align:left;font:inherit;font-weight:850;cursor:pointer}.advancedToggle:focus-visible{outline:2px solid #93c5fd;outline-offset:-3px}.advancedBody{padding:0 16px 16px}.advancedBody .card{border-radius:10px;background:#0e1928}
 .productPrivacy{margin:16px 0 4px;text-align:center;font-size:.88rem}.productPrivacy a{color:#b5f7dd;font-weight:800;text-underline-offset:3px}
 .row{display:flex;flex-wrap:wrap;gap:9px;align-items:center}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:9px}
 button,input,select{min-height:40px;padding:10px 12px;border:1px solid #526d8f;border-radius:10px;background:#1a2940;color:white;font-weight:750}
@@ -300,10 +300,10 @@ function setupProductMode(){
   previewCard.className='card';
   previewCard.innerHTML='<h2>Preview</h2><p><small>Preview dùng đúng khung 250×122 của màn.</small></p>';
 
-  const advanced=document.createElement('details');
+  const advanced=document.createElement('section');
   advanced.className='advanced';
   advanced.id='advancedPanel';
-  advanced.innerHTML='<summary>Kỹ thuật / Nâng cao</summary><div class="advancedBody"></div>';
+  advanced.innerHTML='<button id="advancedToggle" class="advancedToggle" type="button" aria-expanded="false" aria-controls="advancedBody">Kỹ thuật / Nâng cao</button><div id="advancedBody" class="advancedBody" hidden></div>';
   const privacyLink=document.createElement('p');
   privacyLink.className='productPrivacy';
   privacyLink.dataset.einkPrivacyLink='D19B';
@@ -323,6 +323,13 @@ function setupProductMode(){
   statusCard.insertBefore(refs.d2StaleBox,statusCard.querySelector('.unifiedDailyPanel'));
   previewCard.insertBefore(refs.canvasWrap,previewCard.querySelector('p'));
   const advancedBody=advanced.querySelector('.advancedBody');
+  const advancedToggle=advanced.querySelector('#advancedToggle');
+  if(!advancedBody||!advancedToggle)throw Error('Advanced panel controls missing');
+  advancedToggle.addEventListener('click',()=>{
+    const nextOpen=advancedToggle.getAttribute('aria-expanded')!=='true';
+    advancedToggle.setAttribute('aria-expanded',String(nextOpen));
+    advancedBody.hidden=!nextOpen;
+  });
   advancedBody.append(advancedDailyProgress,preferencePanel,identityCard,previewCard);
   for(const section of originalSections){
     advancedBody.append(section);
