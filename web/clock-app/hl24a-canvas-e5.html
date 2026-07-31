@@ -240,6 +240,12 @@ function setupProductMode(){
   header.className='productHeader';
   header.innerHTML='<div><div class="badge">EINK Clock</div><h1>Đồng hồ lịch hằng ngày</h1><p>Chọn mặt đồng hồ, xem preview và gửi lên màn e-ink. Các thông số kỹ thuật vẫn có sẵn trong mục nâng cao.</p></div><div class="row" id="productConnectRow"></div>';
 
+  const productConnectRow=header.querySelector('#productConnectRow');
+  if(!productConnectRow)throw Error('Product connect row missing');
+  productConnectRow.append(refs.connect,refs.disconnect);
+  refs.connect.textContent='Kết nối thiết bị';
+  refs.disconnect.textContent='Ngắt kết nối';
+
   const identityCard=document.createElement('section');
   identityCard.className='card identityCard';
   identityCard.dataset.einkWebBuild=EINK_TEST_IDENTITY.webBuild;
