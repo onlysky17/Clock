@@ -2558,7 +2558,6 @@ function setProductConnectMessage(text,state=""){
 
 async function connectFromProductMode(){
   if(busy)return;
-  setProductConnectMessage("Đang mở danh sách thiết bị...");
 
   if(!window.isSecureContext){
     setProductConnectMessage("Trang phải chạy bằng HTTPS để dùng Bluetooth.","failure");
@@ -2571,8 +2570,17 @@ async function connectFromProductMode(){
   }
 
   try{
+    const chooser=navigator.bluetooth.requestDevice({
+      acceptAllDevices:true,
+      optionalServices:[SERVICE,BATTERY_SERVICE]
+    });
+    setProductConnectMessage("Đang mở danh sách thiết bị...");
+    const selectedDevice=await chooser;
+    setProductConnectMessage(
+      "Đã chọn "+(selectedDevice.name||"thiết bị")+". Đang kết nối GATT..."
+    );
     setBusy(true);
-    await connect();
+    await connect(selectedDevice);
     setProductConnectMessage("Đã kết nối thiết bị.","success");
   }catch(error){
     const cancelled=error&&error.name==="NotFoundError";
@@ -2602,11 +2610,9 @@ async function connectFromProductMode(){
   }
 }
 
-async function connect(){
-  device=await navigator.bluetooth.requestDevice({
-    acceptAllDevices:true,
-    optionalServices:[SERVICE,BATTERY_SERVICE]
-  });
+async function connect(selectedDevice){
+  if(!selectedDevice)throw Error("Thiếu thiết bị BLE đã chọn.");
+  device=selectedDevice;
 
   const selectedName=device?.name||"";
   if(!/^(?:EINK|HINK)/i.test(selectedName)){
