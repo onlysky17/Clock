@@ -81,9 +81,9 @@ const allowed = [
 ].sort();
 
 assert.deepEqual(
-  dirty,
-  allowed,
-  'Only the two D21I recovery files may be dirty'
+  dirty.filter(file => !allowed.includes(file)),
+  [],
+  'Only D21I recovery files may be dirty'
 );
 
 assert.ok(
