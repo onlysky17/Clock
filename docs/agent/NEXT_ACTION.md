@@ -4,31 +4,30 @@
 
 - Repository: `D:\EINK\Clock`
 - Canonical web URL: `https://onlysky17.github.io/Clock/test.html`
-- D20A removed Google Calendar from Product Mode and the daily update flow.
-- D20B keeps one clear `Cập nhật màn hình hôm nay` action near the top.
-- D20C canonical desktop and 360 px mobile usability checks passed.
-- D21A audited daily-update recovery without changing runtime behavior.
-- Weather failure already degrades to clock update, but transient failure
-  currently clears the Owner's weather choice.
-- BLE disconnect currently leaves an active ACK wait until timeout.
-- Device BUSY handling is duplicated and can skip its wait when cached render
-  state is already COMPLETE.
-- Product status mapping, BLE protocol, firmware, SDK, `test.html`, BIN, build,
-  pack, flash, and physical-device behavior remain unchanged.
+- D21B Product Mode recovery is implemented and merged.
+- PRs #116 through #123 restored the Product Mode controls after browser-side
+  regressions.
+- PR #123 merge commit:
+  `7c9795465f14734ccd75d2b47561231027cfd0a9`.
+- Connect/disconnect, identity and battery, profile selection and apply,
+  primary daily update, and the independent Advanced section are present.
+- Advanced remains closed by default.
+- Post-merge D21B smoke: PASS.
 
 ## Next Canonical Action
 
-`TASK D21B - HARDEN PRODUCT MODE DAILY UPDATE RECOVERY`
+`TASK D22A - PRODUCT MODE BROWSER RUNTIME REGRESSION GATE`
 
 Owner-visible goal:
 
-- Preserve the Owner's weather selection and valid same-day weather when a
-  transient location or weather lookup fails.
-- Reject the pending BLE wait immediately on disconnect, release Product Mode,
-  and require the Owner to reconnect.
-- Use one bounded BUSY retry after the active device render completes.
-- Keep exactly one primary action and exactly one physical render per successful
-  update.
+- Add deterministic desktop and mobile browser checks for the canonical
+  Product Mode page.
+- Verify the connect action remains visible and starts Web Bluetooth directly
+  from the Owner's click.
+- After a mocked BLE connection, verify identity, battery, profiles, apply,
+  primary daily update, and Advanced controls are rendered and usable.
+- Verify Advanced opens independently and remains closed by default.
+- Preserve D21B weather, disconnect, BUSY, one-render, and recovery behavior.
 
-D21B is web-only. Do not change firmware, protocol, scheduler, `test.html`, or
-add technical controls to Product Mode.
+D22A is an automated web regression task. It must not change firmware, BLE
+protocol, `test.html`, BIN, Keil output, pack, flash, or physical-device state.
