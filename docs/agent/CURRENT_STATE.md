@@ -544,3 +544,20 @@ TASK D21 is CLOSED, MERGED, and automated validation is PASS.
 Next canonical action:
 
 - `TASK D22A - PRODUCT MODE BROWSER RUNTIME REGRESSION GATE`.
+
+## Current D21L handoff checkpoint
+
+The authoritative Product Mode recovery baseline is now the merged PR #124.
+
+- Main merge commit: `b7dd5d9096afdc7007e790405ae2bf353be04694`.
+- PR #124 feature commit: `cc1bc0d6f04f92ad6211bbf3f640dc2f4225ffe1`.
+- Runtime restoration remains PR #123 merge commit:
+  `7c9795465f14734ccd75d2b47561231027cfd0a9`.
+- The complete resume contract is in
+  `docs/handoff/EINK_HANDOFF_D21_PRODUCT_MODE_RECOVERY_2026-08-03.md`.
+- No new firmware, web runtime, protocol, BIN, build, pack, flash, or physical
+  device work is part of this handoff checkpoint.
+
+Next canonical action remains exactly:
+
+- `TASK D22A - PRODUCT MODE BROWSER RUNTIME REGRESSION GATE`.
