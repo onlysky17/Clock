@@ -302,7 +302,7 @@ function setupProductMode(){
   privacyLink.innerHTML='<a href="../../privacy.html" target="_blank" rel="noopener">Quyền riêng tư</a>';
 
   main.innerHTML='';
-  main.append(header,statusCard,presetCard,advanced,privacyLink);
+  main.append(header,statusCard,identityCard,presetCard,advanced,privacyLink);
   $('identityActionRow').append(refs.d2GetIdentity);
 
   $('productConnectRow').append(refs.connect,refs.disconnect);
@@ -312,13 +312,12 @@ function setupProductMode(){
   refs.syncClock.textContent='Gửi lên màn';
   $('productPresetRow').append(refs.dailyCalendar,refs.updateClock,dailyBriefing,profileApply);
   refs.dailyCalendar.textContent='Mặt lịch hằng ngày';
-  refs.updateClock.textContent='Giờ đơn giản';
   refs.updateClock.textContent='Gi\u1edd l\u1edbn';
   $('productSyncSlot').append(refs.syncStatus);
   statusCard.insertBefore(refs.d2StaleBox,statusCard.querySelector('.unifiedDailyPanel'));
   previewCard.insertBefore(refs.canvasWrap,previewCard.querySelector('p'));
   const advancedBody=advanced.querySelector('.advancedBody');
-  advancedBody.append(advancedDailyProgress,preferencePanel,identityCard,previewCard);
+  advancedBody.append(advancedDailyProgress,preferencePanel,previewCard);
   for(const section of originalSections){
     advancedBody.append(section);
   }
