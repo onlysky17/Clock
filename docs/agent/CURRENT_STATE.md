@@ -521,3 +521,26 @@ canonical public page.
 Next canonical action:
 
 - `TASK D21A - PRODUCT MODE DAILY UPDATE RESILIENCE AUDIT`.
+
+## Current D21 Product Mode recovery closeout
+
+TASK D21 is CLOSED, MERGED, and automated validation is PASS.
+
+- D21B resilience implementation merged in PR #114.
+- Product Mode recovery fixes continued through PRs #116 to #123.
+- Final control restoration: PR #123, merge commit
+  `7c9795465f14734ccd75d2b47561231027cfd0a9`.
+- The canonical page again exposes connect/disconnect, device identity and
+  battery, clock-face selection and apply controls, the primary daily update,
+  and an independently toggleable Advanced section.
+- Advanced remains closed by default.
+- Weather degradation, immediate disconnect cancellation, bounded BUSY
+  recovery, one successful physical render, and later error recovery remain
+  covered by the D21B smoke.
+- Post-merge D21B smoke on clean `main`: PASS.
+- No firmware, BLE protocol, `test.html`, BIN, Keil build, pack, flash, or
+  physical-device state changed in this closeout.
+
+Next canonical action:
+
+- `TASK D22A - PRODUCT MODE BROWSER RUNTIME REGRESSION GATE`.
