@@ -246,7 +246,7 @@ function setupProductMode(){
         margin:0 auto;
         padding:24px 20px 48px;
         display:grid;
-        grid-template-columns:minmax(0,1.55fr) minmax(300px,.75fr);
+        grid-template-columns:minmax(0,1.35fr) minmax(320px,.65fr);
         gap:18px;
         align-items:start
       }
@@ -278,7 +278,7 @@ function setupProductMode(){
       }
       .productModeV2Preview{
         grid-column:1;
-        grid-row:2/span 3;
+        grid-row:2;
         min-width:0
       }
       .productModeV2Preview .canvasWrap{
@@ -291,11 +291,21 @@ function setupProductMode(){
         background:linear-gradient(145deg,#1b3448,#102536);
         overflow:auto
       }
-      .productModeV2Actions,
-      .productModeV2Profiles,
-      .productModeV2Device{
+      .productModeV2Actions{
         grid-column:2;
+        grid-row:2;
         min-width:0
+      }
+      .productModeV2Profiles{
+        grid-column:2;
+        grid-row:3;
+        min-width:0
+      }
+      .productModeV2Device{
+        grid-column:1;
+        grid-row:3;
+        min-width:0;
+        align-self:start
       }
       .productModeV2Actions .unifiedDailyPanel{
         margin-top:12px
@@ -353,7 +363,13 @@ function setupProductMode(){
         margin-top:11px
       }
       .productModeV2Device .identityGrid{
-        grid-template-columns:repeat(2,minmax(0,1fr))
+        grid-template-columns:repeat(auto-fit,minmax(150px,1fr))
+      }
+      .productModeV2Device .identityGrid .stat{
+        min-width:0
+      }
+      .productModeV2Device .identityGrid strong{
+        overflow-wrap:anywhere
       }
       .productModeV2Advanced,
       .productModeV2Privacy{
