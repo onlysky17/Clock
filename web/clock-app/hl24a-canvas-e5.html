@@ -236,12 +236,184 @@ function setupProductMode(){
     d2StaleBox:$('d2StaleBox'),
     canvasWrap:document.querySelector('.canvasWrap')
   };
+
+  if(!document.getElementById('d22cProductModeLayoutStyles')){
+    const style=document.createElement('style');
+    style.id='d22cProductModeLayoutStyles';
+    style.textContent=`
+      main.productModeV2{
+        width:min(1180px,100%);
+        margin:0 auto;
+        padding:24px 20px 48px;
+        display:grid;
+        grid-template-columns:minmax(0,1.55fr) minmax(300px,.75fr);
+        gap:18px;
+        align-items:start
+      }
+      .productModeV2Header{
+        grid-column:1/-1;
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:18px;
+        padding:18px 20px;
+        border:1px solid #22536e;
+        border-radius:20px;
+        background:linear-gradient(145deg,rgba(15,45,66,.96),rgba(8,27,42,.98))
+      }
+      .productModeV2Header h1{
+        margin:7px 0 5px;
+        font-size:clamp(1.65rem,3vw,2.35rem);
+        letter-spacing:-.04em
+      }
+      .productModeV2Header p{
+        max-width:680px;
+        margin:0;
+        color:var(--muted);
+        line-height:1.5
+      }
+      .productModeV2Header #productConnectRow{
+        flex:0 0 auto;
+        justify-content:flex-end
+      }
+      .productModeV2Preview{
+        grid-column:1;
+        grid-row:2/span 3;
+        min-width:0
+      }
+      .productModeV2Preview .canvasWrap{
+        display:grid;
+        place-items:center;
+        min-width:0;
+        padding:18px;
+        border:1px solid #35566e;
+        border-radius:16px;
+        background:linear-gradient(145deg,#1b3448,#102536);
+        overflow:auto
+      }
+      .productModeV2Actions,
+      .productModeV2Profiles,
+      .productModeV2Device{
+        grid-column:2;
+        min-width:0
+      }
+      .productModeV2Actions .unifiedDailyPanel{
+        margin-top:12px
+      }
+      .productModeV2Profiles .productProfileIntro{
+        margin:-4px 0 13px;
+        color:var(--muted);
+        font-size:.84rem;
+        line-height:1.45
+      }
+      .productModeV2Profiles .productLayoutSelect{
+        width:100%;
+        margin-bottom:10px;
+        padding:11px 12px;
+        border:1px solid var(--line);
+        border-radius:12px;
+        background:#071725;
+        color:var(--text)
+      }
+      .productModeV2Profiles #productPresetRow{
+        display:grid;
+        grid-template-columns:repeat(3,minmax(0,1fr));
+        gap:8px
+      }
+      .productModeV2Profiles #productPresetRow button{
+        min-width:0;
+        margin:0;
+        padding:10px 8px;
+        border-radius:11px
+      }
+      .productModeV2Profiles #productPresetRow button[data-layout-profile]{
+        background:#071725;
+        color:var(--muted);
+        border:1px solid var(--line)
+      }
+      .productModeV2Profiles #productPresetRow button[data-layout-profile].selected,
+      .productModeV2Profiles #productPresetRow button[data-layout-profile].selected:disabled{
+        background:#52d8ff !important;
+        color:#03131d !important;
+        border-color:#52d8ff !important;
+        opacity:1 !important;
+        font-weight:900
+      }
+      .productModeV2Profiles #productPresetRow button[data-layout-profile].selected:focus,
+      .productModeV2Profiles #productPresetRow button[data-layout-profile].selected:focus-visible{
+        outline:2px solid #b8f1ff;
+        outline-offset:2px
+      }
+      .productModeV2Profiles #profileApply{
+        grid-column:1/-1;
+        margin-top:2px;
+        padding:13px
+      }
+      .productModeV2Profiles #profileStatus{
+        margin-top:11px
+      }
+      .productModeV2Device .identityGrid{
+        grid-template-columns:repeat(2,minmax(0,1fr))
+      }
+      .productModeV2Advanced,
+      .productModeV2Privacy{
+        grid-column:1/-1
+      }
+      .productModeV2Advanced{
+        overflow:hidden
+      }
+      .productModeV2Advanced>summary{
+        padding:15px 18px
+      }
+      @media(max-width:760px){
+        main.productModeV2{
+          padding:14px 11px 36px;
+          grid-template-columns:minmax(0,1fr)
+        }
+        .productModeV2Header,
+        .productModeV2Preview,
+        .productModeV2Actions,
+        .productModeV2Profiles,
+        .productModeV2Device,
+        .productModeV2Advanced,
+        .productModeV2Privacy{
+          grid-column:1;
+          grid-row:auto
+        }
+        .productModeV2Header{
+          align-items:stretch;
+          flex-direction:column
+        }
+        .productModeV2Header #productConnectRow{
+          justify-content:stretch
+        }
+        .productModeV2Header #productConnectRow button{
+          flex:1 1 140px
+        }
+        .productModeV2Preview .canvasWrap{
+          padding:10px
+        }
+        .productModeV2Device .identityGrid{
+          grid-template-columns:minmax(0,1fr)
+        }
+      }
+      @media(max-width:380px){
+        .productModeV2Profiles #productPresetRow{
+          grid-template-columns:minmax(0,1fr)
+        }
+      }
+    `;
+    document.head.append(style);
+  }
+
+  main.classList.add('productModeV2');
+
   const header=document.createElement('div');
-  header.className='productHeader';
-  header.innerHTML='<div><div class="badge">EINK Clock</div><h1>Đồng hồ lịch hằng ngày</h1><p>Chọn mặt đồng hồ, xem preview và gửi lên màn e-ink. Các thông số kỹ thuật vẫn có sẵn trong mục nâng cao.</p></div><div class="row" id="productConnectRow"></div>';
+  header.className='productHeader productModeV2Header';
+  header.innerHTML='<div><div class="badge">EINK Clock</div><h1>Mặt đồng hồ</h1><p>Chọn Dashboard, Split View hoặc Minimal, xem preview thật và áp dụng lên màn e-ink.</p></div><div class="row" id="productConnectRow"></div>';
 
   const identityCard=document.createElement('section');
-  identityCard.className='card identityCard';
+  identityCard.className='card identityCard productModeV2Device';
   identityCard.dataset.einkWebBuild=EINK_TEST_IDENTITY.webBuild;
   identityCard.dataset.expectedFirmware=EINK_TEST_IDENTITY.expectedFirmware;
   identityCard.dataset.expectedRuntime=EINK_TEST_IDENTITY.expectedRuntime;
@@ -250,79 +422,153 @@ function setupProductMode(){
   identityCard.innerHTML=`<div class="identityTitle">${EINK_TEST_IDENTITY.label}</div><div class="compatibilityState" role="status" aria-live="polite"><span>Tương thích thiết bị</span><strong id="identityCompatibility" class="warn">Chưa kết nối</strong><small id="identityCompatibilityDetail">Kết nối để kiểm tra firmware thực tế.</small></div><div class="identityGrid"><div class="stat"><span>Firmware yêu cầu</span><strong>${EINK_TEST_IDENTITY.expectedRuntime}</strong></div><div class="stat"><span>Firmware thực tế</span><strong id="actualFirmware">Chưa đọc</strong></div><div class="stat"><span>Source ID yêu cầu</span><strong>${EINK_TEST_IDENTITY.expectedSourceId}</strong></div><div class="stat"><span>Source ID thực tế</span><strong id="actualSourceId">-</strong></div><div class="stat"><span>Health</span><strong id="actualHealth">-</strong></div><div class="stat"><span>Health cập nhật</span><strong id="identityUpdatedAt">Chưa đọc</strong></div><div class="stat"><span>Điện áp pin</span><strong id="batteryVoltage" class="batteryValue" aria-live="polite">Chưa đọc</strong></div><div class="stat"><span>Mức pin</span><strong id="batteryLevel">Ước tính -</strong></div><div class="stat"><span>Pin cập nhật</span><strong id="batteryUpdatedAt">Chưa đọc</strong></div><div class="stat"><span>Web build</span><strong>${EINK_TEST_IDENTITY.webBuild}</strong></div></div><div class="row" id="identityActionRow"><button id="batteryRefresh" type="button">Đọc pin</button></div><p class="identityNote">Điện áp được đọc trực tiếp từ thiết bị. Phần trăm chỉ là ước tính theo đường cong CR2032.</p>`;
 
   const statusCard=document.createElement('section');
-  statusCard.className='card';
+  statusCard.className='card productModeV2Actions';
   statusCard.innerHTML='<h2>Hôm nay</h2><div class="productStatus"><div class="stat"><span>Thiết bị</span><strong id="productState" class="warn">Chưa kết nối</strong></div><div class="stat"><span>Tiến trình</span><span id="productSyncSlot"></span></div></div><div class="unifiedDailyPanel"><div class="unifiedDailyHeader"><button id="unifiedDailyUpdate" class="good heroAction" type="button">Cập nhật màn hình hôm nay</button><strong id="unifiedDailyResult" class="unifiedDailyResult" role="status" aria-live="polite">Sẵn sàng cập nhật.</strong></div></div>';
+
   const advancedDailyProgress=document.createElement('div');
   advancedDailyProgress.className='advancedDailyProgress';
   advancedDailyProgress.innerHTML='<h3>Tiến trình cập nhật chi tiết</h3><div class="unifiedDailySteps" role="status" aria-live="polite"><div id="unifiedWeatherStep" class="unifiedDailyStep" data-state="waiting"><span>Thời tiết</span><strong>Đang chờ</strong></div><div id="unifiedTimeStep" class="unifiedDailyStep" data-state="waiting"><span>Đồng bộ giờ</span><strong>Đang chờ</strong></div><div id="unifiedApplyStep" class="unifiedDailyStep" data-state="waiting"><span>Áp dụng lên màn</span><strong>Đang chờ</strong></div></div>';
 
   const presetCard=document.createElement('section');
-  presetCard.className='card';
-  presetCard.innerHTML='<h2>Chọn mặt đồng hồ</h2><div class="row presetRow" id="productPresetRow"></div>';
+  presetCard.className='card productModeV2Profiles';
+  presetCard.innerHTML='<h2>Profile hiển thị</h2><p class="productProfileIntro">Dashboard cho tổng quan nhanh, Split View dùng hằng ngày và Minimal cho màn hình sạch.</p><select id="productLayoutSelect" class="productLayoutSelect" aria-label="Chọn profile hiển thị"><option value="dashboard">Dashboard tổng quan</option><option value="split" selected>Split View hằng ngày</option><option value="minimal">Minimal sạch</option></select><div class="row presetRow" id="productPresetRow"></div>';
 
   const profileApply=document.createElement('button');
   profileApply.id='profileApply';
   profileApply.type='button';
   profileApply.className='good';
-  profileApply.textContent='\u00c1p d\u1ee5ng l\u00ean m\u00e0n';
+  profileApply.textContent='Áp dụng lên màn';
+
   const profileStatus=document.createElement('div');
   profileStatus.id='profileStatus';
   profileStatus.className='profileStatus';
   profileStatus.setAttribute('role','status');
   profileStatus.setAttribute('aria-live','polite');
-  profileStatus.textContent='Ch\u01b0a \u0111\u1ecdc profile t\u1eeb thi\u1ebft b\u1ecb.';
+  profileStatus.textContent='Đang chọn Split View.';
+
   presetCard.append(profileStatus);
 
   const dailyBriefing=document.createElement('button');
   dailyBriefing.id='dailyBriefing';
   dailyBriefing.type='button';
-  dailyBriefing.textContent='T\u00f3m t\u1eaft trong ng\u00e0y';
+  dailyBriefing.textContent='Dashboard';
+
   const dailyContextPanel=document.createElement('div');
   dailyContextPanel.id='dailyContextPanel';
   dailyContextPanel.className='dailyContextPanel';
   dailyContextPanel.hidden=true;
-  dailyContextPanel.innerHTML='<h3>Th\u1eddi ti\u1ebft t\u1ef1 \u0111\u1ed9ng v\u00e0 l\u1ecbch th\u00e1ng</h3><div class="row weatherAutoRow"><label><input id="dailyAutoWeather" type="checkbox"> T\u1ef1 c\u1eadp nh\u1eadt m\u1ed7i 30 ph\u00fat khi \u0111ang k\u1ebft n\u1ed1i</label><button id="dailyWeatherRefresh" type="button">L\u1ea5y th\u1eddi ti\u1ebft ngay</button></div><div id="dailyAutoWeatherStatus" class="weatherAutoStatus" role="status" aria-live="polite">T\u1ef1 \u0111\u1ed9ng \u0111ang t\u1eaft.</div><div id="dailyWeatherStatus" class="weatherAutoStatus" role="status" aria-live="polite">Ch\u01b0a l\u1ea5y v\u1ecb tr\u00ed.</div><div class="dailyContextGrid"><label><span><input id="dailyWeatherEnabled" type="checkbox"> Hi\u1ec3n th\u1eddi ti\u1ebft</span></label><label>Th\u1eddi ti\u1ebft<select id="dailyWeatherCode"><option value="0">N\u1eafng</option><option value="1">Nhi\u1ec1u m\u00e2y</option><option value="2">M\u01b0a</option><option value="3">Gi\u00f4ng</option><option value="4">S\u01b0\u01a1ng m\u00f9</option><option value="5">Gi\u00f3</option><option value="6">N\u00f3ng</option></select></label><label>Nhi\u1ec7t \u0111\u1ed9 (C)<input id="dailyTemperature" type="number" min="-40" max="80" inputmode="numeric" placeholder="27"></label><label>Kh\u1ea3 n\u0103ng m\u01b0a (%)<input id="dailyPrecipitation" type="number" min="0" max="100" inputmode="numeric" placeholder="0"></label></div><input id="dailyAgendaTime0" type="hidden"><input id="dailyAgendaLabel0" type="hidden"><input id="dailyAgendaTime1" type="hidden"><input id="dailyAgendaLabel1" type="hidden"><p class="preferenceHint">T\u1ef1 \u0111\u1ed9ng ch\u1ec9 ch\u1ea1y khi trang \u0111ang m\u1edf, BLE \u0111\u00e3 k\u1ebft n\u1ed1i v\u00e0 m\u1eb7t T\u00f3m t\u1eaft trong ng\u00e0y \u0111ang \u00e1p d\u1ee5ng. V\u1ecb tr\u00ed kh\u00f4ng \u0111\u01b0\u1ee3c l\u01b0u.</p><p class="preferenceHint">D\u1eef li\u1ec7u th\u1eddi ti\u1ebft: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>.</p><div id="dailyContextStatus" class="profileStatus" role="status" aria-live="polite">Ch\u01b0a g\u1eedi th\u1eddi ti\u1ebft h\u00f4m nay.</div>';
+  dailyContextPanel.innerHTML='<h3>Thời tiết tự động và lịch tháng</h3><div class="row weatherAutoRow"><label><input id="dailyAutoWeather" type="checkbox"> Tự cập nhật mỗi 30 phút khi đang kết nối</label><button id="dailyWeatherRefresh" type="button">Lấy thời tiết ngay</button></div><div id="dailyAutoWeatherStatus" class="weatherAutoStatus" role="status" aria-live="polite">Tự động đang tắt.</div><div id="dailyWeatherStatus" class="weatherAutoStatus" role="status" aria-live="polite">Chưa lấy vị trí.</div><div class="dailyContextGrid"><label><span><input id="dailyWeatherEnabled" type="checkbox"> Hiển thị thời tiết</span></label><label>Thời tiết<select id="dailyWeatherCode"><option value="0">Nắng</option><option value="1">Nhiều mây</option><option value="2">Mưa</option><option value="3">Giông</option><option value="4">Sương mù</option><option value="5">Gió</option><option value="6">Nóng</option></select></label><label>Nhiệt độ (C)<input id="dailyTemperature" type="number" min="-40" max="80" inputmode="numeric" placeholder="27"></label><label>Khả năng mưa (%)<input id="dailyPrecipitation" type="number" min="0" max="100" inputmode="numeric" placeholder="0"></label></div><input id="dailyAgendaTime0" type="hidden"><input id="dailyAgendaLabel0" type="hidden"><input id="dailyAgendaTime1" type="hidden"><input id="dailyAgendaLabel1" type="hidden"><p class="preferenceHint">Tự động chỉ chạy khi trang đang mở, BLE đã kết nối và mặt Dashboard đang áp dụng. Vị trí không được lưu.</p><p class="preferenceHint">Dữ liệu thời tiết: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>.</p><div id="dailyContextStatus" class="profileStatus" role="status" aria-live="polite">Chưa gửi thời tiết hôm nay.</div>';
+
   presetCard.append(dailyContextPanel);
 
   const preferencePanel=document.createElement('div');
   preferencePanel.className='preferencePanel';
-  preferencePanel.innerHTML='<h3>T\u00f9y ch\u1ecdn hi\u1ec3n th\u1ecb</h3><div class="row preferenceRow" id="hourModeRow"><button id="hour24" type="button">24 gi\u1edd</button><button id="hour12" type="button">12 gi\u1edd</button></div><div class="row preferenceRow" id="cadenceRow"><button id="cadence5" type="button">5 ph\u00fat</button><button id="cadence10" type="button">10 ph\u00fat</button><button id="cadence1" type="button">1 ph\u00fat</button></div><p class="preferenceHint">1 ph\u00fat s\u1ebd t\u0103ng m\u1ee9c d\u00f9ng pin v\u00e0 s\u1ed1 l\u1ea7n refresh panel.</p><div class="row"><button id="preferenceApply" class="good" type="button">\u00c1p d\u1ee5ng t\u00f9y ch\u1ecdn</button></div><div id="preferenceStatus" class="profileStatus" role="status" aria-live="polite">Ch\u01b0a \u0111\u1ecdc t\u00f9y ch\u1ecdn t\u1eeb thi\u1ebft b\u1ecb.</div>';
+  preferencePanel.innerHTML='<h3>Tùy chọn hiển thị</h3><div class="row preferenceRow" id="hourModeRow"><button id="hour24" type="button">24 giờ</button><button id="hour12" type="button">12 giờ</button></div><div class="row preferenceRow" id="cadenceRow"><button id="cadence5" type="button">5 phút</button><button id="cadence10" type="button">10 phút</button><button id="cadence1" type="button">1 phút</button></div><p class="preferenceHint">1 phút sẽ tăng mức dùng pin và số lần refresh panel.</p><div class="row"><button id="preferenceApply" class="good" type="button">Áp dụng tùy chọn</button></div><div id="preferenceStatus" class="profileStatus" role="status" aria-live="polite">Chưa đọc tùy chọn từ thiết bị.</div>';
 
   const previewCard=document.createElement('section');
-  previewCard.className='card';
-  previewCard.innerHTML='<h2>Preview</h2><p><small>Preview dùng đúng khung 250×122 của màn.</small></p>';
+  previewCard.className='card productModeV2Preview';
+  previewCard.innerHTML='<h2>Preview màn e-ink</h2><p><small>Preview thật dùng đúng khung 250×122 của màn.</small></p>';
 
   const advanced=document.createElement('details');
-  advanced.className='advanced';
+  advanced.className='advanced productModeV2Advanced';
   advanced.id='advancedPanel';
   advanced.innerHTML='<summary>Kỹ thuật / Nâng cao</summary><div class="advancedBody"></div>';
+
   const privacyLink=document.createElement('p');
-  privacyLink.className='productPrivacy';
+  privacyLink.className='productPrivacy productModeV2Privacy';
   privacyLink.dataset.einkPrivacyLink='D19B';
   privacyLink.innerHTML='<a href="../../privacy.html" target="_blank" rel="noopener">Quyền riêng tư</a>';
 
   main.innerHTML='';
-  main.append(header,statusCard,identityCard,presetCard,advanced,privacyLink);
-  $('identityActionRow').append(refs.d2GetIdentity);
+  main.append(
+    header,
+    previewCard,
+    statusCard,
+    presetCard,
+    identityCard,
+    advanced,
+    privacyLink
+  );
 
+  $('identityActionRow').append(refs.d2GetIdentity);
   $('productConnectRow').append(refs.connect,refs.disconnect);
+
   refs.connect.textContent='Kết nối';
   refs.disconnect.textContent='Ngắt kết nối';
   refs.d2SetTime.textContent='Đồng bộ giờ';
   refs.syncClock.textContent='Gửi lên màn';
-  $('productPresetRow').append(refs.dailyCalendar,refs.updateClock,dailyBriefing,profileApply);
-  refs.dailyCalendar.textContent='Mặt lịch hằng ngày';
-  refs.updateClock.textContent='Gi\u1edd l\u1edbn';
+
+  refs.dailyCalendar.textContent='Split View';
+  refs.dailyCalendar.dataset.layoutProfile='split';
+
+  refs.updateClock.textContent='Minimal';
+  refs.updateClock.dataset.layoutProfile='minimal';
+
+  dailyBriefing.dataset.layoutProfile='dashboard';
+
+  $('productPresetRow').append(
+    dailyBriefing,
+    refs.dailyCalendar,
+    refs.updateClock,
+    profileApply
+  );
+
+  const profileButtons={
+    dashboard:dailyBriefing,
+    split:refs.dailyCalendar,
+    minimal:refs.updateClock
+  };
+
+  function setProductLayoutSelection(layout){
+    if(!profileButtons[layout])return;
+
+    for(const [key,button] of Object.entries(profileButtons)){
+      const selected=key===layout;
+      button.classList.toggle('selected',selected);
+      button.setAttribute('aria-pressed',String(selected));
+    }
+
+    $('productLayoutSelect').value=layout;
+    presetCard.dataset.selectedLayout=layout;
+  }
+
+  for(const [layout,button] of Object.entries(profileButtons)){
+    button.addEventListener('click',()=>{
+      setProductLayoutSelection(layout);
+    });
+  }
+
+  $('productLayoutSelect').addEventListener('change',event=>{
+    const layout=event.currentTarget.value;
+
+    if(!profileButtons[layout])return;
+
+    selectClockProfile(clockProfileFromLayout(layout));
+    setProductLayoutSelection(layout);
+  });
+
+  setProductLayoutSelection(
+    layoutFromClockProfile(selectedClockProfile)
+  );
+
   $('productSyncSlot').append(refs.syncStatus);
-  statusCard.insertBefore(refs.d2StaleBox,statusCard.querySelector('.unifiedDailyPanel'));
-  previewCard.insertBefore(refs.canvasWrap,previewCard.querySelector('p'));
+  statusCard.insertBefore(
+    refs.d2StaleBox,
+    statusCard.querySelector('.unifiedDailyPanel')
+  );
+
+  previewCard.insertBefore(
+    refs.canvasWrap,
+    previewCard.querySelector('p')
+  );
+
   const advancedBody=advanced.querySelector('.advancedBody');
-  advancedBody.append(advancedDailyProgress,preferencePanel,previewCard);
+  advancedBody.append(advancedDailyProgress,preferencePanel);
+
   for(const section of originalSections){
     advancedBody.append(section);
   }
 }
-
 function markLayoutHealth(){
   requestAnimationFrame(()=>{
     document.documentElement.dataset.einkNoOverflow=String(document.documentElement.scrollWidth<=window.innerWidth);
@@ -361,19 +607,57 @@ const d2RenderStateName=value=>({
   0x03:'COMPLETE',
   0x04:'ERROR'
 }[value]||`UNKNOWN_${value}`);
-const clockProfileName=value=>({0:'Lịch tháng',1:'Giờ lớn',2:'Tóm tắt trong ngày'}[value]||`Profile ${value}`);
+const clockProfileName=value=>({0:'Split View',1:'Minimal',2:'Dashboard'}[value]||`Profile ${value}`);
+const layoutFromClockProfile=value=>({0:'split',1:'minimal',2:'dashboard'}[value]||'split');
+const clockProfileFromLayout=value=>({dashboard:2,split:0,minimal:1}[value]??0);
 
 function renderClockProfileSelection(){
   $('dailyCalendar').classList.toggle('selected',selectedClockProfile===0);
   $('updateClock').classList.toggle('selected',selectedClockProfile===1);
   $('dailyBriefing').classList.toggle('selected',selectedClockProfile===2);
-  $('dailyCalendar').setAttribute('aria-pressed',String(selectedClockProfile===0));
-  $('updateClock').setAttribute('aria-pressed',String(selectedClockProfile===1));
-  $('dailyBriefing').setAttribute('aria-pressed',String(selectedClockProfile===2));
+
+  $('dailyCalendar').setAttribute(
+    'aria-pressed',
+    String(selectedClockProfile===0)
+  );
+  $('updateClock').setAttribute(
+    'aria-pressed',
+    String(selectedClockProfile===1)
+  );
+  $('dailyBriefing').setAttribute(
+    'aria-pressed',
+    String(selectedClockProfile===2)
+  );
+
   $('dailyContextPanel').hidden=selectedClockProfile!==2;
-  const stored=persistedClockProfile===0xFF?'mặc định':clockProfileName(persistedClockProfile);
-  $('profileStatus').textContent=`Đang chạy: ${clockProfileName(activeClockProfile)} · Lưu: ${stored}`;
-  document.documentElement.dataset.einkClockProfile=String(activeClockProfile);
+
+  const selectedLayout=layoutFromClockProfile(selectedClockProfile);
+  const layoutSelect=$('productLayoutSelect');
+
+  if(layoutSelect){
+    layoutSelect.value=selectedLayout;
+  }
+
+  const profileCard=$('productPresetRow')?.closest('.productModeV2Profiles');
+
+  if(profileCard){
+    profileCard.dataset.selectedLayout=selectedLayout;
+  }
+
+  const stored=persistedClockProfile===0xFF
+    ?'mặc định'
+    :clockProfileName(persistedClockProfile);
+
+  const selectedName=clockProfileName(selectedClockProfile);
+  const activeName=clockProfileName(activeClockProfile);
+
+  $('profileStatus').textContent=
+    selectedClockProfile===activeClockProfile
+      ?`Đang chạy: ${activeName} · Lưu: ${stored}`
+      :`Đang chọn: ${selectedName} · Đang chạy: ${activeName} · Lưu: ${stored}`;
+
+  document.documentElement.dataset.einkClockProfile=
+    String(activeClockProfile);
 }
 
 function selectClockProfile(profile){
@@ -1019,6 +1303,61 @@ function unifiedDailyUpdateConflicting(){
     renderInProgress||!!pending;
 }
 
+/* D22C_DASHBOARD_EMPTY_PREVIEW
+   Dashboard profile 2 is based on daily context.
+   When no weather or agenda data exists, show an explicit empty state
+   instead of looking identical to Split View profile 0. */
+const drawDailyBriefingPreviewRuntimeBase=drawDailyBriefingPreview;
+
+drawDailyBriefingPreview=function(){
+  drawDailyBriefingPreviewRuntimeBase();
+
+  const weatherEnabled=$('dailyWeatherEnabled').checked;
+  const temperature=$('dailyTemperature').value.trim();
+  const precipitation=$('dailyPrecipitation').value.trim();
+  const agenda0=$('dailyAgendaLabel0').value.trim();
+  const agenda1=$('dailyAgendaLabel1').value.trim();
+
+  const hasWeather=
+    weatherEnabled&&temperature!==''&&precipitation!=='';
+
+  const hasAgenda=agenda0!==''||agenda1!=='';
+
+  if(hasWeather||hasAgenda){
+    return;
+  }
+
+  ctx.save();
+  ctx.imageSmoothingEnabled=false;
+
+  ctx.fillStyle='#fff';
+  ctx.fillRect(145,0,105,122);
+
+  ctx.fillStyle='#000';
+  ctx.fillRect(144,8,1,106);
+
+  ctx.textAlign='left';
+  ctx.textBaseline='alphabetic';
+
+  ctx.font='bold 8px ui-monospace,monospace';
+  ctx.fillText('DASHBOARD',153,18);
+
+  ctx.font='bold 13px ui-monospace,monospace';
+  ctx.fillText('-- C',153,37);
+
+  ctx.font='7px ui-monospace,monospace';
+  ctx.fillText('Chưa có thời tiết',153,49);
+
+  ctx.font='bold 8px ui-monospace,monospace';
+  ctx.fillText('HÔM NAY',153,68);
+
+  ctx.font='7px ui-monospace,monospace';
+  ctx.fillText('Chưa có lịch',153,82);
+  ctx.fillText('Kết nối để cập nhật',153,105);
+
+  ctx.restore();
+  repack();
+};
 function controls(){
   const connected=!!server?.connected;
   const e5Complete=e5Success && (browserCrc === latestFwCrc);
