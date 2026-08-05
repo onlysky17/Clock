@@ -212,6 +212,22 @@ let identityCompatibility='disconnected';
 let identityRefreshPending=false;
 let batteryService=null,batteryChar=null,batteryRunning=false;
 let selectedClockProfile=0,activeClockProfile=0,persistedClockProfile=0xFF;
+const PRODUCT_LAYOUT_STORAGE_KEY='einkClock.productMode.layout';
+function loadStoredProductLayout(){
+  try{
+    const layout=localStorage.getItem(PRODUCT_LAYOUT_STORAGE_KEY);
+    return layout==='dashboard'||layout==='split'||layout==='minimal'
+      ?layout
+      :'split';
+  }catch(_error){
+    return'split';
+  }
+}
+function storeProductLayout(layout){
+  try{
+    localStorage.setItem(PRODUCT_LAYOUT_STORAGE_KEY,layout);
+  }catch(_error){}
+}
 let selectedHourMode=0,activeHourMode=0,persistedHourMode=0xFF;
 let selectedRefreshMinutes=5,activeRefreshMinutes=5,persistedRefreshMinutes=0xFF;
 let dailyContextState=0,dailyContextFlags=0;
@@ -557,6 +573,7 @@ function setupProductMode(){
     }
 
     $('productLayoutSelect').value=layout;
+    storeProductLayout(layout);
     presetCard.dataset.selectedLayout=layout;
   }
 
@@ -575,9 +592,7 @@ function setupProductMode(){
     setProductLayoutSelection(layout);
   });
 
-  setProductLayoutSelection(
-    layoutFromClockProfile(selectedClockProfile)
-  );
+  setProductLayoutSelection(loadStoredProductLayout());
 
   $('productSyncSlot').append(refs.syncStatus);
   statusCard.insertBefore(
@@ -1516,7 +1531,13 @@ function resetD2UiDisconnected(){
   batteryService=null;
   batteryChar=null;
   batteryRunning=false;
-  selectedClockProfile=0;
+  const d23aStoredLayout=loadStoredProductLayout();
+  selectedClockProfile=
+    d23aStoredLayout==='dashboard'
+      ?2
+      :d23aStoredLayout==='minimal'
+        ?1
+        :0;
   activeClockProfile=0;
   persistedClockProfile=0xFF;
   selectedHourMode=0;
