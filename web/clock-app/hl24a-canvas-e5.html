@@ -368,6 +368,18 @@ function setupProductMode(){
       .productModeV2Device .identityGrid .stat{
         min-width:0
       }
+      .productModeV2Device .identityGrid .webBuildStat{
+        grid-column:1/-1
+      }
+      .productModeV2Device .identityGrid .webBuildValue{
+        display:block;
+        max-width:100%;
+        overflow-wrap:normal;
+        word-break:normal;
+        white-space:nowrap;
+        font-size:clamp(.72rem,1.35vw,.88rem);
+        letter-spacing:-.01em
+      }
       .productModeV2Device .identityGrid strong{
         overflow-wrap:anywhere
       }
@@ -435,7 +447,7 @@ function setupProductMode(){
   identityCard.dataset.expectedRuntime=EINK_TEST_IDENTITY.expectedRuntime;
   identityCard.dataset.expectedSourceId=EINK_TEST_IDENTITY.expectedSourceId;
   identityCard.dataset.expectedBin=EINK_TEST_IDENTITY.expectedBin;
-  identityCard.innerHTML=`<div class="identityTitle">${EINK_TEST_IDENTITY.label}</div><div class="compatibilityState" role="status" aria-live="polite"><span>Tương thích thiết bị</span><strong id="identityCompatibility" class="warn">Chưa kết nối</strong><small id="identityCompatibilityDetail">Kết nối để kiểm tra firmware thực tế.</small></div><div class="identityGrid"><div class="stat"><span>Firmware yêu cầu</span><strong>${EINK_TEST_IDENTITY.expectedRuntime}</strong></div><div class="stat"><span>Firmware thực tế</span><strong id="actualFirmware">Chưa đọc</strong></div><div class="stat"><span>Source ID yêu cầu</span><strong>${EINK_TEST_IDENTITY.expectedSourceId}</strong></div><div class="stat"><span>Source ID thực tế</span><strong id="actualSourceId">-</strong></div><div class="stat"><span>Health</span><strong id="actualHealth">-</strong></div><div class="stat"><span>Health cập nhật</span><strong id="identityUpdatedAt">Chưa đọc</strong></div><div class="stat"><span>Điện áp pin</span><strong id="batteryVoltage" class="batteryValue" aria-live="polite">Chưa đọc</strong></div><div class="stat"><span>Mức pin</span><strong id="batteryLevel">Ước tính -</strong></div><div class="stat"><span>Pin cập nhật</span><strong id="batteryUpdatedAt">Chưa đọc</strong></div><div class="stat"><span>Web build</span><strong>${EINK_TEST_IDENTITY.webBuild}</strong></div></div><div class="row" id="identityActionRow"><button id="batteryRefresh" type="button">Đọc pin</button></div><p class="identityNote">Điện áp được đọc trực tiếp từ thiết bị. Phần trăm chỉ là ước tính theo đường cong CR2032.</p>`;
+  identityCard.innerHTML=`<div class="identityTitle">${EINK_TEST_IDENTITY.label}</div><div class="compatibilityState" role="status" aria-live="polite"><span>Tương thích thiết bị</span><strong id="identityCompatibility" class="warn">Chưa kết nối</strong><small id="identityCompatibilityDetail">Kết nối để kiểm tra firmware thực tế.</small></div><div class="identityGrid"><div class="stat"><span>Firmware yêu cầu</span><strong>${EINK_TEST_IDENTITY.expectedRuntime}</strong></div><div class="stat"><span>Firmware thực tế</span><strong id="actualFirmware">Chưa đọc</strong></div><div class="stat"><span>Source ID yêu cầu</span><strong>${EINK_TEST_IDENTITY.expectedSourceId}</strong></div><div class="stat"><span>Source ID thực tế</span><strong id="actualSourceId">-</strong></div><div class="stat"><span>Health</span><strong id="actualHealth">-</strong></div><div class="stat"><span>Health cập nhật</span><strong id="identityUpdatedAt">Chưa đọc</strong></div><div class="stat"><span>Điện áp pin</span><strong id="batteryVoltage" class="batteryValue" aria-live="polite">Chưa đọc</strong></div><div class="stat"><span>Mức pin</span><strong id="batteryLevel">Ước tính -</strong></div><div class="stat"><span>Pin cập nhật</span><strong id="batteryUpdatedAt">Chưa đọc</strong></div><div class="stat webBuildStat"><span>Web build</span><strong class="webBuildValue">${EINK_TEST_IDENTITY.webBuild}</strong></div></div><div class="row" id="identityActionRow"><button id="batteryRefresh" type="button">Đọc pin</button></div><p class="identityNote">Điện áp được đọc trực tiếp từ thiết bị. Phần trăm chỉ là ước tính theo đường cong CR2032.</p>`;
 
   const statusCard=document.createElement('section');
   statusCard.className='card productModeV2Actions';
