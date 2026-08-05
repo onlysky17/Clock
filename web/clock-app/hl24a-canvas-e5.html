@@ -488,7 +488,7 @@ function setupProductMode(){
   profileStatus.className='profileStatus';
   profileStatus.setAttribute('role','status');
   profileStatus.setAttribute('aria-live','polite');
-  profileStatus.textContent='Đang chọn Split View.';
+  profileStatus.textContent='Đã nhớ trên web: Split View · Chưa đọc trạng thái thiết bị.';
 
   presetCard.append(profileStatus);
 
@@ -696,8 +696,8 @@ function renderClockProfileSelection(){
 
   $('profileStatus').textContent=
     selectedClockProfile===activeClockProfile
-      ?`Đang chạy: ${activeName} · Lưu: ${stored}`
-      :`Đang chọn: ${selectedName} · Đang chạy: ${activeName} · Lưu: ${stored}`;
+      ?`Đã nhớ trên web: ${selectedName} · Thiết bị đang chạy: ${activeName} · Thiết bị lưu: ${stored}.`
+      :`Đã nhớ trên web: ${selectedName} · Chưa áp dụng lên thiết bị · Thiết bị đang chạy: ${activeName} · Thiết bị lưu: ${stored}.`;
 
   document.documentElement.dataset.einkClockProfile=
     String(activeClockProfile);
