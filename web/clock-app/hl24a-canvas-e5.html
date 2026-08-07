@@ -955,17 +955,17 @@ function isBlack(imageData,x,y){
   return((imageData.data[index]+imageData.data[index+1]+imageData.data[index+2])/3)<0x80;
 }
 
-function packCanvas(){
+function packCanvas(contract=PACKER_CONTRACT){
   const image=ctx.getImageData(0,0,WIDTH,HEIGHT);
-  const output=new Uint8Array(TOTAL).fill(0xFF);
+  const output=new Uint8Array(contract.payloadBytes).fill(0xFF);
   let black=0;
 
   for(let y=0;y<HEIGHT;y++){
     for(let x=0;x<WIDTH;x++){
       if(isBlack(image,x,y)){
         const ramX=y;
-        const ramY=RAM_HEIGHT-1-x;
-        output[ramY*STRIDE+(ramX>>3)]&=~(1<<(7-(ramX&7)));
+        const ramY=contract.ramHeight-1-x;
+        output[ramY*contract.stride+(ramX>>3)]&=~(1<<(7-(ramX&7)));
         black++;
       }
     }
@@ -3405,14 +3405,14 @@ async function keepaliveE4(quiet=true){
   if(response[2]!==0)throw Error(`E4 keepalive failed: ${hex(response)}`);
 }
 
-function startPacket(id){
+function startPacket(id,contract=PACKER_CONTRACT){
   return Uint8Array.of(
     0xE5,0x00,id,
-    RAM_WIDTH&0xFF,RAM_WIDTH>>8,
-    RAM_HEIGHT&0xFF,RAM_HEIGHT>>8,
-    PACKER_CONTRACT.planeCount,
-    STRIDE,
-    TOTAL&0xFF,TOTAL>>8
+    contract.ramWidth&0xFF,contract.ramWidth>>8,
+    contract.ramHeight&0xFF,contract.ramHeight>>8,
+    contract.planeCount,
+    contract.stride,
+    contract.payloadBytes&0xFF,contract.payloadBytes>>8
   );
 }
 

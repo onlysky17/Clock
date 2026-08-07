@@ -30,7 +30,7 @@ for(const fragment of [
   "const RAM_HEIGHT=PACKER_CONTRACT.ramHeight;",
   "const STRIDE=PACKER_CONTRACT.stride;",
   "const TOTAL=PACKER_CONTRACT.payloadBytes;",
-  "PACKER_CONTRACT.planeCount,"
+  "planeCount:ACTIVE_PANEL.planeCount"
 ]){
   assert(source.includes(fragment),`Missing contract boundary: ${fragment}`);
 }
@@ -46,12 +46,12 @@ assert(
 );
 
 assert(
-  source.includes("function packCanvas()"),
+  source.includes("function packCanvas(contract=PACKER_CONTRACT)"),
   "packCanvas was removed"
 );
 
 assert(
-  source.includes("function startPacket(id)"),
+  source.includes("function startPacket(id,contract=PACKER_CONTRACT)"),
   "startPacket was removed"
 );
 
