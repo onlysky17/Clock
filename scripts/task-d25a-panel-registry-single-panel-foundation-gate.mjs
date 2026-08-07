@@ -6,14 +6,24 @@ const repoRoot = path.resolve(
   ".."
 );
 
-const sourcePath = path.join(
+const htmlPath = path.join(
   repoRoot,
   "web",
   "clock-app",
   "hl24a-canvas-e5.html"
 );
 
-const source = fs.readFileSync(sourcePath, "utf8");
+const registryPath = path.join(
+  repoRoot,
+  "web",
+  "clock-app",
+  "panel-registry.js"
+);
+
+const source =
+  fs.readFileSync(htmlPath, "utf8") +
+  "\n" +
+  fs.readFileSync(registryPath, "utf8");
 
 function assert(condition, message) {
   if (!condition) {

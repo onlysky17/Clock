@@ -10,6 +10,13 @@ const runtimePath = path.resolve(
   "clock-app",
   "hl24a-canvas-e5.html"
 );
+const registryPath = path.resolve(
+  __dirname,
+  "..",
+  "web",
+  "clock-app",
+  "panel-registry.js"
+);
 
 const proofDir = process.env.D24B_PROOF_DIR;
 
@@ -17,13 +24,27 @@ let server;
 let runtimeUrl;
 
 test.beforeAll(async () => {
-  server = http.createServer((_request, response) => {
+  server = http.createServer((request, response) => {
+    const requestUrl = new URL(
+      request.url || "/",
+      "http://127.0.0.1"
+    );
+
+    const servesRegistry =
+      requestUrl.pathname === "/panel-registry.js";
+
+    const requestedPath = servesRegistry
+      ? registryPath
+      : runtimePath;
+
     response.writeHead(200, {
-      "Content-Type": "text/html; charset=utf-8",
+      "Content-Type": servesRegistry
+        ? "text/javascript; charset=utf-8"
+        : "text/html; charset=utf-8",
       "Cache-Control": "no-store"
     });
 
-    response.end(fs.readFileSync(runtimePath));
+    response.end(fs.readFileSync(requestedPath));
   });
 
   await new Promise((resolve, reject) => {
