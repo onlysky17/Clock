@@ -104,32 +104,32 @@ assert(
 );
 
 assert(
-  source.includes("const WIDTH=ACTIVE_PANEL.logicalWidth;"),
+  source.includes("width:ACTIVE_PANEL.logicalWidth"),
   "WIDTH no longer derives from ACTIVE_PANEL"
 );
 
 assert(
-  source.includes("const HEIGHT=ACTIVE_PANEL.logicalHeight;"),
+  source.includes("height:ACTIVE_PANEL.logicalHeight"),
   "HEIGHT no longer derives from ACTIVE_PANEL"
 );
 
 assert(
-  source.includes("const RAM_WIDTH=ACTIVE_PANEL.ramWidth;"),
+  source.includes("ramWidth:ACTIVE_PANEL.ramWidth"),
   "RAM_WIDTH no longer derives from ACTIVE_PANEL"
 );
 
 assert(
-  source.includes("const RAM_HEIGHT=ACTIVE_PANEL.ramHeight;"),
+  source.includes("ramHeight:ACTIVE_PANEL.ramHeight"),
   "RAM_HEIGHT no longer derives from ACTIVE_PANEL"
 );
 
 assert(
-  source.includes("const STRIDE=ACTIVE_PANEL.stride;"),
+  source.includes("stride:ACTIVE_PANEL.stride"),
   "STRIDE no longer derives from ACTIVE_PANEL"
 );
 
 assert(
-  source.includes("const TOTAL=ACTIVE_PANEL.payloadBytes;"),
+  source.includes("payloadBytes:ACTIVE_PANEL.payloadBytes"),
   "TOTAL no longer derives from ACTIVE_PANEL"
 );
 

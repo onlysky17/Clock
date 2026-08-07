@@ -167,12 +167,35 @@ small{color:var(--muted)}
 const DEFAULT_PANEL_ID=window.EINK_DEFAULT_PANEL_ID;
 const PANEL_REGISTRY=window.EINK_PANEL_REGISTRY;
 const ACTIVE_PANEL=window.EINK_ACTIVE_PANEL;
-const WIDTH=ACTIVE_PANEL.logicalWidth;
-const HEIGHT=ACTIVE_PANEL.logicalHeight;
-const RAM_WIDTH=ACTIVE_PANEL.ramWidth;
-const RAM_HEIGHT=ACTIVE_PANEL.ramHeight;
-const STRIDE=ACTIVE_PANEL.stride;
-const TOTAL=ACTIVE_PANEL.payloadBytes;
+
+const PANEL_RUNTIME_CONTRACT=Object.freeze({
+  renderer:Object.freeze({
+    width:ACTIVE_PANEL.logicalWidth,
+    height:ACTIVE_PANEL.logicalHeight
+  }),
+  packer:Object.freeze({
+    ramWidth:ACTIVE_PANEL.ramWidth,
+    ramHeight:ACTIVE_PANEL.ramHeight,
+    stride:ACTIVE_PANEL.stride,
+    planeCount:ACTIVE_PANEL.planeCount,
+    payloadBytes:ACTIVE_PANEL.payloadBytes,
+    rotation:ACTIVE_PANEL.rotation,
+    bitOrder:ACTIVE_PANEL.bitOrder,
+    whiteBit:ACTIVE_PANEL.whiteBit
+  })
+});
+
+window.EINK_PANEL_RUNTIME_CONTRACT=PANEL_RUNTIME_CONTRACT;
+
+const RENDER_CONTRACT=PANEL_RUNTIME_CONTRACT.renderer;
+const PACKER_CONTRACT=PANEL_RUNTIME_CONTRACT.packer;
+
+const WIDTH=RENDER_CONTRACT.width;
+const HEIGHT=RENDER_CONTRACT.height;
+const RAM_WIDTH=PACKER_CONTRACT.ramWidth;
+const RAM_HEIGHT=PACKER_CONTRACT.ramHeight;
+const STRIDE=PACKER_CONTRACT.stride;
+const TOTAL=PACKER_CONTRACT.payloadBytes;
 const CHUNK=14;
 const EXPECTED_CHUNKS=Math.ceil(TOTAL/CHUNK);
 const SERVICE='18424398-7cbc-11e9-8f9e-2a86e4085a59';
@@ -203,7 +226,7 @@ $('previewGeometry').textContent=`${WIDTH} × ${HEIGHT}`;
 $('ramGeometry').textContent=`${RAM_WIDTH} × ${RAM_HEIGHT}`;
 $('strideBytes').textContent=`${STRIDE} bytes`;
 $('panelPackingSummary').textContent=
-  `Preview landscape ${WIDTH}×${HEIGHT} được pack theo ROTATE_${ACTIVE_PANEL.rotation} vào RAM ${RAM_WIDTH}×${RAM_HEIGHT}, ${ACTIVE_PANEL.bitOrder.toUpperCase()}, bit ${ACTIVE_PANEL.whiteBit} = trắng. Sáu padding bit cuối mỗi RAM row giữ trắng.`;
+  `Preview landscape ${WIDTH}×${HEIGHT} được pack theo ROTATE_${PACKER_CONTRACT.rotation} vào RAM ${RAM_WIDTH}×${RAM_HEIGHT}, ${PACKER_CONTRACT.bitOrder.toUpperCase()}, bit ${PACKER_CONTRACT.whiteBit} = trắng. Sáu padding bit cuối mỗi RAM row giữ trắng.`;
 $('expectedTransferSummary').textContent=
   `state=COMPLETE · chunks=${EXPECTED_CHUNKS} · bytes=${TOTAL} · browser CRC = firmware CRC`;
 const ctx=canvas.getContext('2d',{willReadFrequently:true});
@@ -3387,7 +3410,7 @@ function startPacket(id){
     0xE5,0x00,id,
     RAM_WIDTH&0xFF,RAM_WIDTH>>8,
     RAM_HEIGHT&0xFF,RAM_HEIGHT>>8,
-    ACTIVE_PANEL.planeCount,
+    PACKER_CONTRACT.planeCount,
     STRIDE,
     TOTAL&0xFF,TOTAL>>8
   );
@@ -3478,11 +3501,11 @@ async function sendFramebuffer(){
     $('progress').value=ackBytes;
     if((seq%40)===0){
       await keepaliveE4(true);
-      log(`Progress ${seq}/${EXPECTED_CHUNKS} chunks, ${ackBytes}/${ACTIVE_PANEL.payloadBytes} bytes`,'OK');
+      log(`Progress ${seq}/${EXPECTED_CHUNKS} chunks, ${ackBytes}/${PACKER_CONTRACT.payloadBytes} bytes`,'OK');
     }
   }
 
-  if(seq!==EXPECTED_CHUNKS||offset!==ACTIVE_PANEL.payloadBytes){
+  if(seq!==EXPECTED_CHUNKS||offset!==PACKER_CONTRACT.payloadBytes){
     throw Error(`Local count mismatch chunks=${seq}, bytes=${offset}`);
   }
 
@@ -3504,7 +3527,7 @@ async function sendFramebuffer(){
   const pass=manifest.status===0&&
     manifest.state===2&&
     manifest.chunks===EXPECTED_CHUNKS&&
-    manifest.bytes===ACTIVE_PANEL.payloadBytes&&
+    manifest.bytes===PACKER_CONTRACT.payloadBytes&&
     manifest.crc===browserCrc;
 
   if(!pass)throw Error(`Final status mismatch: ${hex(response)}`);
