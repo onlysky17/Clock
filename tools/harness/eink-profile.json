@@ -1,0 +1,65 @@
+{
+  "version": "0.1",
+  "project": {
+    "id": "eink",
+    "repository": "onlysky17/Clock",
+    "kind": "firmware_hardware"
+  },
+  "workspace": {
+    "canonicalPath": "D:\\EINK\\Clock",
+    "gitRoot": "D:\\EINK\\Clock",
+    "defaultBranch": "main",
+    "origin": "https://github.com/onlysky17/Clock.git",
+    "requireHeadEqualsOriginMain": true,
+    "requireCleanTrackedTree": true,
+    "preserveUntracked": true
+  },
+  "contextOrder": [
+    "AGENTS.md",
+    "docs/agent/CURRENT_STATE.md",
+    "docs/agent/NEXT_ACTION.md"
+  ],
+  "toolchain": {
+    "sdkPath": "D:\\EINK\\DA14585_SDK_6.0.22.1401",
+    "target": "DA14585",
+    "bootstrapScript": "tools\\bootstrap-hink213-clock22-base.ps1",
+    "packerScript": "tools\\pack-hink.ps1",
+    "keilCli": "UNCONFIRMED"
+  },
+  "artifactPolicy": {
+    "rawBinMaxBytes": 65528,
+    "packedSpiBytes": 262144
+  },
+  "executor": {
+    "primary": "codex_local",
+    "fallback": "manual_powershell"
+  },
+  "automation": {
+    "automatic": [
+      "workspace_guard",
+      "context_loading",
+      "source_editing",
+      "artifact_validation"
+    ],
+    "ownerGates": [
+      "keil_build",
+      "flash_burn",
+      "spi_verify",
+      "cold_boot",
+      "ble_test",
+      "physical_eink_visual_test",
+      "merge"
+    ]
+  },
+  "gitPolicy": {
+    "explicitStagingOnly": true,
+    "forbiddenCommands": [
+      "git add .",
+      "git add -A",
+      "git commit -a",
+      "git clean",
+      "git reset --hard",
+      "git push --force"
+    ]
+  }
+}
