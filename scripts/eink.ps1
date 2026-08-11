@@ -44,9 +44,29 @@ function Invoke-GitCommand {
         [string[]]$Arguments
     )
 
-    $output = @(& git @Arguments 2>&1 | ForEach-Object { $_.ToString() })
+    # Windows PowerShell 5.1 may promote normal native stderr output
+    # (for example git fetch progress) to NativeCommandError when
+    # ErrorActionPreference is Stop and stderr is merged with stdout.
+    #
+    # Treat the native process exit code as the source of truth.
+    $previousErrorActionPreference = $ErrorActionPreference
+
+    try {
+        $ErrorActionPreference = 'Continue'
+
+        $output = @(
+            & git @Arguments 2>&1 |
+                ForEach-Object { $_.ToString() }
+        )
+
+        $exitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+
     return [pscustomobject]@{
-        ExitCode = $LASTEXITCODE
+        ExitCode = $exitCode
         Output = $output
     }
 }
