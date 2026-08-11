@@ -1,5 +1,25 @@
 # CURRENT_STATE
 
+## EINK Harness v0.1 Closeout
+
+- PR #139 is merged to `main`.
+- Main merge commit: `37a1860429691c941dc8b908f512d29aa7be173e`
+  (`chore: add EINK harness v0.1 (#139)`).
+- Original feature commit: `4afdd45c3ddcd600658ac3f8b0e74578508341b1`.
+- Merged scope: exactly five files, 330 insertions:
+  - `scripts/task-eink-harness-v0.1-smoke.ps1`
+  - `tools/harness/artifact-policy.ps1`
+  - `tools/harness/eink-profile.json`
+  - `tools/harness/task-state.ps1`
+  - `tools/harness/workspace-guard.ps1`
+- Pre-merge engineering evidence: harness smoke PASS, `git diff --check` PASS,
+  staged check PASS, and EINK AUTO PREFLIGHT PASS.
+- Post-merge evidence: local `main` is synced, `HEAD == origin/main`, and the
+  working tree is clean.
+- This task made no firmware, web, BIN, build-output, or flash changes.
+- These are Harness and repository validation facts only. They do not establish
+  a physical firmware or device PASS.
+
 ## Canonical Current State
 
 E1A automatic foundation is merged into `main`.
