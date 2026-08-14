@@ -1,5 +1,5 @@
 {
-  "version": "0.1",
+  "version": "0.3",
   "project": {
     "id": "eink",
     "repository": "onlysky17/Clock",
@@ -21,10 +21,17 @@
   ],
   "toolchain": {
     "sdkPath": "D:\\EINK\\DA14585_SDK_6.0.22.1401",
+    "canonicalSource": "D:\\EINK\\Clock\\firmware\\active\\HINK213_CLOCK_22_BASE",
     "target": "DA14585",
     "bootstrapScript": "tools\\bootstrap-hink213-clock22-base.ps1",
     "packerScript": "tools\\pack-hink.ps1",
-    "keilCli": "UNCONFIRMED"
+    "keilCli": "D:\\Keil_v5_AC6\\UV4\\UV4.exe",
+    "toolsIni": "D:\\Keil_v5_AC6\\TOOLS.INI",
+    "compilerVersion": "V6.24",
+    "compilerExecutable": "C:\\Users\\NHAT THIEN\\AppData\\Local\\Keil_v5\\ARM\\ARMCLANG\\Bin\\armclang.exe",
+    "projectFile": "D:\\EINK\\DA14585_SDK_6.0.22.1401\\projects\\target_apps\\ble_examples\\HINK213_CLOCK_22_BASE\\Keil_5\\ble_app_peripheral.uvprojx",
+    "rawBin": "D:\\EINK\\DA14585_SDK_6.0.22.1401\\projects\\target_apps\\ble_examples\\HINK213_CLOCK_22_BASE\\Keil_5\\out_DA14585\\Objects\\ble_app_peripheral_585.bin",
+    "buildEvidenceRoot": "D:\\EINK\\Clock\\_incoming\\EINK_HARNESS_BUILD"
   },
   "artifactPolicy": {
     "rawBinMaxBytes": 65528,
@@ -39,10 +46,10 @@
       "workspace_guard",
       "context_loading",
       "source_editing",
-      "artifact_validation"
+      "artifact_validation",
+      "keil_build"
     ],
     "ownerGates": [
-      "keil_build",
       "flash_burn",
       "spi_verify",
       "cold_boot",

@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
-    [string]$ProfilePath = (Join-Path $PSScriptRoot 'eink-profile.json')
+    [string]$ProfilePath = (Join-Path $PSScriptRoot 'eink-profile.json'),
+    [switch]$AllowDirtyTrackedTree
 )
 
 $ErrorActionPreference = 'Stop'
@@ -44,7 +45,7 @@ if ($originUrl -ne $profile.workspace.origin) { $errors.Add('WRONG_REMOTE') }
 $statusLines = & git status --porcelain=v1 --untracked-files=all 2>$null
 $trackedEntries = @($statusLines | Where-Object { $_ -and -not $_.StartsWith('?? ') })
 $untrackedEntries = @($statusLines | Where-Object { $_ -and $_.StartsWith('?? ') })
-if ($profile.workspace.requireCleanTrackedTree -and $trackedEntries.Count -gt 0) {
+if ($profile.workspace.requireCleanTrackedTree -and -not $AllowDirtyTrackedTree -and $trackedEntries.Count -gt 0) {
     $errors.Add('DIRTY_TRACKED_TREE')
 }
 
