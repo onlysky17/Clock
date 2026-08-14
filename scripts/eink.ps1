@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('status', 'sync', 'next', 'closeout', 'home-verify')]
+    [ValidateSet('status', 'sync', 'next', 'closeout', 'home-verify', 'build')]
     [string]$Action = 'status',
 
     [switch]$DryRun,
@@ -112,7 +112,10 @@ function New-RunnerGuardProfile {
 }
 
 function Invoke-WorkspaceGuard {
-    param([switch]$StrictMain)
+    param(
+        [switch]$StrictMain,
+        [switch]$AllowDirtyTrackedTree
+    )
 
     $activeProfile = $profilePath
     $temporaryProfile = $null
@@ -131,7 +134,11 @@ function Invoke-WorkspaceGuard {
             $activeProfile = $temporaryProfile
         }
 
-        $result = Invoke-ChildPowerShell -ScriptPath $guardScript -Arguments @('-ProfilePath', $activeProfile)
+        $guardArguments = @('-ProfilePath', $activeProfile)
+        if ($AllowDirtyTrackedTree) {
+            $guardArguments += '-AllowDirtyTrackedTree'
+        }
+        $result = Invoke-ChildPowerShell -ScriptPath $guardScript -Arguments $guardArguments
         return [pscustomobject]@{
             ExitCode = $result.ExitCode
             Data = ConvertFrom-JsonOutput -Output $result.Output
@@ -265,6 +272,172 @@ function Invoke-SyncImplementation {
     }
 }
 
+function Write-BuildFailure {
+    param([Parameter(Mandatory = $true)][string]$Reason)
+
+    Write-Output 'EINK HARNESS: BLOCKED'
+    Write-Output 'ACTION: BUILD'
+    Write-Output "REASON: $Reason"
+}
+
+function Test-BuildGuard {
+    param([Parameter(Mandatory = $true)]$Guard)
+
+    if ($Guard.ExitCode -eq 0) {
+        return $true
+    }
+
+    $errors = @($Guard.Data.errors)
+    return ($errors.Count -eq 1 -and [string]$errors[0] -eq 'DIRTY_TRACKED_TREE')
+}
+
+function Invoke-BuildImplementation {
+    $guard = Invoke-WorkspaceGuard -AllowDirtyTrackedTree
+    if (-not (Test-BuildGuard -Guard $guard)) {
+        Write-BuildFailure -Reason (Get-GuardBlockReason -Guard $guard)
+        return 1
+    }
+
+    $profile = Get-Content -LiteralPath $ProfilePath -Raw | ConvertFrom-Json
+    $toolchain = $profile.toolchain
+    $requiredPaths = @(
+        [string]$toolchain.sdkPath,
+        [string]$toolchain.canonicalSource,
+        (Join-Path $RepoRoot ([string]$toolchain.bootstrapScript)),
+        [string]$toolchain.keilCli,
+        [string]$toolchain.toolsIni,
+        [string]$toolchain.compilerExecutable,
+        [string]$toolchain.projectFile
+    )
+
+    foreach ($requiredPath in $requiredPaths) {
+        if ([string]::IsNullOrWhiteSpace($requiredPath) -or -not (Test-Path -LiteralPath $requiredPath)) {
+            Write-BuildFailure -Reason "MISSING_DEPENDENCY: $requiredPath"
+            return 1
+        }
+    }
+
+    $toolsIniText = Get-Content -LiteralPath ([string]$toolchain.toolsIni) -Raw
+    if ($toolsIniText -notmatch 'DEFAULT_ARMCC_VERSION_AC6\s*=\s*"V6\.24"' -or
+        $toolsIniText -notmatch 'ARMCCPATH0') {
+        Write-BuildFailure -Reason 'KEIL_TOOLCHAIN_MISMATCH'
+        return 1
+    }
+
+    $projectText = Get-Content -LiteralPath ([string]$toolchain.projectFile) -Raw
+    if ($projectText -notmatch '<TargetName>DA14585</TargetName>' -or
+        $projectText -notmatch 'V6\.24') {
+        Write-BuildFailure -Reason 'KEIL_PROJECT_MISMATCH'
+        return 1
+    }
+
+    $bootstrapPath = Join-Path $RepoRoot ([string]$toolchain.bootstrapScript)
+    $bootstrap = Invoke-ChildPowerShell -ScriptPath $bootstrapPath -Arguments @()
+    if ($bootstrap.ExitCode -ne 0) {
+        Write-BuildFailure -Reason 'BOOTSTRAP_FAILED'
+        return 1
+    }
+
+    $stamp = Get-Date -Format 'yyyyMMdd_HHmmss'
+    $evidenceDir = Join-Path ([string]$toolchain.buildEvidenceRoot) $stamp
+    [void](New-Item -ItemType Directory -Path $evidenceDir -Force)
+    $buildLog = Join-Path $evidenceDir 'keil-build.log'
+    $buildStartedUtc = [DateTime]::UtcNow
+
+    $processArguments = @(
+        '-j0',
+        '-r', "`"$([string]$toolchain.projectFile)`"",
+        '-t', "`"$([string]$toolchain.target)`"",
+        '-o', "`"$buildLog`""
+    )
+    try {
+        $process = Start-Process `
+            -FilePath ([string]$toolchain.keilCli) `
+            -ArgumentList $processArguments `
+            -Wait `
+            -PassThru
+    }
+    catch {
+        Write-BuildFailure -Reason 'KEIL_PROCESS_EXCEPTION'
+        return 1
+    }
+
+    if ($null -ne $process.ExitCode -and $process.ExitCode -ne 0) {
+        Write-BuildFailure -Reason "KEIL_EXIT_$($process.ExitCode)"
+        return 1
+    }
+    if (-not (Test-Path -LiteralPath $buildLog -PathType Leaf)) {
+        Write-BuildFailure -Reason 'BUILD_LOG_MISSING'
+        return 1
+    }
+
+    $buildText = Get-Content -LiteralPath $buildLog -Raw
+    if ($buildText -match '(?i)not supported by Toolchain') {
+        Write-BuildFailure -Reason 'KEIL_TOOLCHAIN_UNSUPPORTED'
+        return 1
+    }
+
+    if ($buildText -match '(?i)ArmCC|CreateProcess|Target not created') {
+        Write-BuildFailure -Reason 'BUILD_LOG_FATAL'
+        return 1
+    }
+
+    $compilerMarker = "Using Compiler '$([string]$toolchain.compilerVersion)'"
+    if ($buildText.IndexOf($compilerMarker, [System.StringComparison]::OrdinalIgnoreCase) -lt 0) {
+        Write-BuildFailure -Reason 'KEIL_COMPILER_NOT_CONFIRMED'
+        return 1
+    }
+    $resultMatch = [regex]::Match($buildText, '(\d+)\s+Error\(s\),\s+(\d+)\s+Warning\(s\)\.')
+    if (-not $resultMatch.Success -or
+        [int]$resultMatch.Groups[1].Value -ne 0 -or
+        [int]$resultMatch.Groups[2].Value -ne 0) {
+        Write-BuildFailure -Reason 'BUILD_ERRORS_OR_WARNINGS'
+        return 1
+    }
+
+    $rawBin = [string]$toolchain.rawBin
+    if (-not (Test-Path -LiteralPath $rawBin -PathType Leaf)) {
+        Write-BuildFailure -Reason 'RAW_BIN_MISSING'
+        return 1
+    }
+    $rawFile = Get-Item -LiteralPath $rawBin
+    if ($rawFile.LastWriteTimeUtc -lt $buildStartedUtc.AddSeconds(-2)) {
+        Write-BuildFailure -Reason 'RAW_BIN_STALE'
+        return 1
+    }
+    if ($rawFile.Length -le 0 -or $rawFile.Length -gt [int64]$profile.artifactPolicy.rawBinMaxBytes) {
+        Write-BuildFailure -Reason "RAW_BIN_SIZE_$($rawFile.Length)"
+        return 1
+    }
+
+    $rawStream = $null
+    $sha256 = $null
+    try {
+        $rawStream = [System.IO.File]::OpenRead($rawBin)
+        $sha256 = [System.Security.Cryptography.SHA256]::Create()
+        $rawHashBytes = $sha256.ComputeHash($rawStream)
+        $rawHash = ([System.BitConverter]::ToString($rawHashBytes)).Replace('-', '').ToUpperInvariant()
+    }
+    finally {
+        if ($null -ne $sha256) {
+            $sha256.Dispose()
+        }
+        if ($null -ne $rawStream) {
+            $rawStream.Dispose()
+        }
+    }
+    Write-Output 'EINK HARNESS: PASS'
+    Write-Output 'ACTION: BUILD'
+    Write-Output "TARGET: $($toolchain.target)"
+    Write-Output "COMPILER: $($toolchain.compilerVersion)"
+    Write-Output "RAW_BIN: $rawBin"
+    Write-Output "RAW_SIZE: $($rawFile.Length)"
+    Write-Output "RAW_SHA256: $rawHash"
+    Write-Output "BUILD_LOG: $buildLog"
+    Write-Output 'NEXT_STATE: RAW_FIRMWARE_VERIFIED'
+    return 0
+}
+
 $actionName = $Action.ToUpperInvariant()
 
 switch ($Action) {
@@ -374,5 +547,16 @@ switch ($Action) {
 
         Write-Result -Result PASS -ActionName $actionName -Branch $guard.Data.branch -Head $guard.Data.head -NextState WORKSPACE_VERIFIED -Detail 'HOME_VERIFY: PASS'
         exit 0
+    }
+    'build' {
+        $buildResult = @(Invoke-BuildImplementation)
+        if ($buildResult.Count -eq 0) {
+            Write-BuildFailure -Reason 'BUILD_RESULT_MISSING'
+            exit 1
+        }
+        if ($buildResult.Count -gt 1) {
+            $buildResult[0..($buildResult.Count - 2)] | Write-Output
+        }
+        exit [int]$buildResult[-1]
     }
 }
