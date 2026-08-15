@@ -1,5 +1,5 @@
 {
-  "version": "0.6",
+  "version": "0.7",
   "project": {
     "id": "eink",
     "repository": "onlysky17/Clock",
@@ -67,6 +67,13 @@
     "ownerPassToken": "PASS",
     "coldBootPowerOffSeconds": 5
   },
+  "releasePipeline": {
+    "evidenceRoot": "D:\\EINK\\Clock\\_incoming\\EINK_HARNESS_RELEASE",
+    "packedRoot": "D:\\EINK\\Clock\\_incoming\\EINK_HARNESS_RELEASE_PACKED",
+    "destructivePhrasePrefix": "BURN-BOARD1-SPI",
+    "requireHashBoundConfirmation": true,
+    "planIsNonDestructive": true
+  },
   "artifactPolicy": {
     "rawBinMaxBytes": 65528,
     "packedSpiBytes": 262144
@@ -85,7 +92,8 @@
       "spi_backup_read",
       "spi_burn_guarded",
       "spi_readback_verify",
-      "device_validation_orchestration"
+      "device_validation_orchestration",
+      "release_pipeline_orchestration"
     ],
     "ownerGates": [
       "packed_bin_selection",
