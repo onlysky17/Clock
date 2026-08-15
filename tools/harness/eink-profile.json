@@ -1,5 +1,5 @@
 {
-  "version": "0.3",
+  "version": "0.4",
   "project": {
     "id": "eink",
     "repository": "onlysky17/Clock",
@@ -33,6 +33,21 @@
     "rawBin": "D:\\EINK\\DA14585_SDK_6.0.22.1401\\projects\\target_apps\\ble_examples\\HINK213_CLOCK_22_BASE\\Keil_5\\out_DA14585\\Objects\\ble_app_peripheral_585.bin",
     "buildEvidenceRoot": "D:\\EINK\\Clock\\_incoming\\EINK_HARNESS_BUILD"
   },
+  "spiBackup": {
+    "smartSnippetsCli": "C:\\Program Files (x86)\\SmartSnippetsToolbox\\SmartSnippetsToolbox5.0.10\\SmartSnippetsToolbox.exe",
+    "jtagProgrammer": "C:\\Program Files (x86)\\SmartSnippetsToolbox\\SmartSnippetsToolbox5.0.10\\common_resources\\SupportPackages\\DA14585-586\\toolbox_resources\\common\\jtag_programmer.bin",
+    "chip": "DA14585-00",
+    "jtagSerial": "-1",
+    "clk": "P0_0",
+    "cs": "P0_3",
+    "miso": "P0_5",
+    "mosi": "P0_6",
+    "offset": "0x00000",
+    "length": "0x40000",
+    "max": "0x40000",
+    "expectedBytes": 262144,
+    "evidenceRoot": "D:\\EINK\\Clock\\_incoming\\EINK_HARNESS_SPI_BACKUP"
+  },
   "artifactPolicy": {
     "rawBinMaxBytes": 65528,
     "packedSpiBytes": 262144
@@ -47,7 +62,8 @@
       "context_loading",
       "source_editing",
       "artifact_validation",
-      "keil_build"
+      "keil_build",
+      "spi_backup_read"
     ],
     "ownerGates": [
       "flash_burn",
