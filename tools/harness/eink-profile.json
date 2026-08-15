@@ -1,5 +1,5 @@
 {
-  "version": "0.5",
+  "version": "0.6",
   "project": {
     "id": "eink",
     "repository": "onlysky17/Clock",
@@ -59,6 +59,14 @@
     "writeVerify": true,
     "eraseVerify": true
   },
+  "deviceValidation": {
+    "canonicalWebUrl": "https://onlysky17.github.io/Clock/test.html",
+    "evidenceRoot": "D:\\EINK\\Clock\\_incoming\\EINK_HARNESS_DEVICE_VALIDATION",
+    "requiredBurnState": "SPI_BURN_VERIFIED",
+    "expectedSpiBytes": 262144,
+    "ownerPassToken": "PASS",
+    "coldBootPowerOffSeconds": 5
+  },
   "artifactPolicy": {
     "rawBinMaxBytes": 65528,
     "packedSpiBytes": 262144
@@ -76,7 +84,8 @@
       "keil_build",
       "spi_backup_read",
       "spi_burn_guarded",
-      "spi_readback_verify"
+      "spi_readback_verify",
+      "device_validation_orchestration"
     ],
     "ownerGates": [
       "packed_bin_selection",
