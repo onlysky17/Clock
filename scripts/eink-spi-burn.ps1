@@ -184,7 +184,7 @@ $evidenceDir = Join-Path ([string]$burn.evidenceRoot) $stamp
 [System.IO.File]::WriteAllText((Join-Path $evidenceDir 'packed.sha256.txt'), "$packedHash  $packedPath`r`n", [System.Text.UTF8Encoding]::new($false))
 
 $backupRunner = Join-Path $PSScriptRoot 'eink-spi-backup.ps1'
-$backupOutput = @(& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $backupRunner -JtagSerial $serial 2>&1 | ForEach-Object { $_.ToString() })
+$backupOutput = @(& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $backupRunner -ProfilePath $ProfilePath -JtagSerial $serial 2>&1 | ForEach-Object { $_.ToString() })
 $backupExit = $LASTEXITCODE
 [System.IO.File]::WriteAllLines((Join-Path $evidenceDir 'fresh-backup.log'), $backupOutput, [System.Text.UTF8Encoding]::new($false))
 if ($backupExit -ne 0 -or -not ($backupOutput -match 'NEXT_STATE: SPI_BACKUP_VERIFIED')) {
