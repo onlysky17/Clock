@@ -4,54 +4,67 @@
 
 - Repository: `D:\EINK\Clock`.
 - Canonical web URL: `https://onlysky17.github.io/Clock/test.html`.
-- EINK Harness v0.3 PR #144 is merged to `main`.
-- Feature commit: `9c662195eee8c1552918d2c84e9b5c7ef00d3726`.
-- Actual main merge commit: `bbdc2f89c8746bcfc5186352e08f2beebd424b31`.
-- Harness v0.3 automated Keil build is engineering PASS.
-- Proven build evidence:
+- EINK Harness v0.4 PR #146 is merged to `main`.
+- Feature head: `42ee0ae388603a983f0059c2d0f108526a68fc8e`.
+- Actual main merge commit: `3ff48fb3c56bc4bca60df164358815d433229fcb`.
+- Harness v0.4 automated full-SPI backup is engineering + real hardware PASS.
+- Proven backup evidence:
   - Harness smoke PASS 12/12.
-  - Keil ARMCLANG `V6.24`.
-  - `0 Error(s), 0 Warning(s)`.
-  - raw BIN `50552` bytes, below the `65528` byte limit.
-  - raw SHA256 `547D6D3949E36A88843D62DC34FF656199EFD03ECE0442A06733B7296908E012`.
-  - `NEXT_STATE: RAW_FIRMWARE_VERIFIED`.
-- Closeout details: `docs/agent/EINK_HARNESS_V0.3_CLOSEOUT.md`.
-- v0.3 does not establish pack, SPI burn, SPI verify, cold boot, BLE, or physical e-ink PASS.
+  - Board #1 full READ1 = `262144` bytes.
+  - Board #1 full READ2 = `262144` bytes.
+  - READ1 SHA256 `CE2D66AC3B08A7EC761F1C5C786064BA84F5C1FCB96E55E4A6146C3EF01C5E63`.
+  - READ2 SHA256 `CE2D66AC3B08A7EC761F1C5C786064BA84F5C1FCB96E55E4A6146C3EF01C5E63`.
+  - Hash equality PASS.
+  - `NEXT_STATE: SPI_BACKUP_VERIFIED`.
+- v0.4 is read-only and does not establish SPI write/burn, post-write verify, cold boot, BLE, or physical e-ink PASS.
+- Closeout details: `docs/agent/EINK_HARNESS_V0.4_CLOSEOUT.md`.
 - Owner backup folder `bk-13-08-26/` remains outside task scope and must not be staged, cleaned, reset, moved, or deleted by automation.
 
 ## Next Canonical Action
 
-`EINK HARNESS v0.4 - AUTOMATED FULL-SPI BACKUP`
+`EINK HARNESS v0.5 - GUARDED SPI BURN + FULL READBACK VERIFY`
 
-Goal: make a read-only Harness action that backs up the complete 0x40000-byte SPI image through the already proven SmartSnippets CLI path.
+Goal: automate the already-proven SmartSnippets CLI write path while preserving explicit safety gates and requiring a full 0x40000-byte readback hash match before PASS.
 
 Required behavior:
 
 - verify canonical workspace/project before hardware access;
-- auto-detect or safely resolve the connected J-Link without hardcoding a fragile serial when avoidable;
+- require an explicit Owner-provided packed BIN path, never guess the image;
+- require the packed BIN to be exactly `262144` bytes;
+- calculate and print the input packed SHA256 before any destructive action;
+- require a fresh successful v0.4-style full-SPI backup in the same run/session before erase/write;
+- require an explicit destructive confirmation token before erase/write;
 - use the proven DA14585 SmartSnippets/JTAG programmer and SPI pin mapping;
-- perform two independent full reads of `0x40000` bytes;
-- require each backup to be exactly `262144` bytes;
-- calculate SHA256 for both reads;
-- require both hashes to match before PASS;
-- save immutable/read-only evidence under `D:\EINK\Clock\_incoming`;
-- report exact output paths, sizes, hashes, tool paths, and command evidence.
+- perform full SPI erase/write using the proven CLI path only;
+- perform an independent full 0x40000-byte readback after write;
+- require readback size `262144` and SHA256 == input packed SHA256 before PASS;
+- save stdout/stderr, backup, input hash, readback, and final evidence under `D:\EINK\Clock\_incoming`;
+- on any failure, stop without retry loops or alternate write methods.
 
 ## Hard Scope Boundary
 
-v0.4 backup is READ ONLY.
+v0.5 may automate SPI erase/write only after all preconditions above pass.
 
 Do not:
 
-- erase SPI;
-- write/burn SPI;
-- pack firmware;
 - change firmware source or `.uvprojx`;
-- alter Keil/compiler registration;
-- cold boot the board as part of the automated backup task;
-- run BLE or visual physical validation;
+- change Keil/compiler registration;
+- build or repack automatically inside the burn action;
 - touch `bk-13-08-26/`;
-- stage/commit/push unrelated files.
+- claim cold boot, BLE, or visual PASS;
+- stage/commit/push unrelated files;
+- use SmartSnippets GUI as a fallback if CLI fails.
+
+## Owner Gates
+
+Owner still controls:
+
+- the exact packed BIN selected for burn;
+- the explicit destructive confirmation token;
+- final GitHub merge;
+- cold boot validation;
+- BLE validation;
+- physical e-ink visual validation.
 
 ## Execution Contract
 
