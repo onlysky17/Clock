@@ -1,0 +1,50 @@
+[CmdletBinding()]
+param()
+
+$ErrorActionPreference = 'Stop'
+
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$profilePath = Join-Path $repoRoot 'tools\harness\eink-profile.json'
+$runnerPath = Join-Path $repoRoot 'scripts\eink-release.ps1'
+
+$profile = Get-Content -LiteralPath $profilePath -Raw | ConvertFrom-Json
+$runner = Get-Content -LiteralPath $runnerPath -Raw
+
+$passed = 0
+$failed = 0
+
+function Gate {
+    param([string]$Name, [bool]$Condition)
+    if ($Condition) {
+        Write-Output "PASS: $Name"
+        $script:passed++
+    }
+    else {
+        Write-Output "FAIL: $Name"
+        $script:failed++
+    }
+}
+
+Gate 'profile version is 0.7' ([string]$profile.version -eq '0.7')
+Gate 'release evidence root configured' (-not [string]::IsNullOrWhiteSpace([string]$profile.releasePipeline.evidenceRoot))
+Gate 'release packed root configured' (-not [string]::IsNullOrWhiteSpace([string]$profile.releasePipeline.packedRoot))
+Gate 'Plan and Release modes exist' ($runner -match "ValidateSet\('Plan', 'Release'\)")
+Gate 'workspace mismatch emits canonical stop text' ($runner -match 'SAI PROJECT/WORKSPACE')
+Gate 'tracked dirty tree blocks release' ($runner -match 'DIRTY_TRACKED_TREE')
+Gate 'build is composed from proven harness action' ($runner -match "Join-Path \$PSScriptRoot 'eink\.ps1'" -and $runner -match "@\('build'\)")
+Gate 'packer is composed from canonical profile path' ($runner -match 'toolchain\.packerScript')
+Gate 'packed image must be exact configured SPI size' ($runner -match 'artifactPolicy\.packedSpiBytes')
+Gate 'burn Plan runs before any destructive action' ($runner -match "'-Mode', 'Plan'" -and $runner -match 'OWNER_BURN_CONFIRMATION_REQUIRED')
+Gate 'Plan mode exits before destructive Owner gate' ($runner -match "if \(\$Mode -eq 'Plan'\)")
+Gate 'destructive confirmation is bound to exact packed SHA' ($runner -match 'destructivePhrasePrefix' -and $runner -match '\$packedHash' -and $runner -match 'HASH_BOUND_DESTRUCTIVE_CONFIRMATION_REQUIRED')
+Gate 'burn reuses guarded v0.5 runner' ($runner -match "eink-spi-burn\.ps1" -and $runner -match "'-Mode', 'Burn'")
+Gate 'burn still requires exact expected packed SHA' ($runner -match "'-ExpectedPackedSha256', \$packedHash")
+Gate 'device validation reuses v0.6 runner' ($runner -match 'eink-device-validate\.ps1')
+Gate 'cold boot BLE and visual are not auto-approved by release runner' (-not ($runner -match "eink-device-validate\.ps1'.*'-.*PASS"))
+Gate 'release evidence summary is persisted' ($runner -match 'release-validation\.txt')
+Gate 'no GUI fallback or retry loop' (-not ($runner -match '(?i)SmartSnippets GUI|retry|Start-Sleep'))
+Gate 'final release verified state explicit' ($runner -match 'NEXT_STATE: RELEASE_VALIDATION_VERIFIED')
+
+Write-Output "EINK HARNESS V0.7 SMOKE: $passed PASS / $failed FAIL"
+if ($failed -gt 0) { exit 1 }
+exit 0
