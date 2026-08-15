@@ -1,5 +1,5 @@
 {
-  "version": "0.4",
+  "version": "0.5",
   "project": {
     "id": "eink",
     "repository": "onlysky17/Clock",
@@ -48,6 +48,17 @@
     "expectedBytes": 262144,
     "evidenceRoot": "D:\\EINK\\Clock\\_incoming\\EINK_HARNESS_SPI_BACKUP"
   },
+  "spiBurn": {
+    "confirmationToken": "BURN-BOARD1-SPI",
+    "expectedBytes": 262144,
+    "offset": "0x00000",
+    "max": "0x40000",
+    "evidenceRoot": "D:\\EINK\\Clock\\_incoming\\EINK_HARNESS_SPI_BURN",
+    "requireFreshBackup": true,
+    "requireExpectedPackedSha256": true,
+    "writeVerify": true,
+    "eraseVerify": true
+  },
   "artifactPolicy": {
     "rawBinMaxBytes": 65528,
     "packedSpiBytes": 262144
@@ -63,11 +74,13 @@
       "source_editing",
       "artifact_validation",
       "keil_build",
-      "spi_backup_read"
+      "spi_backup_read",
+      "spi_burn_guarded",
+      "spi_readback_verify"
     ],
     "ownerGates": [
-      "flash_burn",
-      "spi_verify",
+      "packed_bin_selection",
+      "destructive_burn_confirmation",
       "cold_boot",
       "ble_test",
       "physical_eink_visual_test",
