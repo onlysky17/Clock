@@ -405,7 +405,18 @@ void user_app_adv_start(void)
 	app_add_ad_struct(cmd, vbuf, vbuf[0]+1, 1);
 
 	// å¯åŠ¨å¸¦è¶…æ—¶çš„æ— å‘å¹¿æ’­
-	app_easy_gap_undirected_advertise_with_timeout_start(user_default_hnd_conf.advertise_period, NULL);
+	if (hink_d2_dedicated_clock_active())
+	{
+		/* FW-AUTONOMOUS-CLOCK-001: keep D2 clock independent from BLE lifecycle.
+		 * Timed advertising consumes an app_easy_timer; D2 already owns a periodic
+		 * minute timer. Continuous connectable advertising avoids timer-slot
+		 * contention after disconnect while preserving reconnectability. */
+		app_easy_gap_undirected_advertise_start();
+	}
+	else
+	{
+		app_easy_gap_undirected_advertise_with_timeout_start(user_default_hnd_conf.advertise_period, NULL);
+	}
 	printk("\nuser_app_adv_start! %s\n", adv_name+2);
 }
 
