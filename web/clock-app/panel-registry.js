@@ -36,7 +36,10 @@
   function parseDeviceClock(){
     const ble=document.getElementById('ble');
     const local=document.getElementById('d2LocalTime');
-    if(!ble||!local||!/connected/i.test(ble.textContent||''))return null;
+    if(!ble||!local)return null;
+
+    const bleText=(ble.textContent||'').trim().toLowerCase();
+    if(!bleText.includes('connected')||bleText.includes('disconnected'))return null;
 
     const text=(local.textContent||'').trim();
     const time=text.match(/(?:^|\s)([01]?\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?(?:\s|$)/);
@@ -57,11 +60,11 @@
   }
 
   function createClockCard(){
-    if(document.querySelector('.productModeV2Clock'))return null;
+    if(document.querySelector('.productProfileClock'))return null;
 
-    const card=document.createElement('section');
-    card.className='card productModeV2Clock';
-    card.dataset.einkPremiumClock='v2';
+    const card=document.createElement('div');
+    card.className='productProfileClock';
+    card.dataset.einkPremiumClock='v2-profile';
     card.innerHTML=`
       <div class="productClockCopy">
         <div class="productClockEyebrow">Current clock</div>
@@ -105,21 +108,21 @@
   }
 
   function mountPremiumClock(){
-    const main=document.querySelector('main.productModeV2');
-    const header=document.querySelector('.productModeV2Header');
-    if(!main||!header)return false;
+    const profile=document.querySelector('.productModeV2Profiles');
+    const intro=profile?.querySelector('.productProfileIntro');
+    if(!profile||!intro)return false;
 
-    let card=document.querySelector('.productModeV2Clock');
+    let card=document.querySelector('.productProfileClock');
     if(!card){
       card=createClockCard();
       if(!card)return true;
-      header.insertAdjacentElement('afterend',card);
+      intro.insertAdjacentElement('afterend',card);
     }
 
     updateClockCard(card);
     if(!window.__einkPremiumClockTimer){
       window.__einkPremiumClockTimer=setInterval(()=>{
-        const mounted=document.querySelector('.productModeV2Clock');
+        const mounted=document.querySelector('.productProfileClock');
         if(mounted)updateClockCard(mounted);
       },1000);
     }
