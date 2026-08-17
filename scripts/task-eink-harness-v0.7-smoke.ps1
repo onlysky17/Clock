@@ -6,9 +6,13 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $profilePath = Join-Path $repoRoot 'tools\harness\eink-profile.json'
 $runnerPath = Join-Path $repoRoot 'scripts\eink-release.ps1'
+$deviceValidationPath = Join-Path $repoRoot 'scripts\eink-device-validate.ps1'
+$reproPath = Join-Path $repoRoot 'scripts\eink-build-repro-check.ps1'
 
 $profile = Get-Content -LiteralPath $profilePath -Raw | ConvertFrom-Json
 $runner = Get-Content -LiteralPath $runnerPath -Raw
+$deviceValidation = Get-Content -LiteralPath $deviceValidationPath -Raw
+$repro = if (Test-Path -LiteralPath $reproPath) { Get-Content -LiteralPath $reproPath -Raw } else { '' }
 
 $passed = 0
 $failed = 0
@@ -39,8 +43,16 @@ Gate 'Plan mode exits before destructive Owner gate' ($runner.Contains("if (`$Mo
 Gate 'destructive confirmation is bound to exact packed SHA' ($runner.Contains('destructivePhrasePrefix') -and $runner.Contains('$packedHash') -and $runner.Contains('HASH_BOUND_DESTRUCTIVE_CONFIRMATION_REQUIRED'))
 Gate 'burn reuses guarded v0.5 runner' ($runner.Contains('eink-spi-burn.ps1') -and $runner.Contains("'-Mode', 'Burn'"))
 Gate 'burn still requires exact expected packed SHA' ($runner.Contains("'-ExpectedPackedSha256', `$packedHash"))
-Gate 'device validation reuses v0.6 runner' ($runner.Contains('eink-device-validate.ps1'))
-Gate 'cold boot BLE and visual are not auto-approved by release runner' (-not ($runner -match "eink-device-validate\.ps1'.*'-.*PASS"))
+Gate 'device validation is composed by release runner' ($runner.Contains('eink-device-validate.ps1'))
+Gate 'device validation explicitly requires power cycle' ($deviceValidation.Contains('STEP 1/3 - POWER CYCLE') -and $deviceValidation.Contains('OFF -> wait -> ON'))
+Gate 'device validation proves reboot with BLE reconnect' ($deviceValidation.Contains('STEP 2/3 - PROVE FIRMWARE BOOTED AFTER POWER CYCLE') -and $deviceValidation.Contains('reconnects by BLE and responds'))
+Gate 'device validation proves real e-ink refresh' ($deviceValidation.Contains('STEP 3/3 - PROVE THE PHYSICAL E-INK CAN REFRESH') -and $deviceValidation.Contains('previously stored static frame does not count'))
+Gate 'device validation console guidance is ASCII-safe' (-not ($deviceValidation.ToCharArray() | Where-Object { [int][char]$_ -gt 127 }))
+Gate 'release does not auto-approve owner device gates' (-not ($runner -match "eink-device-validate\.ps1'.*'-.*PASS"))
+Gate 'build reproducibility checker exists' (-not [string]::IsNullOrWhiteSpace($repro))
+Gate 'repro checker performs two build snapshots' ($repro.Contains('BUILD 1/2') -and $repro.Contains('BUILD 2/2') -and $repro.Contains('build-1.bin') -and $repro.Contains('build-2.bin'))
+Gate 'repro checker is non-destructive' (-not ($repro -match '(?i)eink-spi-burn|SmartSnippets|\bBurn\b'))
+Gate 'repro checker blocks hash mismatch' ($repro.Contains('NONDETERMINISTIC_RAW_FIRMWARE') -and $repro.Contains('BUILD_REPRODUCIBILITY_BLOCKED'))
 Gate 'release evidence summary is persisted' ($runner.Contains('release-validation.txt'))
 Gate 'no GUI fallback or retry loop' (-not ($runner -match '(?i)SmartSnippets GUI|retry|Start-Sleep'))
 Gate 'final release verified state explicit' ($runner.Contains('NEXT_STATE: RELEASE_VALIDATION_VERIFIED'))
