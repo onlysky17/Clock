@@ -98,7 +98,7 @@ Write-Output "BURN_EVIDENCE_DIR: $burnDir"
 Write-Output "CANONICAL_WEB_URL: $($profile.deviceValidation.canonicalWebUrl)"
 Write-Output ''
 Write-Output 'STEP 1/3 - POWER CYCLE'
-Write-Output "- Turn Board #1 power completely OFF."
+Write-Output '- Turn Board #1 power completely OFF.'
 Write-Output "- Wait at least $($profile.deviceValidation.coldBootPowerOffSeconds) seconds."
 Write-Output '- Turn Board #1 power ON again.'
 Write-Output '- Do NOT judge boot from the e-ink image alone; e-ink can keep an old frame with no power.'
@@ -131,7 +131,7 @@ if (-not $blePass) {
 Write-Output ''
 Write-Output 'STEP 3/3 - PROVE THE PHYSICAL E-INK CAN REFRESH'
 Write-Output '- Keep BLE connected.'
-Write-Output '- On the web page, press "Cập nhật màn hình hôm nay".'
+Write-Output '- On the web page, press the green daily update button for today.'
 Write-Output '- Watch the physical e-ink display for an actual refresh/flash and changed current content.'
 Write-Output '- PASS only if the physical display visibly refreshes; a previously stored static frame does not count.'
 $visual = Read-Host 'Type PASS only if the physical e-ink visibly refreshed and changed'
