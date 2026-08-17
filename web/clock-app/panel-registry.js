@@ -1,6 +1,12 @@
 'use strict';
 
 (() => {
+  const theme=document.createElement('link');
+  theme.rel='stylesheet';
+  theme.href='premium-theme.css';
+  theme.dataset.einkTheme='premium-v1';
+  document.head.append(theme);
+
   const DEFAULT_PANEL_ID='hink213-bw-250x122';
 
   const PANEL_REGISTRY=Object.freeze({
