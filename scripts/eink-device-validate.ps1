@@ -93,41 +93,54 @@ $lines.Add("READBACK_SIZE: $($readbackFile.Length)")
 $lines.Add("CANONICAL_WEB_URL: $($profile.deviceValidation.canonicalWebUrl)")
 $lines.Add("CREATED_AT: $(Get-Date -Format o)")
 
-Write-Output 'EINK HARNESS v0.6 DEVICE VALIDATION'
+Write-Output 'EINK HARNESS v0.7 DEVICE VALIDATION'
 Write-Output "BURN_EVIDENCE_DIR: $burnDir"
 Write-Output "CANONICAL_WEB_URL: $($profile.deviceValidation.canonicalWebUrl)"
 Write-Output ''
-Write-Output "1) Power Board #1 OFF for at least $($profile.deviceValidation.coldBootPowerOffSeconds) seconds, then power it ON."
-$cold = Read-Host "Type PASS only if Board #1 cold-boots normally"
-$coldPass = ($cold.Trim().ToUpperInvariant() -eq [string]$profile.deviceValidation.ownerPassToken)
-$lines.Add("COLD_BOOT: $(if ($coldPass) { 'PASS' } else { 'FAIL' })")
-if (-not $coldPass) {
+Write-Output 'STEP 1/3 - POWER CYCLE'
+Write-Output "- Turn Board #1 power completely OFF."
+Write-Output "- Wait at least $($profile.deviceValidation.coldBootPowerOffSeconds) seconds."
+Write-Output '- Turn Board #1 power ON again.'
+Write-Output '- Do NOT judge boot from the e-ink image alone; e-ink can keep an old frame with no power.'
+$power = Read-Host 'Type PASS only after you physically completed OFF -> wait -> ON'
+$powerPass = ($power.Trim().ToUpperInvariant() -eq [string]$profile.deviceValidation.ownerPassToken)
+$lines.Add("POWER_CYCLE: $(if ($powerPass) { 'PASS' } else { 'FAIL' })")
+if (-not $powerPass) {
     [System.IO.File]::WriteAllLines($summaryPath, $lines, [System.Text.UTF8Encoding]::new($false))
-    Write-Blocked -Reason 'COLD_BOOT_NOT_APPROVED'
+    Write-Blocked -Reason 'POWER_CYCLE_NOT_COMPLETED'
     Write-Output "EVIDENCE_DIR: $evidenceDir"
     exit 1
 }
 
 Write-Output ''
-Write-Output "2) On phone, open $($profile.deviceValidation.canonicalWebUrl), connect Board #1 via Web Bluetooth, and confirm live connection/device response."
-$ble = Read-Host 'Type PASS only if BLE connection/device response is confirmed'
+Write-Output 'STEP 2/3 - PROVE FIRMWARE BOOTED AFTER POWER CYCLE'
+Write-Output "- On the phone, open $($profile.deviceValidation.canonicalWebUrl)."
+Write-Output '- Tap Connect and select Board #1.'
+Write-Output '- PASS only if the web page reports a live BLE connection/device response after the power cycle.'
+$ble = Read-Host 'Type PASS only if Board #1 reconnects by BLE and responds'
 $blePass = ($ble.Trim().ToUpperInvariant() -eq [string]$profile.deviceValidation.ownerPassToken)
 $lines.Add("BLE: $(if ($blePass) { 'PASS' } else { 'FAIL' })")
+$lines.Add("COLD_BOOT: $(if ($blePass) { 'PASS' } else { 'FAIL' })")
 if (-not $blePass) {
     [System.IO.File]::WriteAllLines($summaryPath, $lines, [System.Text.UTF8Encoding]::new($false))
-    Write-Blocked -Reason 'BLE_NOT_APPROVED'
+    Write-Blocked -Reason 'BLE_RECONNECT_AFTER_POWER_CYCLE_FAILED'
     Write-Output "EVIDENCE_DIR: $evidenceDir"
     exit 1
 }
 
 Write-Output ''
-Write-Output '3) Inspect the physical e-ink display. Confirm the flashed image boots and the expected clock UI renders correctly.'
-$visual = Read-Host 'Type PASS only if YOU approve the physical e-ink visual result'
+Write-Output 'STEP 3/3 - PROVE THE PHYSICAL E-INK CAN REFRESH'
+Write-Output '- Keep BLE connected.'
+Write-Output '- On the web page, press "Cập nhật màn hình hôm nay".'
+Write-Output '- Watch the physical e-ink display for an actual refresh/flash and changed current content.'
+Write-Output '- PASS only if the physical display visibly refreshes; a previously stored static frame does not count.'
+$visual = Read-Host 'Type PASS only if the physical e-ink visibly refreshed and changed'
 $visualPass = ($visual.Trim().ToUpperInvariant() -eq [string]$profile.deviceValidation.ownerPassToken)
+$lines.Add("PHYSICAL_EINK_REFRESH: $(if ($visualPass) { 'PASS' } else { 'FAIL' })")
 $lines.Add("PHYSICAL_EINK_VISUAL: $(if ($visualPass) { 'PASS' } else { 'FAIL' })")
 if (-not $visualPass) {
     [System.IO.File]::WriteAllLines($summaryPath, $lines, [System.Text.UTF8Encoding]::new($false))
-    Write-Blocked -Reason 'VISUAL_NOT_APPROVED'
+    Write-Blocked -Reason 'PHYSICAL_EINK_REFRESH_NOT_APPROVED'
     Write-Output "EVIDENCE_DIR: $evidenceDir"
     exit 1
 }
@@ -138,8 +151,10 @@ $lines.Add('NEXT_STATE: DEVICE_VALIDATION_VERIFIED')
 Write-Output ''
 Write-Output 'EINK HARNESS: PASS'
 Write-Output 'ACTION: DEVICE-VALIDATION'
+Write-Output 'POWER_CYCLE: PASS'
 Write-Output 'COLD_BOOT: PASS'
 Write-Output 'BLE: PASS'
+Write-Output 'PHYSICAL_EINK_REFRESH: PASS'
 Write-Output 'PHYSICAL_EINK_VISUAL: PASS'
 Write-Output "EVIDENCE_DIR: $evidenceDir"
 Write-Output "EVIDENCE_FILE: $summaryPath"
