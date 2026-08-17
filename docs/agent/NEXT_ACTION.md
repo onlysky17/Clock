@@ -1,77 +1,64 @@
 # NEXT_ACTION
 
-## Current Checkpoint
+## Current Checkpoint — 2026-08-17
 
-- Repository: `D:\EINK\Clock`.
-- Canonical web URL: `https://onlysky17.github.io/Clock/test.html`.
-- EINK Harness v0.5 final PR #148 is merged.
-- Actual v0.5 main merge commit: `4ff480b1e5ac83018e70cdba0c5d0aa0c04b5c0c`.
-- EINK Harness v0.6 branch: `task-d/eink-harness-v0.6-device-validation`.
-- Runtime-tested v0.6 head before final docs: `e333dbe371637cbae055c6ba662fc97d9a34bab8`.
-- Harness v0.6 device validation is real-device PASS.
-- Proven v0.6 evidence:
-  - smoke PASS 13/13;
-  - prior burn evidence directory `D:\EINK\Clock\_incoming\EINK_HARNESS_SPI_BURN\20260815_091014`;
-  - cold boot PASS;
-  - phone Web Bluetooth connection/device response PASS;
-  - physical e-ink visual PASS by Owner;
-  - device evidence directory `D:\EINK\Clock\_incoming\EINK_HARNESS_DEVICE_VALIDATION\20260815_095513`;
-  - device evidence file `D:\EINK\Clock\_incoming\EINK_HARNESS_DEVICE_VALIDATION\20260815_095513\device-validation.txt`;
-  - `NEXT_STATE: DEVICE_VALIDATION_VERIFIED`.
-- Closeout details: `docs/agent/EINK_HARNESS_V0.6_CLOSEOUT.md`.
-- `bk-13-08-26/` remained untracked and untouched.
+`FW-AUTONOMOUS-CLOCK-001` is implementation-complete and real-device HARDWARE PASS on Board #1.
 
-## Current End-to-End Gate State
+Proven firmware artifact:
 
-For the tested Board #1 image:
+- Branch: `task-d/fw-autonomous-clock-ble-disconnect-001`
+- Firmware source change: `firmware/active/HINK213_CLOCK_22_BASE/src/user_peripheral.c`
+- Raw build size: `50568` bytes
+- Raw SHA256: `C044F1182ECDBE9BE37437025886A63D9B1DB9110CBF9B0354BBA496E9DBD9DE`
+- Packed local image: `D:\EINK\Clock\_incoming\FW_AUTONOMOUS_CLOCK_001.bin`
+- Packed size: `262144` bytes
+- Packed SHA256: `010DEBE2949F035F1D59A01EF365EF28E25737C0700DFEFEEE2CCC40A4C7052B`
+- Full SPI readback SHA256: same exact packed SHA
+- Burn evidence: `D:\EINK\Clock\_incoming\EINK_HARNESS_SPI_BURN\20260817_140410`
+- Full power-cycle: PASS
+- BLE reconnect after power-cycle: PASS
+- Connected one-minute baseline refresh: PASS
+- BLE explicit disconnect: PASS
+- Autonomous post-disconnect refresh continued from `14:29` through `14:36`, exceeding the required three consecutive intervals
+- Owner hardware gate: PASS
+- Detailed closeout: `docs/agent/FW_AUTONOMOUS_CLOCK_001_CLOSEOUT.md`
 
-- Keil build: PASS.
-- Full SPI backup: PASS.
-- Guarded SPI burn: PASS.
-- Full `0x40000` readback SHA verification: PASS.
-- Cold boot: PASS.
-- BLE connection/device response: PASS.
-- Physical e-ink visual: PASS by Owner.
+## Immediate Action
 
-## Next Canonical Action
+Finish this firmware milestone with exactly one final PR and one Owner merge gate. Do not mix the premium web UI work or Harness v0.7 changes into this PR.
 
-`EINK HARNESS v0.7 - ONE-COMMAND RELEASE VALIDATION PIPELINE`
+After Owner merges the firmware PR:
 
-Goal: compose the already-proven build, pack/input validation, backup, guarded burn, readback verification, and guided device validation into a single release-oriented Harness flow while preserving every destructive and Owner gate.
+1. Sync local `main` and verify local `HEAD == origin/main` using the actual merge commit.
+2. Resume `EINK HARNESS v0.7 - ONE-COMMAND RELEASE VALIDATION PIPELINE` on its own branch.
+3. Keep the separate premium web UI branch `task-d/eink-web-premium-ui-v1` isolated for Owner visual review. Its planned clock card may use a dark rounded card with a large digital time on the left and an analog clock on the right, but it must not alter the already-proven firmware behavior.
 
-Required behavior:
+## Remaining Harness v0.7 Work
 
-- verify canonical workspace/project/branch/HEAD/status first;
-- reuse the proven v0.3-v0.6 actions rather than duplicating hardware logic;
-- provide a non-destructive Plan mode showing the exact image, hashes, required gates, and intended evidence locations;
-- require explicit Owner selection of the packed image;
-- require explicit destructive burn confirmation before any erase/write;
-- stop on first failed gate; no automatic retry or alternate programmer path;
-- after burn/readback PASS, guide the Owner through cold boot, BLE, and physical visual validation;
-- produce one final release evidence summary linking build/burn/device evidence;
-- keep `bk-13-08-26/` untouched;
-- include implementation, runtime evidence, closeout, and next-action state in one task branch before one final PR.
+- Fix the two false smoke failures around the non-destructive build reproducibility checker.
+- Run/retrieve the build reproducibility checker and diagnose the observed build nondeterminism.
+- Strengthen direct SPI-burn input-path guards: require workspace `_incoming`, reject `bk-13-08-26`, reject Git-tracked packed BINs, and enforce robust full-path boundaries.
+- Reconcile the interrupted formal release evidence for the already-proven F5E artifact without re-burning or repeating valid hardware tests.
+- Keep one complete milestone branch and one final PR only.
 
 ## Hard Scope Boundary
 
 Do not:
 
-- change firmware behavior merely to build the pipeline;
-- weaken or bypass packed SHA, backup, destructive confirmation, readback SHA, cold boot, BLE, or visual gates;
+- re-burn or repeat hardware validation for the already-proven autonomous-clock artifact unless the firmware/BIN changes;
+- commit BIN/build output;
+- mix firmware, Harness v0.7, and premium web UI into one PR;
 - use SmartSnippets GUI fallback;
-- claim physical PASS without Owner approval;
-- stage/commit/push unrelated files.
+- weaken packed SHA, backup, destructive confirmation, full readback SHA, power-cycle, BLE, or physical validation gates;
+- auto-merge any PR.
 
 ## Workflow Contract
 
-Each Harness milestone is one complete task branch:
+Each milestone remains:
 
 - implementation;
 - machine validation;
 - real hardware/device evidence where applicable;
-- closeout docs;
-- next-action state;
+- closeout docs and next-action state in the same branch;
 - one final PR;
 - one Owner merge gate.
-
-No separate closeout PR after the task PR is merged.
