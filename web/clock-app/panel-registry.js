@@ -10,6 +10,7 @@
   const DEFAULT_PANEL_ID='hink213-bw-250x122';
   const CLASSIC_VALUE='clock-classic';
   const CLASSIC_STORAGE_KEY='eink-premium-web-profile';
+  let savedCanvasPreview=null;
 
   const PANEL_REGISTRY=Object.freeze({
     [DEFAULT_PANEL_ID]:Object.freeze({
@@ -52,6 +53,10 @@
     return date;
   }
 
+  function currentClockDate(){
+    return parseDeviceClock()||new Date();
+  }
+
   function addTicks(face){
     for(let index=0;index<12;index++){
       const tick=document.createElement('span');
@@ -59,6 +64,105 @@
       tick.style.transform=`rotate(${index*30}deg)`;
       face.append(tick);
     }
+  }
+
+  function drawClassicCanvas(){
+    const canvas=document.getElementById('canvas');
+    const ctx=canvas?.getContext?.('2d');
+    if(!canvas||!ctx||!canvas.width||!canvas.height)return;
+
+    if(!savedCanvasPreview){
+      try{
+        savedCanvasPreview={
+          width:canvas.width,
+          height:canvas.height,
+          image:ctx.getImageData(0,0,canvas.width,canvas.height)
+        };
+      }catch{}
+    }
+
+    const now=currentClockDate();
+    const hours=now.getHours();
+    const minutes=now.getMinutes();
+    const seconds=now.getSeconds();
+    const weekdays=['CN','T2','T3','T4','T5','T6','T7'];
+    const dateLabel=`${weekdays[now.getDay()]}  ${pad(now.getDate())}/${pad(now.getMonth()+1)}/${now.getFullYear()}`;
+
+    ctx.save();
+    ctx.setTransform(canvas.width/250,0,0,canvas.height/122,0,0);
+    ctx.fillStyle='#fff';
+    ctx.fillRect(0,0,250,122);
+    ctx.fillStyle='#000';
+    ctx.strokeStyle='#000';
+    ctx.lineCap='round';
+    ctx.lineJoin='round';
+
+    ctx.font='700 9px ui-monospace, SFMono-Regular, Consolas, monospace';
+    ctx.fillText('CLOCK CLASSIC',12,14);
+    ctx.font='600 8px ui-monospace, SFMono-Regular, Consolas, monospace';
+    ctx.fillText(dateLabel,12,28);
+
+    ctx.font='800 48px ui-monospace, SFMono-Regular, Consolas, monospace';
+    ctx.fillText(`${pad(hours)}:${pad(minutes)}`,9,78);
+
+    ctx.font='600 8px ui-monospace, SFMono-Regular, Consolas, monospace';
+    ctx.fillText(parseDeviceClock()?'DEVICE TIME':'WEB PREVIEW',13,108);
+
+    const cx=201;
+    const cy=61;
+    const radius=41;
+    ctx.lineWidth=2;
+    ctx.beginPath();
+    ctx.arc(cx,cy,radius,0,Math.PI*2);
+    ctx.stroke();
+
+    for(let index=0;index<12;index++){
+      const angle=(index*Math.PI/6)-Math.PI/2;
+      const inner=radius-(index%3===0?8:5);
+      ctx.lineWidth=index%3===0?2:1;
+      ctx.beginPath();
+      ctx.moveTo(cx+Math.cos(angle)*inner,cy+Math.sin(angle)*inner);
+      ctx.lineTo(cx+Math.cos(angle)*(radius-2),cy+Math.sin(angle)*(radius-2));
+      ctx.stroke();
+    }
+
+    const hourAngle=(((hours%12)+(minutes/60))*Math.PI/6)-Math.PI/2;
+    const minuteAngle=((minutes+(seconds/60))*Math.PI/30)-Math.PI/2;
+    const secondAngle=(seconds*Math.PI/30)-Math.PI/2;
+
+    ctx.lineWidth=4;
+    ctx.beginPath();
+    ctx.moveTo(cx,cy);
+    ctx.lineTo(cx+Math.cos(hourAngle)*21,cy+Math.sin(hourAngle)*21);
+    ctx.stroke();
+
+    ctx.lineWidth=3;
+    ctx.beginPath();
+    ctx.moveTo(cx,cy);
+    ctx.lineTo(cx+Math.cos(minuteAngle)*31,cy+Math.sin(minuteAngle)*31);
+    ctx.stroke();
+
+    ctx.lineWidth=1;
+    ctx.beginPath();
+    ctx.moveTo(cx,cy);
+    ctx.lineTo(cx+Math.cos(secondAngle)*34,cy+Math.sin(secondAngle)*34);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(cx,cy,3,0,Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function restoreCanvasPreview(){
+    const canvas=document.getElementById('canvas');
+    const ctx=canvas?.getContext?.('2d');
+    if(!canvas||!ctx||!savedCanvasPreview)return;
+
+    if(canvas.width===savedCanvasPreview.width&&canvas.height===savedCanvasPreview.height){
+      try{ctx.putImageData(savedCanvasPreview.image,0,0);}catch{}
+    }
+    savedCanvasPreview=null;
   }
 
   function createClockCard(){
@@ -126,8 +230,10 @@
 
     if(active){
       select.value=CLASSIC_VALUE;
+      drawClassicCanvas();
       try{localStorage.setItem(CLASSIC_STORAGE_KEY,CLASSIC_VALUE);}catch{}
     }else{
+      restoreCanvasPreview();
       try{localStorage.removeItem(CLASSIC_STORAGE_KEY);}catch{}
     }
   }
@@ -159,7 +265,7 @@
     if(!profile.querySelector('.productClassicNote')){
       const note=document.createElement('p');
       note.className='productClassicNote';
-      note.textContent='Clock Classic là giao diện web số + kim. Chưa gửi profile mới xuống firmware ở bước UI này.';
+      note.textContent='Clock Classic đang đổi preview web 250×122. Chưa gửi profile mới xuống firmware ở bước UI này.';
       note.hidden=true;
       row.insertAdjacentElement('afterend',note);
     }
@@ -173,7 +279,7 @@
     if(note)note.hidden=!active;
     const status=document.getElementById('profileStatus');
     if(active&&status){
-      status.textContent='Đang xem Clock Classic trên web. Profile e-ink trên thiết bị chưa thay đổi.';
+      status.textContent='Đang xem Clock Classic trên preview web 250×122. Profile e-ink trên thiết bị chưa thay đổi.';
     }
   }
 
@@ -200,6 +306,8 @@
       window.__einkPremiumClockTimer=setInterval(()=>{
         const mounted=document.querySelector('.productProfileClock');
         if(mounted)updateClockCard(mounted);
+        const profileCard=document.querySelector('.productModeV2Profiles');
+        if(profileCard?.dataset.webProfile===CLASSIC_VALUE)drawClassicCanvas();
       },1000);
     }
     return true;
@@ -240,7 +348,7 @@
       event.stopImmediatePropagation();
       const status=document.getElementById('profileStatus');
       if(status){
-        status.textContent='Clock Classic hiện là giao diện web; không gửi mã profile lạ xuống e-ink.';
+        status.textContent='Clock Classic hiện mới là preview web; không gửi mã profile lạ xuống e-ink.';
       }
     }
   },true);
