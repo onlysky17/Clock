@@ -8,6 +8,8 @@
   document.head.append(theme);
 
   const DEFAULT_PANEL_ID='hink213-bw-250x122';
+  const CLASSIC_VALUE='clock-classic';
+  const CLASSIC_STORAGE_KEY='eink-premium-web-profile';
 
   const PANEL_REGISTRY=Object.freeze({
     [DEFAULT_PANEL_ID]:Object.freeze({
@@ -67,7 +69,7 @@
     card.dataset.einkPremiumClock='v2-profile';
     card.innerHTML=`
       <div class="productClockCopy">
-        <div class="productClockEyebrow">Current clock</div>
+        <div class="productClockEyebrow">Clock Classic</div>
         <div class="productClockTime" aria-live="polite">--:--</div>
         <div class="productClockMeta">
           <strong class="productClockDate">--</strong>
@@ -107,6 +109,74 @@
     card.querySelector('.productAnalogSecond').style.transform=`rotate(${seconds*6}deg)`;
   }
 
+  function setClassicUi(active){
+    const profile=document.querySelector('.productModeV2Profiles');
+    const select=document.getElementById('productLayoutSelect');
+    const card=document.querySelector('.productProfileClock');
+    const classicButton=document.querySelector('[data-eink-classic-profile]');
+    const deviceButtons=[...document.querySelectorAll('#productPresetRow button[data-layout-profile]')]
+      .filter(button=>button!==classicButton);
+
+    if(!profile||!select||!card)return;
+
+    profile.dataset.webProfile=active?CLASSIC_VALUE:'device';
+    card.hidden=!active;
+    classicButton?.classList.toggle('selected',active);
+    deviceButtons.forEach(button=>button.classList.toggle('selected',!active&&button.dataset.layoutProfile===select.value));
+
+    if(active){
+      select.value=CLASSIC_VALUE;
+      try{localStorage.setItem(CLASSIC_STORAGE_KEY,CLASSIC_VALUE);}catch{}
+    }else{
+      try{localStorage.removeItem(CLASSIC_STORAGE_KEY);}catch{}
+    }
+  }
+
+  function ensureClassicChoice(){
+    const profile=document.querySelector('.productModeV2Profiles');
+    const select=document.getElementById('productLayoutSelect');
+    const row=document.getElementById('productPresetRow');
+    if(!profile||!select||!row)return false;
+
+    if(!select.querySelector(`option[value="${CLASSIC_VALUE}"]`)){
+      const option=document.createElement('option');
+      option.value=CLASSIC_VALUE;
+      option.textContent='Clock Classic — Số + Kim';
+      select.append(option);
+    }
+
+    let classicButton=row.querySelector('[data-eink-classic-profile]');
+    if(!classicButton){
+      classicButton=document.createElement('button');
+      classicButton.type='button';
+      classicButton.dataset.einkClassicProfile='true';
+      classicButton.dataset.layoutProfile=CLASSIC_VALUE;
+      classicButton.textContent='Clock Classic';
+      row.append(classicButton);
+      row.style.setProperty('grid-template-columns','repeat(2,minmax(0,1fr))','important');
+    }
+
+    if(!profile.querySelector('.productClassicNote')){
+      const note=document.createElement('p');
+      note.className='productClassicNote';
+      note.textContent='Clock Classic là giao diện web số + kim. Chưa gửi profile mới xuống firmware ở bước UI này.';
+      note.hidden=true;
+      row.insertAdjacentElement('afterend',note);
+    }
+
+    return true;
+  }
+
+  function renderClassicState(active){
+    setClassicUi(active);
+    const note=document.querySelector('.productClassicNote');
+    if(note)note.hidden=!active;
+    const status=document.getElementById('profileStatus');
+    if(active&&status){
+      status.textContent='Đang xem Clock Classic trên web. Profile e-ink trên thiết bị chưa thay đổi.';
+    }
+  }
+
   function mountPremiumClock(){
     const profile=document.querySelector('.productModeV2Profiles');
     const intro=profile?.querySelector('.productProfileIntro');
@@ -119,7 +189,13 @@
       intro.insertAdjacentElement('afterend',card);
     }
 
+    if(!ensureClassicChoice())return false;
+
+    let restoreClassic=false;
+    try{restoreClassic=localStorage.getItem(CLASSIC_STORAGE_KEY)===CLASSIC_VALUE;}catch{}
+    renderClassicState(restoreClassic);
     updateClockCard(card);
+
     if(!window.__einkPremiumClockTimer){
       window.__einkPremiumClockTimer=setInterval(()=>{
         const mounted=document.querySelector('.productProfileClock');
@@ -128,6 +204,46 @@
     }
     return true;
   }
+
+  document.addEventListener('change',event=>{
+    if(event.target?.id!=='productLayoutSelect')return;
+
+    if(event.target.value===CLASSIC_VALUE){
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      renderClassicState(true);
+      return;
+    }
+
+    renderClassicState(false);
+  },true);
+
+  document.addEventListener('click',event=>{
+    const classicButton=event.target.closest?.('[data-eink-classic-profile]');
+    if(classicButton){
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      renderClassicState(true);
+      return;
+    }
+
+    const deviceButton=event.target.closest?.('#productPresetRow button[data-layout-profile]');
+    if(deviceButton){
+      renderClassicState(false);
+      return;
+    }
+
+    const apply=event.target.closest?.('#profileApply');
+    const select=document.getElementById('productLayoutSelect');
+    if(apply&&select?.value===CLASSIC_VALUE){
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const status=document.getElementById('profileStatus');
+      if(status){
+        status.textContent='Clock Classic hiện là giao diện web; không gửi mã profile lạ xuống e-ink.';
+      }
+    }
+  },true);
 
   function installPremiumClock(){
     if(mountPremiumClock())return;
