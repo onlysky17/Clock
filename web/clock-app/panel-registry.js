@@ -46,9 +46,34 @@
       .productClockCadence{grid-column:1/-1;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px;margin-top:2px;padding-top:10px;border-top:1px solid rgba(145,176,205,.12)}
       .productClockCadence button{min-width:0!important;min-height:32px!important;padding:6px 4px!important;border-radius:9px!important;font-size:.72rem!important;font-weight:800!important;color:#93a9be!important;background:rgba(5,13,23,.5)!important}
       .productClockCadence button.selected{border-color:rgba(91,220,255,.42)!important;background:linear-gradient(135deg,rgba(91,220,255,.95),rgba(48,183,230,.95))!important;color:#03121b!important;box-shadow:0 5px 14px rgba(33,191,242,.16)}
-      @media(max-width:430px){.productClockCadence{gap:4px}.productClockCadence button{min-height:30px!important;padding:5px 2px!important;font-size:.68rem!important}}
+      .productModeV2Profiles .productOwnerPreferences{margin-top:16px;padding-top:14px;border-top:1px solid rgba(145,176,205,.14)}
+      .productModeV2Profiles .productOwnerPreferences h3{margin:0 0 10px;font-size:.92rem;color:#f4f9ff}
+      .productModeV2Profiles .productOwnerPreferences .preferenceRow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-bottom:8px}
+      .productModeV2Profiles .productOwnerPreferences #hourModeRow{grid-template-columns:repeat(2,minmax(0,1fr))}
+      .productModeV2Profiles .productOwnerPreferences button{min-width:0!important;width:100%}
+      .productModeV2Profiles .productOwnerPreferences .preferenceHint{margin:6px 0 9px;font-size:.76rem;line-height:1.4}
+      .productModeV2DeviceAdvanced{margin-top:14px!important}
+      @media(max-width:430px){.productClockCadence{gap:4px}.productClockCadence button{min-height:30px!important;padding:5px 2px!important;font-size:.68rem!important}.productModeV2Profiles .productOwnerPreferences .preferenceRow{gap:5px}}
     `;
     document.head.append(style);
+  }
+
+  function ensureOwnerPriorityLayout(){
+    const profileCard=document.querySelector('.productModeV2Profiles');
+    const preferencePanel=document.querySelector('.preferencePanel');
+    const advanced=document.querySelector('.productModeV2Advanced');
+    const advancedBody=advanced?.querySelector('.advancedBody');
+    const deviceCard=document.querySelector('.productModeV2Device');
+
+    if(profileCard&&preferencePanel&&preferencePanel.parentElement!==profileCard){
+      preferencePanel.classList.add('productOwnerPreferences');
+      profileCard.append(preferencePanel);
+    }
+
+    if(advancedBody&&deviceCard&&deviceCard.parentElement!==advancedBody){
+      deviceCard.classList.add('productModeV2DeviceAdvanced');
+      advancedBody.append(deviceCard);
+    }
   }
 
   function parseDeviceClock(){
@@ -415,6 +440,7 @@
   }
 
   function mountPremiumClock(){
+    ensureOwnerPriorityLayout();
     const profile=document.querySelector('.productModeV2Profiles');
     const intro=profile?.querySelector('.productProfileIntro');
     if(!profile||!intro)return false;
@@ -427,6 +453,7 @@
     }
 
     if(!ensureClassicChoice())return false;
+    ensureOwnerPriorityLayout();
 
     let restoreClassic=false;
     try{restoreClassic=localStorage.getItem(CLASSIC_STORAGE_KEY)===CLASSIC_VALUE;}catch{}
@@ -435,6 +462,7 @@
 
     if(!window.__einkPremiumClockTimer){
       window.__einkPremiumClockTimer=setInterval(()=>{
+        ensureOwnerPriorityLayout();
         const mounted=document.querySelector('.productProfileClock');
         if(mounted)updateClockCard(mounted);
         const profileCard=document.querySelector('.productModeV2Profiles');
@@ -494,9 +522,11 @@
 
   function installPremiumClock(){
     ensureClassicCadenceStyles();
+    ensureOwnerPriorityLayout();
     if(mountPremiumClock())return;
 
     const observer=new MutationObserver(()=>{
+      ensureOwnerPriorityLayout();
       if(mountPremiumClock())observer.disconnect();
     });
     observer.observe(document.documentElement,{childList:true,subtree:true});
