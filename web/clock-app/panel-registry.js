@@ -58,6 +58,8 @@
       .productModeV2OwnerControls .preferenceHint{margin:6px 0 10px;font-size:.8rem;line-height:1.45}
       .productModeV2Workspace .productModeV2Preview,.productModeV2Workspace .productModeV2Actions,.productModeV2Workspace .productModeV2Profiles{align-self:stretch}
       .productModeV2DeviceAdvanced{margin-top:14px!important}
+      .productModeV2Preview canvas.classicDeviceCanvasHidden{display:none!important}
+      .productModeV2Preview canvas.classicWebPreview{display:block!important;image-rendering:auto!important;filter:none!important;background:#fff!important}
       @media(max-width:900px){.productModeV2Workspace{grid-template-columns:minmax(0,1.1fr) minmax(300px,.9fr);gap:14px}.productModeV2WorkspaceColumn{gap:14px}}
       @media(max-width:760px){.productModeV2Workspace{grid-template-columns:minmax(0,1fr);gap:14px}.productModeV2WorkspaceColumn{gap:14px}.productModeV2OwnerControls .preferenceRow{gap:6px}}
       @media(max-width:430px){.productClockCadence{gap:4px}.productClockCadence button{min-height:30px!important;padding:5px 2px!important;font-size:.68rem!important}.productModeV2OwnerControls .preferenceRow{gap:5px}}
@@ -167,19 +169,34 @@
     }
   }
 
-  function drawClassicCanvas(){
-    const canvas=document.getElementById('canvas');
+  function ensureClassicWebPreviewCanvas(){
+    const deviceCanvas=document.getElementById('canvas');
+    const wrap=deviceCanvas?.closest('.canvasWrap');
+    if(!deviceCanvas||!wrap)return null;
+
+    let webCanvas=document.getElementById('classicWebPreview');
+    if(!webCanvas){
+      webCanvas=document.createElement('canvas');
+      webCanvas.id='classicWebPreview';
+      webCanvas.className='classicWebPreview';
+      webCanvas.width=1000;
+      webCanvas.height=488;
+      webCanvas.setAttribute('aria-label','Clock Classic web preview high resolution');
+      deviceCanvas.insertAdjacentElement('afterend',webCanvas);
+    }
+    deviceCanvas.classList.add('classicDeviceCanvasHidden');
+    return webCanvas;
+  }
+
+  function hideClassicWebPreviewCanvas(){
+    document.getElementById('canvas')?.classList.remove('classicDeviceCanvasHidden');
+    document.getElementById('classicWebPreview')?.remove();
+  }
+
+  function drawClassicScene(canvas,now,cadence){
     const ctx=canvas?.getContext?.('2d');
     if(!canvas||!ctx||!canvas.width||!canvas.height)return;
 
-    if(!savedCanvasPreview){
-      try{
-        savedCanvasPreview={width:canvas.width,height:canvas.height,image:ctx.getImageData(0,0,canvas.width,canvas.height)};
-      }catch{}
-    }
-
-    const now=currentClockDate();
-    const cadence=getClassicCadence();
     const hours=now.getHours();
     const actualMinutes=now.getMinutes();
     const displayMinutes=cadence===1?actualMinutes:Math.floor(actualMinutes/cadence)*cadence;
@@ -188,7 +205,7 @@
 
     ctx.save();
     ctx.setTransform(canvas.width/250,0,0,canvas.height/122,0,0);
-    ctx.imageSmoothingEnabled=false;
+    ctx.imageSmoothingEnabled=true;
     ctx.fillStyle='#fff';
     ctx.fillRect(0,0,250,122);
     ctx.fillStyle='#000';
@@ -281,19 +298,37 @@
     ctx.arc(cx,cy,3.1,0,Math.PI*2);
     ctx.fill();
     ctx.restore();
+  }
+
+  function drawClassicCanvas(){
+    const deviceCanvas=document.getElementById('canvas');
+    const deviceCtx=deviceCanvas?.getContext?.('2d');
+    if(!deviceCanvas||!deviceCtx||!deviceCanvas.width||!deviceCanvas.height)return;
+
+    if(!savedCanvasPreview){
+      try{
+        savedCanvasPreview={width:deviceCanvas.width,height:deviceCanvas.height,image:deviceCtx.getImageData(0,0,deviceCanvas.width,deviceCanvas.height)};
+      }catch{}
+    }
+
+    const now=currentClockDate();
+    const cadence=getClassicCadence();
+    drawClassicScene(deviceCanvas,now,cadence);
+    const webCanvas=ensureClassicWebPreviewCanvas();
+    if(webCanvas)drawClassicScene(webCanvas,now,cadence);
 
     const note=document.querySelector('.productClassicNote');
-    if(note&&!note.hidden)note.textContent=`Clock Classic preview 250×122 · vòng giờ 1–12 · vòng phút ${cadence} phút · e-ink không kim giây.`;
+    if(note&&!note.hidden)note.textContent=`Clock Classic web preview high-res · cadence ${cadence} phút · output e-ink 250×122 xử lý riêng.`;
   }
 
   function restoreCanvasPreview(){
     const canvas=document.getElementById('canvas');
     const ctx=canvas?.getContext?.('2d');
-    if(!canvas||!ctx||!savedCanvasPreview)return;
-    if(canvas.width===savedCanvasPreview.width&&canvas.height===savedCanvasPreview.height){
+    if(canvas&&ctx&&savedCanvasPreview&&canvas.width===savedCanvasPreview.width&&canvas.height===savedCanvasPreview.height){
       try{ctx.putImageData(savedCanvasPreview.image,0,0);}catch{}
     }
     savedCanvasPreview=null;
+    hideClassicWebPreviewCanvas();
   }
 
   function createClockCard(){
@@ -388,7 +423,7 @@
     if(!profile.querySelector('.productClassicNote')){
       const note=document.createElement('p');
       note.className='productClassicNote';
-      note.textContent='Clock Classic preview 250×122 · vòng giờ 1–12 · vòng phút theo cadence · e-ink không kim giây.';
+      note.textContent='Clock Classic web preview high-res. Output e-ink thật xử lý riêng ở bước firmware.';
       note.hidden=true;
       row.insertAdjacentElement('afterend',note);
     }
@@ -401,7 +436,7 @@
     if(note)note.hidden=!active;
     if(active)drawClassicCanvas();
     const status=document.getElementById('profileStatus');
-    if(active&&status)status.textContent='Đang xem Clock Classic trên preview web 250×122. Profile e-ink trên thiết bị chưa thay đổi.';
+    if(active&&status)status.textContent='Đang xem Clock Classic bằng web preview high-res. Profile e-ink trên thiết bị chưa thay đổi.';
   }
 
   function mountPremiumClock(){
