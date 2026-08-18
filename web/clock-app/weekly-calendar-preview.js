@@ -54,8 +54,7 @@
   function mondayOf(date){
     const copy=new Date(date.getFullYear(),date.getMonth(),date.getDate());
     const day=copy.getDay();
-    const diff=day===0?-6:1-day;
-    copy.setDate(copy.getDate()+diff);
+    copy.setDate(copy.getDate()+(day===0?-6:1-day));
     copy.setHours(12,0,0,0);
     return copy;
   }
@@ -169,16 +168,6 @@
     return {day:lunarDay,month:lunarMonth,year:lunarYear,leap:lunarLeap};
   }
 
-  function readTemperature(){
-    const candidates=['dailyWeatherTemperature','weatherTemperature','temperature','tempValue'];
-    for(const id of candidates){
-      const text=(document.getElementById(id)?.textContent||'').trim();
-      const match=text.match(/-?\d+(?:[.,]\d+)?\s*°?C/i);
-      if(match)return match[0].replace(/\s+/g,'');
-    }
-    return '--°C';
-  }
-
   function weekData(now){
     const monday=mondayOf(now);
     const days=[];
@@ -192,6 +181,8 @@
   function ensureCanvas(){
     const device=document.getElementById(DEVICE_CANVAS_ID);
     if(!device)return null;
+    document.getElementById('classicWebPreview')?.remove();
+    device.classList.remove('classicDeviceCanvasHidden');
     let canvas=document.getElementById(WEEK_CANVAS_ID);
     if(!canvas){
       canvas=document.createElement('canvas');
@@ -226,6 +217,7 @@
 
     ctx.save();
     ctx.setTransform(canvas.width/250,0,0,canvas.height/122,0,0);
+    ctx.imageSmoothingEnabled=true;
     ctx.fillStyle='#fff';
     ctx.fillRect(0,0,250,122);
     ctx.fillStyle='#050505';
@@ -248,38 +240,34 @@
 
     data.days.forEach((item,index)=>{
       const x=left+index*(colWidth+gap);
-      const y=top;
       const key=`${item.date.getFullYear()}-${item.date.getMonth()}-${item.date.getDate()}`;
       const active=key===currentKey;
 
       ctx.lineWidth=.7;
       if(active){
         ctx.fillStyle='#050505';
-        ctx.fillRect(x,y,colWidth,colHeight);
+        ctx.fillRect(x,top,colWidth,colHeight);
         ctx.fillStyle='#fff';
       }else{
         ctx.fillStyle='#fff';
-        ctx.fillRect(x,y,colWidth,colHeight);
+        ctx.fillRect(x,top,colWidth,colHeight);
         ctx.strokeStyle='#111';
-        ctx.strokeRect(x+.35,y+.35,colWidth-.7,colHeight-.7);
+        ctx.strokeRect(x+.35,top+.35,colWidth-.7,colHeight-.7);
         ctx.fillStyle='#050505';
       }
 
       ctx.textAlign='center';
       ctx.font='900 6px Arial, sans-serif';
-      ctx.fillText(weekdays[index],x+colWidth/2,y+9);
-
+      ctx.fillText(weekdays[index],x+colWidth/2,top+9);
       ctx.font='900 16px Arial, sans-serif';
-      ctx.fillText(item.date.getDate(),x+colWidth/2,y+32);
-
+      ctx.fillText(item.date.getDate(),x+colWidth/2,top+32);
       const lunarLabel=item.lunar.day===1
         ?`1/${item.lunar.month}${item.lunar.leap?'N':''}`
         :String(item.lunar.day);
       ctx.font='800 5.8px Arial, sans-serif';
-      ctx.fillText(lunarLabel,x+colWidth/2,y+54);
-
+      ctx.fillText(lunarLabel,x+colWidth/2,top+54);
       ctx.font='700 4.6px Arial, sans-serif';
-      ctx.fillText(item.date.getMonth()+1===now.getMonth()+1?'DL':'THÁNG',x+colWidth/2,y+68);
+      ctx.fillText('ÂM',x+colWidth/2,top+68);
     });
 
     const currentLunar=solarToLunar(now);
@@ -287,11 +275,9 @@
     ctx.textAlign='left';
     ctx.font='800 6px Arial, sans-serif';
     ctx.fillText(`${weekdays[(now.getDay()+6)%7]} ${pad(now.getDate())}/${pad(now.getMonth()+1)}`,7,108);
-    ctx.textAlign='center';
-    ctx.font='800 5.6px Arial, sans-serif';
-    ctx.fillText(`ÂM ${currentLunar.day}/${currentLunar.month}${currentLunar.leap?'N':''}`,126,108);
     ctx.textAlign='right';
-    ctx.fillText(readTemperature(),243,108);
+    ctx.font='800 5.6px Arial, sans-serif';
+    ctx.fillText(`ÂM ${currentLunar.day}/${currentLunar.month}${currentLunar.leap?'N':''}`,243,108);
 
     ctx.restore();
     syncWeekCard(now,data);
@@ -367,14 +353,23 @@
 
     if(active){
       if(select)select.value=WEEK_VALUE;
+      document.querySelectorAll('#productPresetRow button[data-layout-profile]').forEach(item=>item.classList.toggle('selected',item===button));
       document.querySelector('.productProfileClock')?.setAttribute('hidden','');
+      document.querySelector('.productClassicNote')?.setAttribute('hidden','');
       drawWeek();
       const status=document.getElementById('profileStatus');
-      if(status)status.textContent='Đang xem Lịch Tuần bằng web preview high-res. Output e-ink thật sẽ xử lý riêng.';
+      if(status)status.textContent='Đang xem Lịch Tuần bằng web preview high-res. Profile e-ink trên thiết bị chưa thay đổi.';
     }else{
       restoreCanvas();
     }
   }
+
+  function deactivate(){
+    if(!weekActive)return;
+    setWeekActive(false);
+  }
+
+  window.EINK_WEEK_PREVIEW={deactivate,isActive:()=>weekActive};
 
   function install(){
     ensureStyles();
