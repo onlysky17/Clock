@@ -10,6 +10,7 @@
   const DEFAULT_PANEL_ID='hink213-bw-250x122';
   const CLASSIC_VALUE='clock-classic';
   const CLASSIC_STORAGE_KEY='eink-premium-web-profile';
+  const CLASSIC_CADENCES=[1,5,10,15,30];
   let savedCanvasPreview=null;
 
   const PANEL_REGISTRY=Object.freeze({
@@ -57,6 +58,30 @@
     return parseDeviceClock()||new Date();
   }
 
+  function getClassicCadence(){
+    for(const value of CLASSIC_CADENCES){
+      if(document.getElementById(`cadence${value}`)?.classList.contains('selected'))return value;
+    }
+    const active=Number(document.documentElement.dataset.einkRefreshMinutes);
+    return CLASSIC_CADENCES.includes(active)?active:5;
+  }
+
+  function minuteLabelsForCadence(cadence){
+    if(cadence<=5)return [5,10,15,20,25,30,35,40,45,50,55];
+    const labels=[];
+    for(let minute=cadence;minute<60;minute+=cadence)labels.push(minute);
+    return labels;
+  }
+
+  function drawCenteredText(ctx,text,x,y,font){
+    ctx.save();
+    ctx.font=font;
+    ctx.textAlign='center';
+    ctx.textBaseline='middle';
+    ctx.fillText(String(text),x,y);
+    ctx.restore();
+  }
+
   function addTicks(face){
     for(let index=0;index<12;index++){
       const tick=document.createElement('span');
@@ -82,9 +107,10 @@
     }
 
     const now=currentClockDate();
+    const cadence=getClassicCadence();
     const hours=now.getHours();
-    const minutes=now.getMinutes();
-    const seconds=now.getSeconds();
+    const actualMinutes=now.getMinutes();
+    const displayMinutes=cadence===1?actualMinutes:Math.floor(actualMinutes/cadence)*cadence;
     const weekdays=['CN','T2','T3','T4','T5','T6','T7'];
     const dateLabel=`${weekdays[now.getDay()]}  ${pad(now.getDate())}/${pad(now.getMonth()+1)}/${now.getFullYear()}`;
 
@@ -103,55 +129,104 @@
     ctx.fillText(dateLabel,12,28);
 
     ctx.font='800 48px ui-monospace, SFMono-Regular, Consolas, monospace';
-    ctx.fillText(`${pad(hours)}:${pad(minutes)}`,9,78);
+    ctx.fillText(`${pad(hours)}:${pad(displayMinutes)}`,9,78);
 
-    ctx.font='600 8px ui-monospace, SFMono-Regular, Consolas, monospace';
-    ctx.fillText(parseDeviceClock()?'DEVICE TIME':'WEB PREVIEW',13,108);
+    ctx.font='600 7px ui-monospace, SFMono-Regular, Consolas, monospace';
+    ctx.fillText(`${parseDeviceClock()?'D2':'WEB'} · ${cadence} MIN · NO SEC`,13,108);
 
     const cx=201;
     const cy=61;
-    const radius=41;
-    ctx.lineWidth=2;
+    const outerRadius=42;
+    const hourLabelRadius=34;
+    const minuteTickRadius=27.5;
+    const minuteLabelRadius=21.5;
+
+    ctx.lineWidth=1.5;
     ctx.beginPath();
-    ctx.arc(cx,cy,radius,0,Math.PI*2);
+    ctx.arc(cx,cy,outerRadius,0,Math.PI*2);
     ctx.stroke();
 
-    for(let index=0;index<12;index++){
-      const angle=(index*Math.PI/6)-Math.PI/2;
-      const inner=radius-(index%3===0?8:5);
-      ctx.lineWidth=index%3===0?2:1;
+    ctx.lineWidth=.65;
+    ctx.beginPath();
+    ctx.arc(cx,cy,30,0,Math.PI*2);
+    ctx.stroke();
+
+    for(let hour=1;hour<=12;hour++){
+      const angle=(hour*Math.PI/6)-Math.PI/2;
+      const tickOuter=outerRadius-1.5;
+      const tickInner=outerRadius-(hour%3===0?5:3.5);
+      ctx.lineWidth=hour%3===0?1.5:1;
       ctx.beginPath();
-      ctx.moveTo(cx+Math.cos(angle)*inner,cy+Math.sin(angle)*inner);
-      ctx.lineTo(cx+Math.cos(angle)*(radius-2),cy+Math.sin(angle)*(radius-2));
+      ctx.moveTo(cx+Math.cos(angle)*tickInner,cy+Math.sin(angle)*tickInner);
+      ctx.lineTo(cx+Math.cos(angle)*tickOuter,cy+Math.sin(angle)*tickOuter);
       ctx.stroke();
+      drawCenteredText(
+        ctx,
+        hour,
+        cx+Math.cos(angle)*hourLabelRadius,
+        cy+Math.sin(angle)*hourLabelRadius,
+        '700 7.5px ui-monospace, SFMono-Regular, Consolas, monospace'
+      );
     }
 
-    const hourAngle=(((hours%12)+(minutes/60))*Math.PI/6)-Math.PI/2;
-    const minuteAngle=((minutes+(seconds/60))*Math.PI/30)-Math.PI/2;
-    const secondAngle=(seconds*Math.PI/30)-Math.PI/2;
+    if(cadence===1){
+      for(let minute=0;minute<60;minute++){
+        const angle=(minute*Math.PI/30)-Math.PI/2;
+        const major=minute%5===0;
+        ctx.lineWidth=major?1:.45;
+        const inner=minuteTickRadius-(major?2.7:1.35);
+        const outer=minuteTickRadius+1.1;
+        ctx.beginPath();
+        ctx.moveTo(cx+Math.cos(angle)*inner,cy+Math.sin(angle)*inner);
+        ctx.lineTo(cx+Math.cos(angle)*outer,cy+Math.sin(angle)*outer);
+        ctx.stroke();
+      }
+    }else{
+      for(let minute=0;minute<60;minute+=cadence){
+        const angle=(minute*Math.PI/30)-Math.PI/2;
+        ctx.lineWidth=1;
+        ctx.beginPath();
+        ctx.moveTo(cx+Math.cos(angle)*(minuteTickRadius-2.5),cy+Math.sin(angle)*(minuteTickRadius-2.5));
+        ctx.lineTo(cx+Math.cos(angle)*(minuteTickRadius+1.2),cy+Math.sin(angle)*(minuteTickRadius+1.2));
+        ctx.stroke();
+      }
+    }
 
-    ctx.lineWidth=4;
+    for(const minute of minuteLabelsForCadence(cadence)){
+      const angle=(minute*Math.PI/30)-Math.PI/2;
+      drawCenteredText(
+        ctx,
+        minute,
+        cx+Math.cos(angle)*minuteLabelRadius,
+        cy+Math.sin(angle)*minuteLabelRadius,
+        '600 5.5px ui-monospace, SFMono-Regular, Consolas, monospace'
+      );
+    }
+
+    const hourAngle=(((hours%12)+(displayMinutes/60))*Math.PI/6)-Math.PI/2;
+    const minuteAngle=(displayMinutes*Math.PI/30)-Math.PI/2;
+
+    ctx.lineWidth=3.6;
     ctx.beginPath();
     ctx.moveTo(cx,cy);
-    ctx.lineTo(cx+Math.cos(hourAngle)*21,cy+Math.sin(hourAngle)*21);
+    ctx.lineTo(cx+Math.cos(hourAngle)*16,cy+Math.sin(hourAngle)*16);
     ctx.stroke();
 
-    ctx.lineWidth=3;
+    ctx.lineWidth=2.2;
     ctx.beginPath();
     ctx.moveTo(cx,cy);
-    ctx.lineTo(cx+Math.cos(minuteAngle)*31,cy+Math.sin(minuteAngle)*31);
-    ctx.stroke();
-
-    ctx.lineWidth=1;
-    ctx.beginPath();
-    ctx.moveTo(cx,cy);
-    ctx.lineTo(cx+Math.cos(secondAngle)*34,cy+Math.sin(secondAngle)*34);
+    ctx.lineTo(cx+Math.cos(minuteAngle)*27,cy+Math.sin(minuteAngle)*27);
     ctx.stroke();
 
     ctx.beginPath();
-    ctx.arc(cx,cy,3,0,Math.PI*2);
+    ctx.arc(cx,cy,2.8,0,Math.PI*2);
     ctx.fill();
     ctx.restore();
+
+    const note=document.querySelector('.productClassicNote');
+    if(note&&!note.hidden){
+      note.textContent=`Clock Classic preview 250×122 · vòng giờ 1–12 · vòng phút ${cadence} phút · e-ink không kim giây.`;
+    }
   }
 
   function restoreCanvasPreview(){
@@ -286,7 +361,7 @@
     if(!profile.querySelector('.productClassicNote')){
       const note=document.createElement('p');
       note.className='productClassicNote';
-      note.textContent='Clock Classic đang đổi preview web 250×122. Chưa gửi profile mới xuống firmware ở bước UI này.';
+      note.textContent='Clock Classic preview 250×122 · vòng giờ 1–12 · vòng phút theo cadence · e-ink không kim giây.';
       note.hidden=true;
       row.insertAdjacentElement('afterend',note);
     }
@@ -298,6 +373,7 @@
     setClassicUi(active);
     const note=document.querySelector('.productClassicNote');
     if(note)note.hidden=!active;
+    if(active)drawClassicCanvas();
     const status=document.getElementById('profileStatus');
     if(active&&status){
       status.textContent='Đang xem Clock Classic trên preview web 250×122. Profile e-ink trên thiết bị chưa thay đổi.';
@@ -362,6 +438,13 @@
     const deviceButton=event.target.closest?.('#productPresetRow button[data-layout-profile]');
     if(deviceButton){
       renderClassicState(false);
+      return;
+    }
+
+    const cadenceButton=event.target.closest?.('#cadenceRow button[id^="cadence"]');
+    if(cadenceButton){
+      const profile=document.querySelector('.productModeV2Profiles');
+      if(profile?.dataset.webProfile===CLASSIC_VALUE)drawClassicCanvas();
       return;
     }
 
