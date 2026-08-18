@@ -46,28 +46,38 @@
       .productClockCadence{grid-column:1/-1;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px;margin-top:2px;padding-top:10px;border-top:1px solid rgba(145,176,205,.12)}
       .productClockCadence button{min-width:0!important;min-height:32px!important;padding:6px 4px!important;border-radius:9px!important;font-size:.72rem!important;font-weight:800!important;color:#93a9be!important;background:rgba(5,13,23,.5)!important}
       .productClockCadence button.selected{border-color:rgba(91,220,255,.42)!important;background:linear-gradient(135deg,rgba(91,220,255,.95),rgba(48,183,230,.95))!important;color:#03121b!important;box-shadow:0 5px 14px rgba(33,191,242,.16)}
-      .productModeV2Profiles .productOwnerPreferences{margin-top:16px;padding-top:14px;border-top:1px solid rgba(145,176,205,.14)}
-      .productModeV2Profiles .productOwnerPreferences h3{margin:0 0 10px;font-size:.92rem;color:#f4f9ff}
-      .productModeV2Profiles .productOwnerPreferences .preferenceRow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-bottom:8px}
-      .productModeV2Profiles .productOwnerPreferences #hourModeRow{grid-template-columns:repeat(2,minmax(0,1fr))}
-      .productModeV2Profiles .productOwnerPreferences button{min-width:0!important;width:100%}
-      .productModeV2Profiles .productOwnerPreferences .preferenceHint{margin:6px 0 9px;font-size:.76rem;line-height:1.4}
+      .productModeV2OwnerControls{grid-column:1;grid-row:3;align-self:start;min-width:0}
+      .productModeV2OwnerControls .preferencePanel{margin:0;padding:0;border-top:0}
+      .productModeV2OwnerControls .preferencePanel h3{margin:0 0 12px;font-size:1rem;color:#f4f9ff}
+      .productModeV2OwnerControls .preferenceRow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:9px}
+      .productModeV2OwnerControls #hourModeRow{grid-template-columns:repeat(2,minmax(0,1fr))}
+      .productModeV2OwnerControls button{min-width:0!important;width:100%}
+      .productModeV2OwnerControls .preferenceHint{margin:6px 0 10px;font-size:.8rem;line-height:1.45}
       .productModeV2DeviceAdvanced{margin-top:14px!important}
-      @media(max-width:430px){.productClockCadence{gap:4px}.productClockCadence button{min-height:30px!important;padding:5px 2px!important;font-size:.68rem!important}.productModeV2Profiles .productOwnerPreferences .preferenceRow{gap:5px}}
+      @media(max-width:760px){.productModeV2OwnerControls{grid-column:1;grid-row:auto}.productModeV2OwnerControls .preferenceRow{gap:6px}}
+      @media(max-width:430px){.productClockCadence{gap:4px}.productClockCadence button{min-height:30px!important;padding:5px 2px!important;font-size:.68rem!important}.productModeV2OwnerControls .preferenceRow{gap:5px}}
     `;
     document.head.append(style);
   }
 
   function ensureOwnerPriorityLayout(){
+    const root=document.querySelector('main.productModeV2');
     const profileCard=document.querySelector('.productModeV2Profiles');
     const preferencePanel=document.querySelector('.preferencePanel');
     const advanced=document.querySelector('.productModeV2Advanced');
     const advancedBody=advanced?.querySelector('.advancedBody');
     const deviceCard=document.querySelector('.productModeV2Device');
 
-    if(profileCard&&preferencePanel&&preferencePanel.parentElement!==profileCard){
+    let controlsCard=document.querySelector('.productModeV2OwnerControls');
+    if(root&&profileCard&&!controlsCard){
+      controlsCard=document.createElement('section');
+      controlsCard.className='card productModeV2OwnerControls';
+      root.insertBefore(controlsCard,profileCard);
+    }
+
+    if(controlsCard&&preferencePanel&&preferencePanel.parentElement!==controlsCard){
       preferencePanel.classList.add('productOwnerPreferences');
-      profileCard.append(preferencePanel);
+      controlsCard.append(preferencePanel);
     }
 
     if(advancedBody&&deviceCard&&deviceCard.parentElement!==advancedBody){
@@ -200,13 +210,7 @@
       ctx.moveTo(cx+Math.cos(angle)*tickInner,cy+Math.sin(angle)*tickInner);
       ctx.lineTo(cx+Math.cos(angle)*tickOuter,cy+Math.sin(angle)*tickOuter);
       ctx.stroke();
-      drawCenteredText(
-        ctx,
-        hour,
-        cx+Math.cos(angle)*hourLabelRadius,
-        cy+Math.sin(angle)*hourLabelRadius,
-        '800 8.2px Arial, sans-serif'
-      );
+      drawCenteredText(ctx,hour,cx+Math.cos(angle)*hourLabelRadius,cy+Math.sin(angle)*hourLabelRadius,'800 8.2px Arial, sans-serif');
     }
 
     if(cadence===1){
@@ -248,13 +252,7 @@
 
     for(const minute of minuteLabelsForCadence(cadence)){
       const angle=(minute*Math.PI/30)-Math.PI/2;
-      drawCenteredText(
-        ctx,
-        minute,
-        cx+Math.cos(angle)*minuteLabelRadius,
-        cy+Math.sin(angle)*minuteLabelRadius,
-        '700 6px Arial, sans-serif'
-      );
+      drawCenteredText(ctx,minute,cx+Math.cos(angle)*minuteLabelRadius,cy+Math.sin(angle)*minuteLabelRadius,'700 6px Arial, sans-serif');
     }
 
     const hourAngle=(((hours%12)+(displayMinutes/60))*Math.PI/6)-Math.PI/2;
@@ -287,7 +285,6 @@
     const canvas=document.getElementById('canvas');
     const ctx=canvas?.getContext?.('2d');
     if(!canvas||!ctx||!savedCanvasPreview)return;
-
     if(canvas.width===savedCanvasPreview.width&&canvas.height===savedCanvasPreview.height){
       try{ctx.putImageData(savedCanvasPreview.image,0,0);}catch{}
     }
@@ -296,7 +293,6 @@
 
   function createClockCard(){
     if(document.querySelector('.productProfileClock'))return null;
-
     ensureClassicCadenceStyles();
     const cadenceButtons=CLASSIC_CADENCES.map(value=>`<button type="button" data-classic-cadence="${value}" aria-pressed="${value===classicCadence}">${value}p</button>`).join('');
     const card=document.createElement('div');
@@ -318,7 +314,6 @@
         <span class="productAnalogCenter"></span>
       </div>
       <div class="productClockCadence" aria-label="Chu kỳ làm mới Clock Classic">${cadenceButtons}</div>`;
-
     addTicks(card.querySelector('.productAnalogClock'));
     syncClassicCadenceButtons();
     return card;
@@ -333,9 +328,7 @@
     const seconds=now.getSeconds();
 
     card.querySelector('.productClockTime').textContent=`${pad(hours)}:${pad(minutes)}`;
-    card.querySelector('.productClockDate').textContent=new Intl.DateTimeFormat('vi-VN',{
-      weekday:'long',day:'2-digit',month:'2-digit',year:'numeric'
-    }).format(now);
+    card.querySelector('.productClockDate').textContent=new Intl.DateTimeFormat('vi-VN',{weekday:'long',day:'2-digit',month:'2-digit',year:'numeric'}).format(now);
 
     const source=card.querySelector('.productClockSource');
     source.textContent=deviceDate?'Giờ đang đọc từ thiết bị':'Giờ hiện tại trên trình duyệt';
@@ -349,11 +342,8 @@
   function syncClassicApply(active){
     const apply=document.getElementById('profileApply');
     if(!apply)return;
-
     if(active){
-      if(!apply.dataset.classicOriginalLabel){
-        apply.dataset.classicOriginalLabel=apply.textContent||'Áp dụng lên màn';
-      }
+      if(!apply.dataset.classicOriginalLabel)apply.dataset.classicOriginalLabel=apply.textContent||'Áp dụng lên màn';
       apply.dataset.classicPreview='true';
       apply.textContent='Preview web — chưa áp dụng';
       apply.disabled=true;
@@ -371,9 +361,7 @@
     const select=document.getElementById('productLayoutSelect');
     const card=document.querySelector('.productProfileClock');
     const classicButton=document.querySelector('[data-eink-classic-profile]');
-    const deviceButtons=[...document.querySelectorAll('#productPresetRow button[data-layout-profile]')]
-      .filter(button=>button!==classicButton);
-
+    const deviceButtons=[...document.querySelectorAll('#productPresetRow button[data-layout-profile]')].filter(button=>button!==classicButton);
     if(!profile||!select||!card)return;
 
     profile.dataset.webProfile=active?CLASSIC_VALUE:'device';
@@ -424,7 +412,6 @@
       note.hidden=true;
       row.insertAdjacentElement('afterend',note);
     }
-
     return true;
   }
 
@@ -434,9 +421,7 @@
     if(note)note.hidden=!active;
     if(active)drawClassicCanvas();
     const status=document.getElementById('profileStatus');
-    if(active&&status){
-      status.textContent='Đang xem Clock Classic trên preview web 250×122. Profile e-ink trên thiết bị chưa thay đổi.';
-    }
+    if(active&&status)status.textContent='Đang xem Clock Classic trên preview web 250×122. Profile e-ink trên thiết bị chưa thay đổi.';
   }
 
   function mountPremiumClock(){
@@ -477,14 +462,12 @@
 
   document.addEventListener('change',event=>{
     if(event.target?.id!=='productLayoutSelect')return;
-
     if(event.target.value===CLASSIC_VALUE){
       event.preventDefault();
       event.stopImmediatePropagation();
       renderClassicState(true);
       return;
     }
-
     renderClassicState(false);
   },true);
 
@@ -533,9 +516,6 @@
     setTimeout(()=>observer.disconnect(),15000);
   }
 
-  if(document.readyState==='loading'){
-    document.addEventListener('DOMContentLoaded',installPremiumClock,{once:true});
-  }else{
-    installPremiumClock();
-  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',installPremiumClock,{once:true});
+  else installPremiumClock();
 })();
