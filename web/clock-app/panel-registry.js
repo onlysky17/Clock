@@ -129,8 +129,8 @@
     ctx.font='700 8px Arial, sans-serif';
     ctx.fillText(dateLabel,10,27);
 
-    ctx.font='800 42px ui-monospace, SFMono-Regular, Consolas, monospace';
-    ctx.fillText(`${pad(hours)}:${pad(displayMinutes)}`,7,76);
+    ctx.font='800 40px ui-monospace, SFMono-Regular, Consolas, monospace';
+    ctx.fillText(`${pad(hours)}:${pad(displayMinutes)}`,7,75);
 
     ctx.font='700 7px Arial, sans-serif';
     ctx.fillText(`${parseDeviceClock()?'D2':'WEB'} · ${cadence} MIN · NO SEC`,10,108);
@@ -138,9 +138,9 @@
     const cx=202;
     const cy=61;
     const outerRadius=47;
-    const hourLabelRadius=40;
-    const minuteTickRadius=31;
-    const minuteLabelRadius=26.5;
+    const hourLabelRadius=36.5;
+    const minuteTickRadius=29.5;
+    const minuteLabelRadius=21.5;
 
     ctx.lineWidth=1.7;
     ctx.beginPath();
@@ -149,9 +149,10 @@
 
     for(let hour=1;hour<=12;hour++){
       const angle=(hour*Math.PI/6)-Math.PI/2;
-      const tickOuter=outerRadius-1.4;
-      const tickInner=outerRadius-(hour%3===0?5.8:4.2);
-      ctx.lineWidth=hour%3===0?1.6:1;
+      const longTick=hour%2===0;
+      const tickOuter=outerRadius-1.2;
+      const tickInner=outerRadius-(longTick?6.4:4.0);
+      ctx.lineWidth=longTick?1.6:1.05;
       ctx.beginPath();
       ctx.moveTo(cx+Math.cos(angle)*tickInner,cy+Math.sin(angle)*tickInner);
       ctx.lineTo(cx+Math.cos(angle)*tickOuter,cy+Math.sin(angle)*tickOuter);
@@ -161,7 +162,7 @@
         hour,
         cx+Math.cos(angle)*hourLabelRadius,
         cy+Math.sin(angle)*hourLabelRadius,
-        '800 8.5px Arial, sans-serif'
+        '800 8.2px Arial, sans-serif'
       );
     }
 
@@ -169,21 +170,35 @@
       for(let minute=0;minute<60;minute++){
         const angle=(minute*Math.PI/30)-Math.PI/2;
         const major=minute%5===0;
-        ctx.lineWidth=major?1.15:.55;
-        const inner=minuteTickRadius-(major?3.2:1.7);
-        const outer=minuteTickRadius+1.3;
+        const majorIndex=Math.floor(minute/5);
+        const longMajor=major&&majorIndex%2===0;
+        let inner;
+        let outer;
+        if(major){
+          inner=minuteTickRadius-(longMajor?3.6:2.4);
+          outer=minuteTickRadius+(longMajor?1.8:1.0);
+          ctx.lineWidth=longMajor?1.25:1.0;
+        }else{
+          inner=minuteTickRadius-.8;
+          outer=minuteTickRadius+.7;
+          ctx.lineWidth=.45;
+        }
         ctx.beginPath();
         ctx.moveTo(cx+Math.cos(angle)*inner,cy+Math.sin(angle)*inner);
         ctx.lineTo(cx+Math.cos(angle)*outer,cy+Math.sin(angle)*outer);
         ctx.stroke();
       }
     }else{
-      for(let minute=0;minute<60;minute+=cadence){
+      let markerIndex=0;
+      for(let minute=0;minute<60;minute+=cadence,markerIndex++){
         const angle=(minute*Math.PI/30)-Math.PI/2;
-        ctx.lineWidth=1.15;
+        const longTick=markerIndex%2===0;
+        const inner=minuteTickRadius-(longTick?3.7:2.2);
+        const outer=minuteTickRadius+(longTick?1.6:.8);
+        ctx.lineWidth=longTick?1.2:.9;
         ctx.beginPath();
-        ctx.moveTo(cx+Math.cos(angle)*(minuteTickRadius-3.2),cy+Math.sin(angle)*(minuteTickRadius-3.2));
-        ctx.lineTo(cx+Math.cos(angle)*(minuteTickRadius+1.4),cy+Math.sin(angle)*(minuteTickRadius+1.4));
+        ctx.moveTo(cx+Math.cos(angle)*inner,cy+Math.sin(angle)*inner);
+        ctx.lineTo(cx+Math.cos(angle)*outer,cy+Math.sin(angle)*outer);
         ctx.stroke();
       }
     }
@@ -195,7 +210,7 @@
         minute,
         cx+Math.cos(angle)*minuteLabelRadius,
         cy+Math.sin(angle)*minuteLabelRadius,
-        '700 6.2px Arial, sans-serif'
+        '700 6px Arial, sans-serif'
       );
     }
 
@@ -205,17 +220,17 @@
     ctx.lineWidth=4.1;
     ctx.beginPath();
     ctx.moveTo(cx,cy);
-    ctx.lineTo(cx+Math.cos(hourAngle)*14.5,cy+Math.sin(hourAngle)*14.5);
+    ctx.lineTo(cx+Math.cos(hourAngle)*14,cy+Math.sin(hourAngle)*14);
     ctx.stroke();
 
-    ctx.lineWidth=2.1;
+    ctx.lineWidth=2.05;
     ctx.beginPath();
     ctx.moveTo(cx,cy);
-    ctx.lineTo(cx+Math.cos(minuteAngle)*22.5,cy+Math.sin(minuteAngle)*22.5);
+    ctx.lineTo(cx+Math.cos(minuteAngle)*20.5,cy+Math.sin(minuteAngle)*20.5);
     ctx.stroke();
 
     ctx.beginPath();
-    ctx.arc(cx,cy,3.2,0,Math.PI*2);
+    ctx.arc(cx,cy,3.1,0,Math.PI*2);
     ctx.fill();
     ctx.restore();
 
