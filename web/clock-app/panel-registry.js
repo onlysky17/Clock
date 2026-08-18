@@ -116,6 +116,7 @@
 
     ctx.save();
     ctx.setTransform(canvas.width/250,0,0,canvas.height/122,0,0);
+    ctx.imageSmoothingEnabled=false;
     ctx.fillStyle='#fff';
     ctx.fillRect(0,0,250,122);
     ctx.fillStyle='#000';
@@ -123,39 +124,40 @@
     ctx.lineCap='round';
     ctx.lineJoin='round';
 
-    ctx.font='700 9px ui-monospace, SFMono-Regular, Consolas, monospace';
-    ctx.fillText('CLOCK CLASSIC',12,14);
-    ctx.font='600 8px ui-monospace, SFMono-Regular, Consolas, monospace';
-    ctx.fillText(dateLabel,12,28);
+    ctx.font='700 9px Arial, sans-serif';
+    ctx.fillText('CLOCK CLASSIC',10,14);
+    ctx.font='700 8px Arial, sans-serif';
+    ctx.fillText(dateLabel,10,27);
 
-    ctx.font='800 48px ui-monospace, SFMono-Regular, Consolas, monospace';
-    ctx.fillText(`${pad(hours)}:${pad(displayMinutes)}`,9,78);
+    ctx.font='800 44px ui-monospace, SFMono-Regular, Consolas, monospace';
+    ctx.fillText(`${pad(hours)}:${pad(displayMinutes)}`,7,77);
 
-    ctx.font='600 7px ui-monospace, SFMono-Regular, Consolas, monospace';
-    ctx.fillText(`${parseDeviceClock()?'D2':'WEB'} · ${cadence} MIN · NO SEC`,13,108);
+    ctx.font='700 7px Arial, sans-serif';
+    ctx.fillText(`${parseDeviceClock()?'D2':'WEB'} · ${cadence} MIN · NO SEC`,10,108);
 
-    const cx=201;
+    const cx=202;
     const cy=61;
-    const outerRadius=42;
-    const hourLabelRadius=34;
-    const minuteTickRadius=27.5;
-    const minuteLabelRadius=21.5;
+    const outerRadius=47;
+    const hourLabelRadius=39;
+    const minuteRingRadius=31;
+    const minuteTickRadius=31;
+    const minuteLabelRadius=24.5;
 
-    ctx.lineWidth=1.5;
+    ctx.lineWidth=1.7;
     ctx.beginPath();
     ctx.arc(cx,cy,outerRadius,0,Math.PI*2);
     ctx.stroke();
 
-    ctx.lineWidth=.65;
+    ctx.lineWidth=.8;
     ctx.beginPath();
-    ctx.arc(cx,cy,30,0,Math.PI*2);
+    ctx.arc(cx,cy,minuteRingRadius+2.2,0,Math.PI*2);
     ctx.stroke();
 
     for(let hour=1;hour<=12;hour++){
       const angle=(hour*Math.PI/6)-Math.PI/2;
-      const tickOuter=outerRadius-1.5;
-      const tickInner=outerRadius-(hour%3===0?5:3.5);
-      ctx.lineWidth=hour%3===0?1.5:1;
+      const tickOuter=outerRadius-1.4;
+      const tickInner=outerRadius-(hour%3===0?5.8:4.2);
+      ctx.lineWidth=hour%3===0?1.6:1;
       ctx.beginPath();
       ctx.moveTo(cx+Math.cos(angle)*tickInner,cy+Math.sin(angle)*tickInner);
       ctx.lineTo(cx+Math.cos(angle)*tickOuter,cy+Math.sin(angle)*tickOuter);
@@ -165,7 +167,7 @@
         hour,
         cx+Math.cos(angle)*hourLabelRadius,
         cy+Math.sin(angle)*hourLabelRadius,
-        '700 7.5px ui-monospace, SFMono-Regular, Consolas, monospace'
+        '800 8.5px Arial, sans-serif'
       );
     }
 
@@ -173,9 +175,9 @@
       for(let minute=0;minute<60;minute++){
         const angle=(minute*Math.PI/30)-Math.PI/2;
         const major=minute%5===0;
-        ctx.lineWidth=major?1:.45;
-        const inner=minuteTickRadius-(major?2.7:1.35);
-        const outer=minuteTickRadius+1.1;
+        ctx.lineWidth=major?1.15:.55;
+        const inner=minuteTickRadius-(major?3.2:1.7);
+        const outer=minuteTickRadius+1.3;
         ctx.beginPath();
         ctx.moveTo(cx+Math.cos(angle)*inner,cy+Math.sin(angle)*inner);
         ctx.lineTo(cx+Math.cos(angle)*outer,cy+Math.sin(angle)*outer);
@@ -184,10 +186,10 @@
     }else{
       for(let minute=0;minute<60;minute+=cadence){
         const angle=(minute*Math.PI/30)-Math.PI/2;
-        ctx.lineWidth=1;
+        ctx.lineWidth=1.15;
         ctx.beginPath();
-        ctx.moveTo(cx+Math.cos(angle)*(minuteTickRadius-2.5),cy+Math.sin(angle)*(minuteTickRadius-2.5));
-        ctx.lineTo(cx+Math.cos(angle)*(minuteTickRadius+1.2),cy+Math.sin(angle)*(minuteTickRadius+1.2));
+        ctx.moveTo(cx+Math.cos(angle)*(minuteTickRadius-3.2),cy+Math.sin(angle)*(minuteTickRadius-3.2));
+        ctx.lineTo(cx+Math.cos(angle)*(minuteTickRadius+1.4),cy+Math.sin(angle)*(minuteTickRadius+1.4));
         ctx.stroke();
       }
     }
@@ -199,27 +201,27 @@
         minute,
         cx+Math.cos(angle)*minuteLabelRadius,
         cy+Math.sin(angle)*minuteLabelRadius,
-        '600 5.5px ui-monospace, SFMono-Regular, Consolas, monospace'
+        '700 6.6px Arial, sans-serif'
       );
     }
 
     const hourAngle=(((hours%12)+(displayMinutes/60))*Math.PI/6)-Math.PI/2;
     const minuteAngle=(displayMinutes*Math.PI/30)-Math.PI/2;
 
-    ctx.lineWidth=3.6;
+    ctx.lineWidth=4.2;
     ctx.beginPath();
     ctx.moveTo(cx,cy);
-    ctx.lineTo(cx+Math.cos(hourAngle)*16,cy+Math.sin(hourAngle)*16);
+    ctx.lineTo(cx+Math.cos(hourAngle)*17,cy+Math.sin(hourAngle)*17);
     ctx.stroke();
 
-    ctx.lineWidth=2.2;
+    ctx.lineWidth=2.25;
     ctx.beginPath();
     ctx.moveTo(cx,cy);
-    ctx.lineTo(cx+Math.cos(minuteAngle)*27,cy+Math.sin(minuteAngle)*27);
+    ctx.lineTo(cx+Math.cos(minuteAngle)*29,cy+Math.sin(minuteAngle)*29);
     ctx.stroke();
 
     ctx.beginPath();
-    ctx.arc(cx,cy,2.8,0,Math.PI*2);
+    ctx.arc(cx,cy,3.2,0,Math.PI*2);
     ctx.fill();
     ctx.restore();
 
