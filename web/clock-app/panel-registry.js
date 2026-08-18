@@ -11,6 +11,7 @@
   const CLASSIC_VALUE='clock-classic';
   const CLASSIC_STORAGE_KEY='eink-premium-web-profile';
   const CLASSIC_CADENCES=[1,5,10,15,30];
+  let classicCadence=5;
   let savedCanvasPreview=null;
 
   const PANEL_REGISTRY=Object.freeze({
@@ -37,6 +38,19 @@
 
   const pad=value=>String(value).padStart(2,'0');
 
+  function ensureClassicCadenceStyles(){
+    if(document.getElementById('einkClassicCadenceStyle'))return;
+    const style=document.createElement('style');
+    style.id='einkClassicCadenceStyle';
+    style.textContent=`
+      .productClockCadence{grid-column:1/-1;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px;margin-top:2px;padding-top:10px;border-top:1px solid rgba(145,176,205,.12)}
+      .productClockCadence button{min-width:0!important;min-height:32px!important;padding:6px 4px!important;border-radius:9px!important;font-size:.72rem!important;font-weight:800!important;color:#93a9be!important;background:rgba(5,13,23,.5)!important}
+      .productClockCadence button.selected{border-color:rgba(91,220,255,.42)!important;background:linear-gradient(135deg,rgba(91,220,255,.95),rgba(48,183,230,.95))!important;color:#03121b!important;box-shadow:0 5px 14px rgba(33,191,242,.16)}
+      @media(max-width:430px){.productClockCadence{gap:4px}.productClockCadence button{min-height:30px!important;padding:5px 2px!important;font-size:.68rem!important}}
+    `;
+    document.head.append(style);
+  }
+
   function parseDeviceClock(){
     const ble=document.getElementById('ble');
     const local=document.getElementById('d2LocalTime');
@@ -59,11 +73,15 @@
   }
 
   function getClassicCadence(){
-    for(const value of CLASSIC_CADENCES){
-      if(document.getElementById(`cadence${value}`)?.classList.contains('selected'))return value;
-    }
-    const active=Number(document.documentElement.dataset.einkRefreshMinutes);
-    return CLASSIC_CADENCES.includes(active)?active:5;
+    return CLASSIC_CADENCES.includes(classicCadence)?classicCadence:5;
+  }
+
+  function syncClassicCadenceButtons(){
+    document.querySelectorAll('[data-classic-cadence]').forEach(button=>{
+      const selected=Number(button.dataset.classicCadence)===getClassicCadence();
+      button.classList.toggle('selected',selected);
+      button.setAttribute('aria-pressed',String(selected));
+    });
   }
 
   function minuteLabelsForCadence(cadence){
@@ -254,6 +272,8 @@
   function createClockCard(){
     if(document.querySelector('.productProfileClock'))return null;
 
+    ensureClassicCadenceStyles();
+    const cadenceButtons=CLASSIC_CADENCES.map(value=>`<button type="button" data-classic-cadence="${value}" aria-pressed="${value===classicCadence}">${value}p</button>`).join('');
     const card=document.createElement('div');
     card.className='productProfileClock';
     card.dataset.einkPremiumClock='v2-profile';
@@ -271,9 +291,11 @@
         <span class="productAnalogHand productAnalogMinute"></span>
         <span class="productAnalogHand productAnalogSecond"></span>
         <span class="productAnalogCenter"></span>
-      </div>`;
+      </div>
+      <div class="productClockCadence" aria-label="Chu kỳ làm mới Clock Classic">${cadenceButtons}</div>`;
 
     addTicks(card.querySelector('.productAnalogClock'));
+    syncClassicCadenceButtons();
     return card;
   }
 
@@ -334,6 +356,7 @@
     classicButton?.classList.toggle('selected',active);
     deviceButtons.forEach(button=>button.classList.toggle('selected',!active&&button.dataset.layoutProfile===select.value));
     syncClassicApply(active);
+    syncClassicCadenceButtons();
 
     if(active){
       select.value=CLASSIC_VALUE;
@@ -438,6 +461,15 @@
   },true);
 
   document.addEventListener('click',event=>{
+    const classicCadenceButton=event.target.closest?.('[data-classic-cadence]');
+    if(classicCadenceButton){
+      event.preventDefault();
+      classicCadence=Number(classicCadenceButton.dataset.classicCadence);
+      syncClassicCadenceButtons();
+      drawClassicCanvas();
+      return;
+    }
+
     const classicButton=event.target.closest?.('[data-eink-classic-profile]');
     if(classicButton){
       event.preventDefault();
@@ -452,13 +484,6 @@
       return;
     }
 
-    const cadenceButton=event.target.closest?.('#cadenceRow button[id^="cadence"]');
-    if(cadenceButton){
-      const profile=document.querySelector('.productModeV2Profiles');
-      if(profile?.dataset.webProfile===CLASSIC_VALUE)drawClassicCanvas();
-      return;
-    }
-
     const apply=event.target.closest?.('#profileApply');
     const select=document.getElementById('productLayoutSelect');
     if(apply&&select?.value===CLASSIC_VALUE){
@@ -468,6 +493,7 @@
   },true);
 
   function installPremiumClock(){
+    ensureClassicCadenceStyles();
     if(mountPremiumClock())return;
 
     const observer=new MutationObserver(()=>{
