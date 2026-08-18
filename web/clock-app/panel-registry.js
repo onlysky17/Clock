@@ -129,8 +129,8 @@
     ctx.font='700 8px Arial, sans-serif';
     ctx.fillText(dateLabel,10,27);
 
-    ctx.font='800 44px ui-monospace, SFMono-Regular, Consolas, monospace';
-    ctx.fillText(`${pad(hours)}:${pad(displayMinutes)}`,7,77);
+    ctx.font='800 42px ui-monospace, SFMono-Regular, Consolas, monospace';
+    ctx.fillText(`${pad(hours)}:${pad(displayMinutes)}`,7,76);
 
     ctx.font='700 7px Arial, sans-serif';
     ctx.fillText(`${parseDeviceClock()?'D2':'WEB'} · ${cadence} MIN · NO SEC`,10,108);
@@ -138,19 +138,13 @@
     const cx=202;
     const cy=61;
     const outerRadius=47;
-    const hourLabelRadius=39;
-    const minuteRingRadius=31;
+    const hourLabelRadius=40;
     const minuteTickRadius=31;
-    const minuteLabelRadius=24.5;
+    const minuteLabelRadius=26.5;
 
     ctx.lineWidth=1.7;
     ctx.beginPath();
     ctx.arc(cx,cy,outerRadius,0,Math.PI*2);
-    ctx.stroke();
-
-    ctx.lineWidth=.8;
-    ctx.beginPath();
-    ctx.arc(cx,cy,minuteRingRadius+2.2,0,Math.PI*2);
     ctx.stroke();
 
     for(let hour=1;hour<=12;hour++){
@@ -201,23 +195,23 @@
         minute,
         cx+Math.cos(angle)*minuteLabelRadius,
         cy+Math.sin(angle)*minuteLabelRadius,
-        '700 6.6px Arial, sans-serif'
+        '700 6.2px Arial, sans-serif'
       );
     }
 
     const hourAngle=(((hours%12)+(displayMinutes/60))*Math.PI/6)-Math.PI/2;
     const minuteAngle=(displayMinutes*Math.PI/30)-Math.PI/2;
 
-    ctx.lineWidth=4.2;
+    ctx.lineWidth=4.1;
     ctx.beginPath();
     ctx.moveTo(cx,cy);
-    ctx.lineTo(cx+Math.cos(hourAngle)*17,cy+Math.sin(hourAngle)*17);
+    ctx.lineTo(cx+Math.cos(hourAngle)*14.5,cy+Math.sin(hourAngle)*14.5);
     ctx.stroke();
 
-    ctx.lineWidth=2.25;
+    ctx.lineWidth=2.1;
     ctx.beginPath();
     ctx.moveTo(cx,cy);
-    ctx.lineTo(cx+Math.cos(minuteAngle)*29,cy+Math.sin(minuteAngle)*29);
+    ctx.lineTo(cx+Math.cos(minuteAngle)*22.5,cy+Math.sin(minuteAngle)*22.5);
     ctx.stroke();
 
     ctx.beginPath();
