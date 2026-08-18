@@ -7,6 +7,13 @@
   theme.dataset.einkTheme='premium-v2-clock-card';
   document.head.append(theme);
 
+  if(!document.querySelector('script[data-eink-week-calendar]')){
+    const weekScript=document.createElement('script');
+    weekScript.src='weekly-calendar-preview.js';
+    weekScript.dataset.einkWeekCalendar='v1';
+    document.head.append(weekScript);
+  }
+
   const DEFAULT_PANEL_ID='hink213-bw-250x122';
   const CLASSIC_VALUE='clock-classic';
   const CLASSIC_STORAGE_KEY='eink-premium-web-profile';
@@ -431,6 +438,7 @@
   }
 
   function renderClassicState(active){
+    if(active)window.EINK_WEEK_PREVIEW?.deactivate?.();
     setClassicUi(active);
     const note=document.querySelector('.productClassicNote');
     if(note)note.hidden=!active;
