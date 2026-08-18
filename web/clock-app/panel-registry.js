@@ -213,6 +213,26 @@
     card.querySelector('.productAnalogSecond').style.transform=`rotate(${seconds*6}deg)`;
   }
 
+  function syncClassicApply(active){
+    const apply=document.getElementById('profileApply');
+    if(!apply)return;
+
+    if(active){
+      if(!apply.dataset.classicOriginalLabel){
+        apply.dataset.classicOriginalLabel=apply.textContent||'Áp dụng lên màn';
+      }
+      apply.dataset.classicPreview='true';
+      apply.textContent='Preview web — chưa áp dụng';
+      apply.disabled=true;
+      apply.setAttribute('aria-disabled','true');
+    }else if(apply.dataset.classicPreview==='true'){
+      apply.textContent=apply.dataset.classicOriginalLabel||'Áp dụng lên màn';
+      apply.disabled=false;
+      apply.removeAttribute('aria-disabled');
+      delete apply.dataset.classicPreview;
+    }
+  }
+
   function setClassicUi(active){
     const profile=document.querySelector('.productModeV2Profiles');
     const select=document.getElementById('productLayoutSelect');
@@ -227,6 +247,7 @@
     card.hidden=!active;
     classicButton?.classList.toggle('selected',active);
     deviceButtons.forEach(button=>button.classList.toggle('selected',!active&&button.dataset.layoutProfile===select.value));
+    syncClassicApply(active);
 
     if(active){
       select.value=CLASSIC_VALUE;
@@ -307,7 +328,10 @@
         const mounted=document.querySelector('.productProfileClock');
         if(mounted)updateClockCard(mounted);
         const profileCard=document.querySelector('.productModeV2Profiles');
-        if(profileCard?.dataset.webProfile===CLASSIC_VALUE)drawClassicCanvas();
+        if(profileCard?.dataset.webProfile===CLASSIC_VALUE){
+          drawClassicCanvas();
+          syncClassicApply(true);
+        }
       },1000);
     }
     return true;
@@ -346,10 +370,6 @@
     if(apply&&select?.value===CLASSIC_VALUE){
       event.preventDefault();
       event.stopImmediatePropagation();
-      const status=document.getElementById('profileStatus');
-      if(status){
-        status.textContent='Clock Classic hiện mới là preview web; không gửi mã profile lạ xuống e-ink.';
-      }
     }
   },true);
 
