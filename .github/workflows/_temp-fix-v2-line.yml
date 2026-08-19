@@ -1,0 +1,110 @@
+name: temp-fix-v2-line
+
+on:
+  push:
+    branches: [task-d/eink-web-premium-ui-v2-clock-card]
+    paths: [.github/workflows/_temp-fix-v2-line.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: task-d/eink-web-premium-ui-v2-clock-card
+          fetch-depth: 0
+      - name: Patch Bresenham endpoint bug with exact guard
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('firmware/active/HINK213_CLOCK_22_BASE/src/hink_profile_v2.inc')
+          s=p.read_text(encoding='utf-8')
+          old='''static void hink_v2_line(int x0, int y0, int x1, int y1, uint8_t color)
+{
+    int dx = (x1 >= x0) ? (x1 - x0) : (x0 - x1);
+    int sx = (x0 < x1) ? 1 : -1;
+    int dy_abs = (y1 >= y0) ? (y1 - y0) : (y0 - y1);
+    int dy = -dy_abs;
+    int sy = (y0 < y1) ? 1 : -1;
+    int err = dx + dy;
+
+    while (1)
+    {
+        hink_d7a_pixel(x0, y0, color);
+        if ((x0 == x1) && (y0 == y1))
+        {
+            break;
+        }
+        if ((2 * err) >= dy)
+        {
+            err += dy;
+            x0 += sx;
+        }
+        if ((2 * err) <= dx)
+        {
+            err += dx;
+            y0 += sy;
+        }
+    }
+}
+'''
+          new='''static void hink_v2_line(int x0, int y0, int x1, int y1, uint8_t color)
+{
+    int dx = (x1 >= x0) ? (x1 - x0) : (x0 - x1);
+    int sx = (x0 < x1) ? 1 : -1;
+    int dy_abs = (y1 >= y0) ? (y1 - y0) : (y0 - y1);
+    int dy = -dy_abs;
+    int sy = (y0 < y1) ? 1 : -1;
+    int err = dx + dy;
+    int e2;
+
+    while (1)
+    {
+        hink_d7a_pixel(x0, y0, color);
+        if ((x0 == x1) && (y0 == y1))
+        {
+            break;
+        }
+
+        /* Both decisions must use the same pre-update error value. */
+        e2 = 2 * err;
+        if (e2 >= dy)
+        {
+            err += dy;
+            x0 += sx;
+        }
+        if (e2 <= dx)
+        {
+            err += dx;
+            y0 += sy;
+        }
+    }
+}
+'''
+          count=s.count(old)
+          if count!=1:
+              raise SystemExit(f'line renderer guard failed: expected 1 block, found {count}')
+          p.write_text(s.replace(old,new,1),encoding='utf-8')
+          print('PATCH PASS: Bresenham uses stable e2 snapshot')
+          PY
+      - name: Verify exact source only
+        shell: bash
+        run: |
+          grep -n "int e2;" firmware/active/HINK213_CLOCK_22_BASE/src/hink_profile_v2.inc
+          grep -n "e2 = 2 \* err;" firmware/active/HINK213_CLOCK_22_BASE/src/hink_profile_v2.inc
+          git diff --check
+      - name: Commit exact firmware file and self-remove
+        shell: bash
+        run: |
+          rm .github/workflows/_temp-fix-v2-line.yml
+          git config user.name eink-harness
+          git config user.email eink-harness@users.noreply.github.com
+          git add firmware/active/HINK213_CLOCK_22_BASE/src/hink_profile_v2.inc
+          git add -u .github/workflows/_temp-fix-v2-line.yml
+          git diff --cached --check
+          git commit -m "fix: prevent v2 line renderer lockup"
+          git push origin HEAD:task-d/eink-web-premium-ui-v2-clock-card
