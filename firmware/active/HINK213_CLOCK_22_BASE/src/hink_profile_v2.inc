@@ -31,6 +31,7 @@ static void hink_v2_line(int x0, int y0, int x1, int y1, uint8_t color)
     int dy = -dy_abs;
     int sy = (y0 < y1) ? 1 : -1;
     int err = dx + dy;
+    int e2;
 
     while (1)
     {
@@ -39,12 +40,13 @@ static void hink_v2_line(int x0, int y0, int x1, int y1, uint8_t color)
         {
             break;
         }
-        if ((2 * err) >= dy)
+        e2 = 2 * err;
+        if (e2 >= dy)
         {
             err += dy;
             x0 += sx;
         }
-        if ((2 * err) <= dx)
+        if (e2 <= dx)
         {
             err += dx;
             y0 += sy;
