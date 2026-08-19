@@ -354,9 +354,29 @@
       drawCenteredText(ctx,hour,cx+Math.cos(angle)*hourLabelRadius,cy+Math.sin(angle)*hourLabelRadius,'800 8.2px Arial, sans-serif');
     }
 
-    /* Refresh cadence affects timing only.
-       Keep one clean hour scale like the physical target. */
+    /*
+     * Inner minute ring mirrors the physical target.
+     * Keep it well inside the hour numerals so the two scales do not
+     * collide on the 250x122 output.
+     */
+    for(let minute=0;minute<60;minute++){
+      const angle=(minute*Math.PI/30)-Math.PI/2;
+      const major=minute%5===0;
+      const inner=major?19:21;
+      const outer=major?23:22;
 
+      ctx.lineWidth=major?1.15:.72;
+      ctx.beginPath();
+      ctx.moveTo(
+        cx+Math.cos(angle)*inner,
+        cy+Math.sin(angle)*inner
+      );
+      ctx.lineTo(
+        cx+Math.cos(angle)*outer,
+        cy+Math.sin(angle)*outer
+      );
+      ctx.stroke();
+    }
 
     const hourAngle=(((hours%12)+(displayMinutes/60))*Math.PI/6)-Math.PI/2;
     const minuteAngle=(displayMinutes*Math.PI/30)-Math.PI/2;

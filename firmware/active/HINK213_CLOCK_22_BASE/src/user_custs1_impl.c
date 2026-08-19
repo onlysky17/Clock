@@ -221,8 +221,33 @@ static timer_hnd epd_wait_hnd;
 static uint8_t hink_epd_busy_seen;
 static uint8_t hink_epd_busy_start_polls;
 static uint8_t hink_epd_first_refresh_pending = 1U;
+
 #define HINK_EPD_BUSY_START_POLL_LIMIT 50U
 #define HINK_EPD_PRIME_RECOVERY_TICKS 100UL
+
+/*
+ * Dirty-pixel refresh V1.
+ * The panel driver already exposes UPDATE_FLY / lut_fly.
+ * Keep ten fly updates between maintenance full refreshes;
+ * this matches the driver's own ten-iteration fly test.
+ */
+#define HINK_EPD_FLY_MAINTENANCE_LIMIT 10U
+
+static uint8_t hink_epd_fly_ready
+    __SECTION_ZERO("retention_mem_area0");
+static uint8_t hink_epd_fly_profile
+    __SECTION_ZERO("retention_mem_area0");
+static uint8_t hink_epd_fly_count
+    __SECTION_ZERO("retention_mem_area0");
+static uint32_t hink_epd_fly_day
+    __SECTION_ZERO("retention_mem_area0");
+
+static uint8_t hink_epd_refresh_was_fly
+    __SECTION_ZERO("retention_mem_area0");
+static uint8_t hink_epd_refresh_profile
+    __SECTION_ZERO("retention_mem_area0");
+static uint32_t hink_epd_refresh_day
+    __SECTION_ZERO("retention_mem_area0");
 
 #define HINK_D3D_STORE_SECTOR 0x3B000UL
 #define HINK_D3D_STORE_SLOT_A 0x3B000UL
@@ -1758,6 +1783,35 @@ static void epd_wait_timer(void)
             if (auto_minute == HINK_AUTO_SENTINEL) {
                 auto_minute = hink_auto_local_minute_key();
             }
+            /*
+             * The prime-recovery branch above returns before reaching
+             * this point, so a new baseline is trusted only after the
+             * final successful panel refresh.
+             */
+            if ((hink_epd_refresh_profile == HINK_CLOCK_PROFILE_CLASSIC) ||
+                (hink_epd_refresh_profile == HINK_CLOCK_PROFILE_WEEKLY))
+            {
+                if (hink_epd_refresh_was_fly)
+                {
+                    if (hink_epd_fly_count < 0xffU)
+                    {
+                        hink_epd_fly_count++;
+                    }
+                }
+                else
+                {
+                    hink_epd_fly_ready = 1U;
+                    hink_epd_fly_profile = hink_epd_refresh_profile;
+                    hink_epd_fly_day = hink_epd_refresh_day;
+                    hink_epd_fly_count = 0U;
+                }
+            }
+            else
+            {
+                hink_epd_fly_ready = 0U;
+                hink_epd_fly_count = 0U;
+            }
+
             hink_d2_render_state = HINK_D2_RENDER_COMPLETE;
             hink_auto_last_rendered_minute = auto_minute;
             if ((hink_auto_flags & HINK_AUTO_FLAG_PENDING) &&
@@ -2681,11 +2735,50 @@ static void hink_d2_render_notify(uint8_t result, uint8_t state)
 
 static uint8_t hink_d2_start_epd_refresh(void)
 {
+    uint32_t refresh_day = hink_auto_local_minute_key() / 1440UL;
+    uint8_t use_fly = 0U;
+
+    /*
+     * Only Classic and Weekly have mostly-static layouts.
+     *
+     * Same profile + same local day:
+     *   use UPDATE_FLY so unchanged pixels remain visually static.
+     *
+     * First render, profile/day change, prime recovery, or every tenth
+     * fly update:
+     *   use a maintenance/full refresh.
+     */
+    if (!hink_epd_first_refresh_pending &&
+        ((hink_clock_profile == HINK_CLOCK_PROFILE_CLASSIC) ||
+         (hink_clock_profile == HINK_CLOCK_PROFILE_WEEKLY)) &&
+        hink_epd_fly_ready &&
+        (hink_epd_fly_profile == hink_clock_profile) &&
+        (hink_epd_fly_day == refresh_day) &&
+        (hink_epd_fly_count < HINK_EPD_FLY_MAINTENANCE_LIMIT))
+    {
+        use_fly = 1U;
+    }
+
+    if (!use_fly)
+    {
+        /*
+         * Do not consider the static panel baseline valid again until
+         * this full refresh reaches the normal COMPLETE path.
+         */
+        hink_epd_fly_ready = 0U;
+        hink_epd_fly_count = 0U;
+    }
+
+    hink_epd_refresh_was_fly = use_fly;
+    hink_epd_refresh_profile = hink_clock_profile;
+    hink_epd_refresh_day = refresh_day;
+
     epd_hw_open();
-    epd_update_mode(UPDATE_FULL);
+    epd_update_mode(use_fly ? UPDATE_FLY : UPDATE_FULL);
     epd_init();
     epd_screen_update();
     epd_update();
+
     arch_set_sleep_mode(ARCH_SLEEP_OFF);
     hink_epd_busy_seen = 0U;
     hink_epd_busy_start_polls = 0U;
@@ -2695,6 +2788,9 @@ static uint8_t hink_d2_start_epd_refresh(void)
     {
         return 1U;
     }
+
+    hink_epd_fly_ready = 0U;
+    hink_epd_fly_count = 0U;
 
     epd_power(0);
     epd_hw_close();

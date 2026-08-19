@@ -128,6 +128,7 @@ static void hink_v2_draw_clock_classic(uint8_t h, uint8_t m,
 {
     char date_buf[14];
     uint8_t hour;
+    uint8_t minute;
     uint8_t idx;
     uint8_t long_tick;
     uint8_t inner;
@@ -175,9 +176,38 @@ static void hink_v2_draw_clock_classic(uint8_t h, uint8_t m,
         );
     }
 
-    /* Refresh cadence controls scheduling only.
-       Keep one clean hour scale on the 250x122 face. */
+    /*
+     * Inner minute ring.
+     *
+     * 60 marks are kept well inside the 1..12 hour numerals:
+     *   hour labels : radius 30
+     *   minute ring : radius 19..23
+     *
+     * This leaves a visible gap instead of letting the inner/outer
+     * marks touch the hour numbers.
+     */
+    for (minute = 0U; minute < 60U; minute++)
+    {
+        idx = minute;
+        if ((minute % 5U) == 0U)
+        {
+            inner = 19U;
+            outer = 23U;
+        }
+        else
+        {
+            inner = 21U;
+            outer = 22U;
+        }
 
+        hink_v2_line(
+            cx + hink_v2_scale(hink_v2_x60[idx], inner),
+            cy + hink_v2_scale(hink_v2_y60[idx], inner),
+            cx + hink_v2_scale(hink_v2_x60[idx], outer),
+            cy + hink_v2_scale(hink_v2_y60[idx], outer),
+            BLACK
+        );
+    }
 
     /* Hands: hour short/thick, minute long/thin. No seconds on e-ink. */
     idx = (uint8_t)((((h % 12U) * 5U) + (m / 12U)) % 60U);
