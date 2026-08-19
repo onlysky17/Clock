@@ -1,6 +1,13 @@
 'use strict';
 
 (() => {
+  if(!document.querySelector('script[data-eink-device-target-preview]')){
+    const targetScript=document.createElement('script');
+    targetScript.src='device-target-preview.js';
+    targetScript.dataset.einkDeviceTargetPreview='v1';
+    document.head.append(targetScript);
+  }
+
   const WEEK_VALUE='week-calendar';
   const WEEK_CANVAS_ID='weekWebPreview';
   const DEVICE_CANVAS_ID='canvas';
@@ -412,6 +419,10 @@
         event.stopImmediatePropagation();
       }
     },true);
+
+    document.addEventListener('eink-preview-mode-change',()=>{
+      if(weekActive)drawWeek();
+    });
 
     if(!window.__einkWeekPreviewTimer){
       window.__einkWeekPreviewTimer=setInterval(()=>{
