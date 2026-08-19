@@ -1,0 +1,116 @@
+name: temp-custom-profile-state-fix
+
+on:
+  push:
+    branches: [task-d/eink-web-premium-ui-v2-clock-card]
+    paths: [.github/workflows/_temp-custom-profile-state-fix.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: task-d/eink-web-premium-ui-v2-clock-card
+          fetch-depth: 0
+      - name: Patch custom profile state authority
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path=Path('web/clock-app/device-target-preview.js')
+          text=path.read_text(encoding='utf-8')
+
+          def once(old,new,label):
+              global text
+              count=text.count(old)
+              if count!=1:
+                  raise SystemExit(f'{label}: expected 1 match, found {count}')
+              text=text.replace(old,new,1)
+
+          once(
+          """  function activeSource(){
+            const value=document.getElementById('productLayoutSelect')?.value;
+            if(value==='week-calendar')return document.getElementById('weekWebPreview')||document.getElementById('canvas');
+            if(value==='clock-classic')return document.getElementById('classicWebPreview')||document.getElementById('canvas');
+            return document.getElementById('canvas');
+          }
+""",
+          """  function activeSource(){
+            const value=customLayout()||document.getElementById('productLayoutSelect')?.value;
+            if(value==='week-calendar')return document.getElementById('weekWebPreview')||document.getElementById('canvas');
+            if(value==='clock-classic')return document.getElementById('classicWebPreview')||document.getElementById('canvas');
+            return document.getElementById('canvas');
+          }
+""",
+          'activeSource')
+
+          once(
+          """  function customLayout(){
+            const value=document.getElementById('productLayoutSelect')?.value;
+            return value==='clock-classic'||value==='week-calendar'?value:'';
+          }
+""",
+          """  function customLayout(){
+            try{
+              if(window.EINK_WEEK_PREVIEW?.isActive?.())return 'week-calendar';
+            }catch(_error){}
+            const profile=document.querySelector('.productModeV2Profiles');
+            if(profile?.dataset.webProfile==='clock-classic')return 'clock-classic';
+            const value=document.getElementById('productLayoutSelect')?.value;
+            return value==='clock-classic'||value==='week-calendar'?value:'';
+          }
+""",
+          'customLayout')
+
+          once(
+          """  function syncDeviceApplyButton(){
+            const layout=customLayout();
+            const apply=document.getElementById('profileApply');
+            if(!layout||!apply)return;
+            apply.textContent='Áp dụng lên màn';
+            apply.disabled=!deviceApplyAllowed();
+            if(apply.disabled)apply.setAttribute('aria-disabled','true');
+            else apply.removeAttribute('aria-disabled');
+          }
+""",
+          """  function syncDeviceApplyButton(){
+            const layout=customLayout();
+            const apply=document.getElementById('profileApply');
+            if(!layout||!apply)return;
+            restoreCustomSelection(layout);
+            delete apply.dataset.classicPreview;
+            delete apply.dataset.weekPreview;
+            apply.textContent='Áp dụng lên màn';
+            apply.disabled=!deviceApplyAllowed();
+            if(apply.disabled)apply.setAttribute('aria-disabled','true');
+            else apply.removeAttribute('aria-disabled');
+          }
+""",
+          'syncDeviceApplyButton')
+
+          path.write_text(text,encoding='utf-8')
+          print('PATCH PASS: custom profile state is authoritative during preview/apply')
+          PY
+      - name: Verify
+        shell: bash
+        run: |
+          grep -q "window.EINK_WEEK_PREVIEW?.isActive" web/clock-app/device-target-preview.js
+          grep -q "profile?.dataset.webProfile==='clock-classic'" web/clock-app/device-target-preview.js
+          grep -q "restoreCustomSelection(layout);" web/clock-app/device-target-preview.js
+          git diff --check
+      - name: Commit exact file and self-remove
+        shell: bash
+        run: |
+          rm .github/workflows/_temp-custom-profile-state-fix.yml
+          git config user.name eink-harness
+          git config user.email eink-harness@users.noreply.github.com
+          git add web/clock-app/device-target-preview.js
+          git add -u .github/workflows/_temp-custom-profile-state-fix.yml
+          git diff --cached --check
+          git commit -m "fix: keep custom profile state during device apply"
+          git push origin HEAD:task-d/eink-web-premium-ui-v2-clock-card
