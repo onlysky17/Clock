@@ -1,6 +1,7 @@
 'use strict';
 
 (() => {
+  window.__einkCustomDeviceApplyReady=true;
   const WIDTH=250;
   const HEIGHT=122;
   const TARGET_ID='deviceTargetPreview';
@@ -8,6 +9,8 @@
   const CLASSIC_PROFILE_ID=3;
   const WEEK_PROFILE_ID=4;
   let mode='web';
+  let applyObserver=null;
+  let applyObserverBusy=false;
 
   function ensureStyles(){
     if(document.getElementById(STYLE_ID))return;
@@ -165,9 +168,10 @@
 
   function restoreCustomSelection(layout){
     const select=document.getElementById('productLayoutSelect');
-    if(select)select.value=layout;
+    if(select&&select.value!==layout)select.value=layout;
     document.querySelectorAll('#productPresetRow button[data-layout-profile]').forEach(button=>{
-      button.classList.toggle('selected',button.dataset.layoutProfile===layout);
+      const selected=button.dataset.layoutProfile===layout;
+      if(button.classList.contains('selected')!==selected)button.classList.toggle('selected',selected);
     });
   }
 
@@ -176,12 +180,33 @@
     const apply=document.getElementById('profileApply');
     if(!layout||!apply)return;
     restoreCustomSelection(layout);
-    delete apply.dataset.classicPreview;
-    delete apply.dataset.weekPreview;
-    apply.textContent='Áp dụng lên màn';
-    apply.disabled=!deviceApplyAllowed();
-    if(apply.disabled)apply.setAttribute('aria-disabled','true');
-    else apply.removeAttribute('aria-disabled');
+    if(apply.dataset.classicPreview)delete apply.dataset.classicPreview;
+    if(apply.dataset.weekPreview)delete apply.dataset.weekPreview;
+    if(apply.textContent!=='Áp dụng lên màn')apply.textContent='Áp dụng lên màn';
+    const shouldDisable=!deviceApplyAllowed();
+    if(apply.disabled!==shouldDisable)apply.disabled=shouldDisable;
+    if(shouldDisable){
+      if(apply.getAttribute('aria-disabled')!=='true')apply.setAttribute('aria-disabled','true');
+    }else if(apply.hasAttribute('aria-disabled')){
+      apply.removeAttribute('aria-disabled');
+    }
+  }
+
+  function installApplyStabilizer(){
+    const apply=document.getElementById('profileApply');
+    if(!apply)return false;
+    if(applyObserver)applyObserver.disconnect();
+    applyObserver=new MutationObserver(()=>{
+      if(applyObserverBusy||!customLayout())return;
+      applyObserverBusy=true;
+      queueMicrotask(()=>{
+        try{syncDeviceApplyButton();}
+        finally{applyObserverBusy=false;}
+      });
+    });
+    applyObserver.observe(apply,{attributes:true,childList:true,characterData:true,subtree:true});
+    syncDeviceApplyButton();
+    return true;
   }
 
   function friendlyApplyStatus(layout){
@@ -229,7 +254,7 @@
     },true);
 
     if(!window.__einkProfileDeviceApplyTimer){
-      window.__einkProfileDeviceApplyTimer=setInterval(syncDeviceApplyButton,250);
+      window.__einkProfileDeviceApplyTimer=setInterval(syncDeviceApplyButton,1000);
     }
   }
 
@@ -240,6 +265,7 @@
     document.documentElement.dataset.einkPreviewMode=mode;
     syncUi();
     installDeviceApplyBridge();
+    installApplyStabilizer();
 
     document.addEventListener('click',event=>{
       const button=event.target.closest?.('[data-preview-mode]');
@@ -259,6 +285,7 @@
     const observer=new MutationObserver(()=>{
       ensureControls();
       ensureTargetCanvas();
+      if(!applyObserver)installApplyStabilizer();
       if(mode==='device')setTimeout(syncUi,0);
     });
     observer.observe(document.documentElement,{childList:true,subtree:true});
