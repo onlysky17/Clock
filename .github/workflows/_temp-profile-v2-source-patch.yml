@@ -1,0 +1,148 @@
+name: temp-profile-v2-source-patch
+
+on:
+  push:
+    branches:
+      - task-d/eink-web-premium-ui-v2-clock-card
+    paths:
+      - .github/workflows/_temp-profile-v2-source-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: task-d/eink-web-premium-ui-v2-clock-card
+          fetch-depth: 0
+
+      - name: Patch firmware profile plumbing with exact guards
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('firmware/active/HINK213_CLOCK_22_BASE/src/user_custs1_impl.c')
+          text = path.read_text(encoding='utf-8')
+
+          def once(old, new, label):
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected exactly 1 match, found {count}')
+              text = text.replace(old, new, 1)
+
+          once(
+          '''#define HINK_CLOCK_PROFILE_MONTHLY    0x00U
+          #define HINK_CLOCK_PROFILE_LARGE_TIME 0x01U
+          #define HINK_CLOCK_PROFILE_DAILY      0x02U
+          #define HINK_CLOCK_PROFILE_NONE       0xFFU''',
+          '''#define HINK_CLOCK_PROFILE_MONTHLY    0x00U
+          #define HINK_CLOCK_PROFILE_LARGE_TIME 0x01U
+          #define HINK_CLOCK_PROFILE_DAILY      0x02U
+          #define HINK_CLOCK_PROFILE_CLASSIC    0x03U
+          #define HINK_CLOCK_PROFILE_WEEKLY     0x04U
+          #define HINK_CLOCK_PROFILE_MAX        HINK_CLOCK_PROFILE_WEEKLY
+          #define HINK_CLOCK_PROFILE_NONE       0xFFU''',
+          'profile constants')
+
+          replacements = {
+              'hink_clock_profile_persisted <= HINK_CLOCK_PROFILE_DAILY': 'hink_clock_profile_persisted <= HINK_CLOCK_PROFILE_MAX',
+              'profile > HINK_CLOCK_PROFILE_DAILY': 'profile > HINK_CLOCK_PROFILE_MAX',
+              'a[16] <= HINK_CLOCK_PROFILE_DAILY': 'a[16] <= HINK_CLOCK_PROFILE_MAX',
+              'b[16] <= HINK_CLOCK_PROFILE_DAILY': 'b[16] <= HINK_CLOCK_PROFILE_MAX',
+          }
+          for old, new in replacements.items():
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'range guard {old!r}: expected 1, found {count}')
+              text = text.replace(old, new, 1)
+
+          once(
+          '''static uint8_t hink_refresh_value_valid(uint8_t value)
+          {
+              return (uint8_t)((value == 1U) || (value == 5U) || (value == 10U));
+          }''',
+          '''static uint8_t hink_refresh_value_valid(uint8_t value)
+          {
+              return (uint8_t)((value == 1U) || (value == 5U) || (value == 10U) ||
+                               (value == 15U) || (value == 30U));
+          }''',
+          'refresh cadence validation')
+
+          once(
+          '''static void hink_d2_draw_current_framebuffer(void)
+          {''',
+          '''#include "hink_profile_v2.inc"
+
+          static void hink_d2_draw_current_framebuffer(void)
+          {''',
+          'renderer include')
+
+          once(
+          '''\tif (hink_clock_profile == HINK_CLOCK_PROFILE_LARGE_TIME)
+          \t{
+          \t\think_d11b_draw_large_time(draw_hour, m, sy, sm, sd, sw, lunar_valid, lm, ld, ampm);
+          \t}
+          \telse if (hink_clock_profile == HINK_CLOCK_PROFILE_DAILY)
+          \t{
+          \t\think_d13b_draw_daily_briefing(draw_hour, m, sy, sm, sd, sw,
+          \t\t                                  lunar_valid, lm, ld, ampm);
+          \t}
+          \telse
+          \t{
+          \t\think_bitmap_draw_clock(draw_hour, m, sy, sm, sd, sw, lunar_valid, lm, ld, ampm);
+          \t}''',
+          '''\tif (hink_clock_profile == HINK_CLOCK_PROFILE_CLASSIC)
+          \t{
+          \t\think_v2_draw_clock_classic(draw_hour, m, sy, sm, sd, sw,
+          \t\t                           lunar_valid, lm, ld);
+          \t}
+          \telse if (hink_clock_profile == HINK_CLOCK_PROFILE_WEEKLY)
+          \t{
+          \t\think_v2_draw_weekly(local_day, sy, sm, sd, sw,
+          \t\t                    lunar_valid, lm, ld);
+          \t}
+          \telse if (hink_clock_profile == HINK_CLOCK_PROFILE_LARGE_TIME)
+          \t{
+          \t\think_d11b_draw_large_time(draw_hour, m, sy, sm, sd, sw, lunar_valid, lm, ld, ampm);
+          \t}
+          \telse if (hink_clock_profile == HINK_CLOCK_PROFILE_DAILY)
+          \t{
+          \t\think_d13b_draw_daily_briefing(draw_hour, m, sy, sm, sd, sw,
+          \t\t                                  lunar_valid, lm, ld, ampm);
+          \t}
+          \telse
+          \t{
+          \t\think_bitmap_draw_clock(draw_hour, m, sy, sm, sd, sw, lunar_valid, lm, ld, ampm);
+          \t}''',
+          'render dispatch')
+
+          path.write_text(text, encoding='utf-8')
+          print('PATCH PASS: profile IDs 3/4 + cadence 15/30 + persistence guards + render dispatch')
+          PY
+
+      - name: Verify patch anchors
+        shell: bash
+        run: |
+          grep -n "HINK_CLOCK_PROFILE_CLASSIC" firmware/active/HINK213_CLOCK_22_BASE/src/user_custs1_impl.c
+          grep -n "HINK_CLOCK_PROFILE_WEEKLY" firmware/active/HINK213_CLOCK_22_BASE/src/user_custs1_impl.c
+          grep -n "value == 15U" firmware/active/HINK213_CLOCK_22_BASE/src/user_custs1_impl.c
+          grep -n "hink_profile_v2.inc" firmware/active/HINK213_CLOCK_22_BASE/src/user_custs1_impl.c
+          grep -n "hink_v2_draw_clock_classic" firmware/active/HINK213_CLOCK_22_BASE/src/user_custs1_impl.c
+          grep -n "hink_v2_draw_weekly" firmware/active/HINK213_CLOCK_22_BASE/src/user_custs1_impl.c
+
+      - name: Commit exact firmware source and remove temporary workflow
+        shell: bash
+        run: |
+          rm .github/workflows/_temp-profile-v2-source-patch.yml
+          git config user.name "eink-harness"
+          git config user.email "eink-harness@users.noreply.github.com"
+          git add firmware/active/HINK213_CLOCK_22_BASE/src/user_custs1_impl.c
+          git add -u .github/workflows/_temp-profile-v2-source-patch.yml
+          git diff --cached --check
+          git commit -m "fw: wire classic and weekly display profiles"
+          git push origin HEAD:task-d/eink-web-premium-ui-v2-clock-card
