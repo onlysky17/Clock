@@ -35,13 +35,7 @@ jobs:
                   raise SystemExit(f'{label}: expected 1 match, found {count}')
               return text.replace(old, new, 1)
 
-          panel = once(
-              panel,
-              "  const CLASSIC_VALUE='clock-classic';\n",
-              "  const CLASSIC_VALUE='clock-classic';\n  const CLASSIC_PROFILE_ID=3;\n",
-              'classic profile id'
-          )
-
+          panel = once(panel,"  const CLASSIC_VALUE='clock-classic';\n","  const CLASSIC_VALUE='clock-classic';\n  const CLASSIC_PROFILE_ID=3;\n",'classic profile id')
           pattern = r"  function syncClassicApply\(active\)\{.*?\n  \}\n\n  function setClassicUi"
           replacement = '''  function syncClassicApply(active){
             const apply=document.getElementById('profileApply');
@@ -49,11 +43,7 @@ jobs:
             if(active){
               apply.dataset.classicDeviceProfile='true';
               apply.textContent='Áp dụng lên màn';
-              try{
-                selectedClockProfile=CLASSIC_PROFILE_ID;
-                selectedRefreshMinutes=classicCadence;
-                controls();
-              }catch(_error){}
+              try{selectedClockProfile=CLASSIC_PROFILE_ID;selectedRefreshMinutes=classicCadence;controls();}catch(_error){}
             }else if(apply.dataset.classicDeviceProfile==='true'){
               delete apply.dataset.classicDeviceProfile;
               apply.textContent='Áp dụng lên màn';
@@ -62,31 +52,20 @@ jobs:
           }
 
           function setClassicUi'''
-          panel, n = re.subn(pattern, replacement, panel, count=1, flags=re.S)
-          if n != 1:
-              raise SystemExit(f'syncClassicApply: expected 1 regex match, found {n}')
-
-          panel = once(
-              panel,
-              '''      classicCadence=Number(classicCadenceButton.dataset.classicCadence);
+          panel,n=re.subn(pattern,replacement,panel,count=1,flags=re.S)
+          if n!=1: raise SystemExit(f'syncClassicApply: expected 1 regex match, found {n}')
+          panel=once(panel,'''      classicCadence=Number(classicCadenceButton.dataset.classicCadence);
               syncClassicCadenceButtons();
-              drawClassicCanvas();''',
-              '''      classicCadence=Number(classicCadenceButton.dataset.classicCadence);
+              drawClassicCanvas();''','''      classicCadence=Number(classicCadenceButton.dataset.classicCadence);
               try{selectedRefreshMinutes=classicCadence;controls();}catch(_error){}
               syncClassicCadenceButtons();
-              drawClassicCanvas();''',
-              'classic cadence bridge'
-          )
-
-          panel = once(
-              panel,
-              '''    const apply=event.target.closest?.('#profileApply');
+              drawClassicCanvas();''','classic cadence bridge')
+          panel=once(panel,'''    const apply=event.target.closest?.('#profileApply');
               const select=document.getElementById('productLayoutSelect');
               if(apply&&select?.value===CLASSIC_VALUE){
                 event.preventDefault();
                 event.stopImmediatePropagation();
-              }''',
-              '''    const apply=event.target.closest?.('#profileApply');
+              }''','''    const apply=event.target.closest?.('#profileApply');
               const select=document.getElementById('productLayoutSelect');
               if(apply&&select?.value===CLASSIC_VALUE){
                 event.preventDefault();
@@ -94,36 +73,17 @@ jobs:
                 try{
                   selectedClockProfile=CLASSIC_PROFILE_ID;
                   selectedRefreshMinutes=classicCadence;
-                  const run=runD2Flow(async()=>{
-                    await d2ApplyClockPreferences();
-                    return d2ApplyClockProfile();
-                  });
-                  if(run&&typeof run.then==='function'){
-                    run.then(()=>{
-                      renderClassicState(true);
-                      const status=document.getElementById('profileStatus');
-                      if(status)status.textContent='Đồng hồ kim đã áp dụng lên thiết bị.';
-                    });
-                  }
-                }catch(error){
-                  console.error('Classic device apply failed',error);
-                }
-              }''',
-              'classic apply handler'
-          )
-          panel_path.write_text(panel, encoding='utf-8')
+                  const run=runD2Flow(async()=>{await d2ApplyClockPreferences();return d2ApplyClockProfile();});
+                  if(run&&typeof run.then==='function')run.then(()=>{renderClassicState(true);const status=document.getElementById('profileStatus');if(status)status.textContent='Đồng hồ kim đã áp dụng lên thiết bị.';});
+                }catch(error){console.error('Classic device apply failed',error);}
+              }''','classic apply handler')
+          panel_path.write_text(panel,encoding='utf-8')
 
-          week_path = Path('web/clock-app/weekly-calendar-preview.js')
-          week = week_path.read_text(encoding='utf-8')
-          week = once(
-              week,
-              "  const WEEK_VALUE='week-calendar';\n",
-              "  const WEEK_VALUE='week-calendar';\n  const WEEK_PROFILE_ID=4;\n",
-              'weekly profile id'
-          )
-
-          pattern = r"  function setApplyPreview\(active\)\{.*?\n  \}\n\n  function setWeekActive"
-          replacement = '''  function setApplyPreview(active){
+          week_path=Path('web/clock-app/weekly-calendar-preview.js')
+          week=week_path.read_text(encoding='utf-8')
+          week=once(week,"  const WEEK_VALUE='week-calendar';\n","  const WEEK_VALUE='week-calendar';\n  const WEEK_PROFILE_ID=4;\n",'weekly profile id')
+          pattern=r"  function setApplyPreview\(active\)\{.*?\n  \}\n\n  function setWeekActive"
+          replacement='''  function setApplyPreview(active){
             const apply=document.getElementById('profileApply');
             if(!apply)return;
             if(active){
@@ -138,50 +98,29 @@ jobs:
           }
 
           function setWeekActive'''
-          week, n = re.subn(pattern, replacement, week, count=1, flags=re.S)
-          if n != 1:
-              raise SystemExit(f'setApplyPreview: expected 1 regex match, found {n}')
-
-          week = once(
-              week,
-              '''      const apply=event.target.closest?.('#profileApply');
+          week,n=re.subn(pattern,replacement,week,count=1,flags=re.S)
+          if n!=1: raise SystemExit(f'setApplyPreview: expected 1 regex match, found {n}')
+          week=once(week,'''      const apply=event.target.closest?.('#profileApply');
               if(apply&&weekActive){
                 event.preventDefault();
                 event.stopImmediatePropagation();
-              }''',
-              '''      const apply=event.target.closest?.('#profileApply');
+              }''','''      const apply=event.target.closest?.('#profileApply');
               if(apply&&weekActive){
                 event.preventDefault();
                 event.stopImmediatePropagation();
                 try{
                   selectedClockProfile=WEEK_PROFILE_ID;
                   const run=runD2Flow(d2ApplyClockProfile);
-                  if(run&&typeof run.then==='function'){
-                    run.then(()=>{
-                      setWeekActive(true);
-                      const status=document.getElementById('profileStatus');
-                      if(status)status.textContent='Lịch Tuần đã áp dụng lên thiết bị.';
-                    });
-                  }
-                }catch(error){
-                  console.error('Weekly device apply failed',error);
-                }
-              }''',
-              'weekly apply handler'
-          )
-          week_path.write_text(week, encoding='utf-8')
+                  if(run&&typeof run.then==='function')run.then(()=>{setWeekActive(true);const status=document.getElementById('profileStatus');if(status)status.textContent='Lịch Tuần đã áp dụng lên thiết bị.';});
+                }catch(error){console.error('Weekly device apply failed',error);}
+              }''','weekly apply handler')
+          week_path.write_text(week,encoding='utf-8')
 
-          html_path = Path('web/clock-app/hl24a-canvas-e5.html')
-          html = html_path.read_text(encoding='utf-8')
-          html = once(
-              html,
-              "const clockProfileName=value=>({0:'Split View',1:'Minimal',2:'Dashboard'}[value]||`Profile ${value}`);\nconst layoutFromClockProfile=value=>({0:'split',1:'minimal',2:'dashboard'}[value]||'split');\nconst clockProfileFromLayout=value=>({dashboard:2,split:0,minimal:1}[value]??0);",
-              "const clockProfileName=value=>({0:'Split View',1:'Minimal',2:'Dashboard',3:'Đồng hồ kim',4:'Lịch Tuần'}[value]||`Profile ${value}`);\nconst layoutFromClockProfile=value=>({0:'split',1:'minimal',2:'dashboard',3:'clock-classic',4:'week-calendar'}[value]||'split');\nconst clockProfileFromLayout=value=>({dashboard:2,split:0,minimal:1,'clock-classic':3,'week-calendar':4}[value]??0);",
-              'core profile name mapping'
-          )
-          html_path.write_text(html, encoding='utf-8')
-
-          print('PATCH PASS: classic profile=3, weekly profile=4, cadence bridge, device apply enabled')
+          html_path=Path('web/clock-app/hl24a-canvas-e5.html')
+          html=html_path.read_text(encoding='utf-8')
+          html=once(html,"const clockProfileName=value=>({0:'Split View',1:'Minimal',2:'Dashboard'}[value]||`Profile ${value}`);\nconst layoutFromClockProfile=value=>({0:'split',1:'minimal',2:'dashboard'}[value]||'split');\nconst clockProfileFromLayout=value=>({dashboard:2,split:0,minimal:1}[value]??0);","const clockProfileName=value=>({0:'Split View',1:'Minimal',2:'Dashboard',3:'Đồng hồ kim',4:'Lịch Tuần'}[value]||`Profile ${value}`);\nconst layoutFromClockProfile=value=>({0:'split',1:'minimal',2:'dashboard',3:'clock-classic',4:'week-calendar'}[value]||'split');\nconst clockProfileFromLayout=value=>({dashboard:2,split:0,minimal:1,'clock-classic':3,'week-calendar':4}[value]??0);",'core profile name mapping')
+          html_path.write_text(html,encoding='utf-8')
+          print('PATCH PASS: profile 3/4 device apply')
           PY
 
       - name: Verify web apply anchors
@@ -190,7 +129,7 @@ jobs:
           grep -n "CLASSIC_PROFILE_ID=3" web/clock-app/panel-registry.js
           grep -n "selectedRefreshMinutes=classicCadence" web/clock-app/panel-registry.js
           grep -n "WEEK_PROFILE_ID=4" web/clock-app/weekly-calendar-preview.js
-          grep -n "Lịch Tuần.*4" web/clock-app/hl24a-canvas-e5.html
+          grep -n "4:'Lịch Tuần'" web/clock-app/hl24a-canvas-e5.html
           git diff --check
 
       - name: Commit exact web files and remove temporary workflow
