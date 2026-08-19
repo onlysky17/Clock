@@ -149,6 +149,9 @@ static timer_hnd hink_e6_timer_hnd       __SECTION_ZERO("retention_mem_area0");
 #define HINK_CLOCK_PROFILE_MONTHLY    0x00U
 #define HINK_CLOCK_PROFILE_LARGE_TIME 0x01U
 #define HINK_CLOCK_PROFILE_DAILY      0x02U
+#define HINK_CLOCK_PROFILE_CLASSIC    0x03U
+#define HINK_CLOCK_PROFILE_WEEKLY     0x04U
+#define HINK_CLOCK_PROFILE_MAX        HINK_CLOCK_PROFILE_WEEKLY
 #define HINK_CLOCK_PROFILE_NONE       0xFFU
 #define HINK_PROFILE_FLAG_PERSISTED   0x01U
 #define HINK_PROFILE_FLAG_DEFAULTED   0x02U
@@ -2152,7 +2155,7 @@ static void hink_d2_profile_notify(uint8_t result)
     uint8_t msg[HINK_D2_PROFILE_STATUS_LEN];
     uint8_t status_flags = 0U;
 
-    if (hink_clock_profile_persisted <= HINK_CLOCK_PROFILE_DAILY)
+    if (hink_clock_profile_persisted <= HINK_CLOCK_PROFILE_MAX)
     {
         status_flags |= HINK_PROFILE_FLAG_PERSISTED;
     }
@@ -2186,7 +2189,7 @@ static uint8_t hink_d2_profile_handle(struct custs1_val_write_ind const *param)
         return 1U;
     }
     profile = param->value[2];
-    if (profile > HINK_CLOCK_PROFILE_DAILY)
+    if (profile > HINK_CLOCK_PROFILE_MAX)
     {
         hink_d2_profile_notify(HINK_D2_RESULT_INVALID_PROFILE);
         return 1U;
@@ -2224,7 +2227,8 @@ static uint8_t hink_d2_profile_handle(struct custs1_val_write_ind const *param)
 
 static uint8_t hink_refresh_value_valid(uint8_t value)
 {
-    return (uint8_t)((value == 1U) || (value == 5U) || (value == 10U));
+    return (uint8_t)((value == 1U) || (value == 5U) || (value == 10U) ||
+                     (value == 15U) || (value == 30U));
 }
 
 static void hink_d2_pref_notify(uint8_t result)
@@ -2698,6 +2702,8 @@ static uint8_t hink_d2_start_epd_refresh(void)
     return 0U;
 }
 
+#include "hink_profile_v2.inc"
+
 static void hink_d2_draw_current_framebuffer(void)
 {
     uint32_t epoch;
@@ -2757,7 +2763,17 @@ static void hink_d2_draw_current_framebuffer(void)
 			draw_hour = 12U;
 		}
 	}
-	if (hink_clock_profile == HINK_CLOCK_PROFILE_LARGE_TIME)
+	if (hink_clock_profile == HINK_CLOCK_PROFILE_CLASSIC)
+	{
+		hink_v2_draw_clock_classic(draw_hour, m, sy, sm, sd, sw,
+		                           lunar_valid, lm, ld);
+	}
+	else if (hink_clock_profile == HINK_CLOCK_PROFILE_WEEKLY)
+	{
+		hink_v2_draw_weekly(local_day, sy, sm, sd, sw,
+		                    lunar_valid, lm, ld);
+	}
+	else if (hink_clock_profile == HINK_CLOCK_PROFILE_LARGE_TIME)
 	{
 		hink_d11b_draw_large_time(draw_hour, m, sy, sm, sd, sw, lunar_valid, lm, ld, ampm);
 	}
@@ -2988,7 +3004,7 @@ void hink_d3d_boot_load_last_known_time(void)
         hink_d3d_stale_timezone = tz_a;
         hink_d3d_stale_flags = flags_a;
         hink_d3d_stale_valid = 1U;
-        if (a[16] <= HINK_CLOCK_PROFILE_DAILY)
+        if (a[16] <= HINK_CLOCK_PROFILE_MAX)
         {
             hink_clock_profile = a[16];
             hink_clock_profile_persisted = a[16];
@@ -3010,7 +3026,7 @@ void hink_d3d_boot_load_last_known_time(void)
         hink_d3d_stale_timezone = tz_b;
         hink_d3d_stale_flags = flags_b;
         hink_d3d_stale_valid = 1U;
-        if (b[16] <= HINK_CLOCK_PROFILE_DAILY)
+        if (b[16] <= HINK_CLOCK_PROFILE_MAX)
         {
             hink_clock_profile = b[16];
             hink_clock_profile_persisted = b[16];
