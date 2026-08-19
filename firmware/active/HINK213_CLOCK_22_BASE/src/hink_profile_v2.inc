@@ -128,8 +128,6 @@ static void hink_v2_draw_clock_classic(uint8_t h, uint8_t m,
 {
     char date_buf[14];
     uint8_t hour;
-    uint8_t minute;
-    uint8_t cadence = hink_refresh_minutes;
     uint8_t idx;
     uint8_t long_tick;
     uint8_t inner;
@@ -162,7 +160,7 @@ static void hink_v2_draw_clock_classic(uint8_t h, uint8_t m,
     {
         idx = (uint8_t)((hour * 5U) % 60U);
         long_tick = (uint8_t)((hour & 1U) == 0U);
-        inner = long_tick ? 39U : 42U;
+        inner = long_tick ? 41U : 43U;
         outer = 45U;
         x0 = cx + hink_v2_scale(hink_v2_x60[idx], inner);
         y0 = cy + hink_v2_scale(hink_v2_y60[idx], inner);
@@ -170,59 +168,16 @@ static void hink_v2_draw_clock_classic(uint8_t h, uint8_t m,
         y1 = cy + hink_v2_scale(hink_v2_y60[idx], outer);
         hink_v2_line(x0, y0, x1, y1, BLACK);
         hink_v2_small_uint_center(
-            cx + hink_v2_scale(hink_v2_x60[idx], 35U),
-            cy + hink_v2_scale(hink_v2_y60[idx], 35U),
+            cx + hink_v2_scale(hink_v2_x60[idx], 30U),
+            cy + hink_v2_scale(hink_v2_y60[idx], 30U),
             hour,
             BLACK
         );
     }
 
-    /* Inner minute layer. 1-minute mode keeps 60 tiny ticks but labels only every 5. */
-    if (cadence == 1U)
-    {
-        for (minute = 0U; minute < 60U; minute++)
-        {
-            idx = minute;
-            if ((minute % 5U) == 0U)
-            {
-                inner = (uint8_t)(((minute / 5U) & 1U) ? 28U : 26U);
-                outer = 31U;
-            }
-            else
-            {
-                inner = 29U;
-                outer = 30U;
-            }
-            hink_v2_line(
-                cx + hink_v2_scale(hink_v2_x60[idx], inner),
-                cy + hink_v2_scale(hink_v2_y60[idx], inner),
-                cx + hink_v2_scale(hink_v2_x60[idx], outer),
-                cy + hink_v2_scale(hink_v2_y60[idx], outer),
-                BLACK
-            );
-        }
-        cadence = 5U;
-    }
-    else
-    {
-        uint8_t marker = 0U;
-        for (minute = 0U; minute < 60U; minute = (uint8_t)(minute + cadence))
-        {
-            idx = minute;
-            inner = (marker & 1U) ? 28U : 26U;
-            outer = 31U;
-            hink_v2_line(
-                cx + hink_v2_scale(hink_v2_x60[idx], inner),
-                cy + hink_v2_scale(hink_v2_y60[idx], inner),
-                cx + hink_v2_scale(hink_v2_x60[idx], outer),
-                cy + hink_v2_scale(hink_v2_y60[idx], outer),
-                BLACK
-            );
-            marker++;
-        }
-    }
+    /* Refresh cadence controls scheduling only.
+       Keep one clean hour scale on the 250x122 face. */
 
-    /* Inner cadence is represented by ticks only; omit minute numerals on 250x122 to prevent collisions. */
 
     /* Hands: hour short/thick, minute long/thin. No seconds on e-ink. */
     idx = (uint8_t)((((h % 12U) * 5U) + (m / 12U)) % 60U);
@@ -328,6 +283,7 @@ static void hink_v2_draw_weekly(uint32_t local_day, uint8_t h, uint8_t m,
     char header[18];
     char footer[10];
     char wbuf[3];
+    char timebuf[6];
     uint8_t iso_wday = (sw == 0U) ? 7U : sw;
     uint8_t week = hink_v2_iso_week(sy, sm, sd, sw);
     uint32_t monday = local_day - (uint32_t)(iso_wday - 1U);
@@ -342,11 +298,8 @@ static void hink_v2_draw_weekly(uint32_t local_day, uint8_t h, uint8_t m,
     uint8_t active;
     uint8_t x;
     uint8_t day_color;
-    uint8_t clock_idx;
     int x1;
     int x2;
-    int cx = 235;
-    int cy = 9;
 
     /* Vietnamese header: THĂNG mm Â· TUáº¦N ww. The compact firmware font is ASCII,
        so the accent marks and middle dot are drawn explicitly. */
@@ -366,27 +319,12 @@ static void hink_v2_draw_weekly(uint32_t local_day, uint8_t h, uint8_t m,
     hink_d7a_pixel(79, 6, BLACK); hink_d7a_pixel(80, 5, BLACK); hink_d7a_pixel(81, 6, BLACK);
     hink_d7a_pixel(78, 3, BLACK); hink_d7a_pixel(79, 4, BLACK);
 
-    /* Mini analog clock in the top-right header gap. */
-    hink_v2_circle(cx, cy, 8, BLACK);
-    for (clock_idx = 0U; clock_idx < 60U; clock_idx = (uint8_t)(clock_idx + 15U))
-    {
-        hink_v2_line(
-            cx + hink_v2_scale(hink_v2_x60[clock_idx], 6U),
-            cy + hink_v2_scale(hink_v2_y60[clock_idx], 6U),
-            cx + hink_v2_scale(hink_v2_x60[clock_idx], 7U),
-            cy + hink_v2_scale(hink_v2_y60[clock_idx], 7U),
-            BLACK
-        );
-    }
-    clock_idx = (uint8_t)((((h % 12U) * 5U) + (m / 12U)) % 60U);
-    hink_v2_line(cx, cy,
-                 cx + hink_v2_scale(hink_v2_x60[clock_idx], 4U),
-                 cy + hink_v2_scale(hink_v2_y60[clock_idx], 4U), BLACK);
-    clock_idx = m;
-    hink_v2_line(cx, cy,
-                 cx + hink_v2_scale(hink_v2_x60[clock_idx], 6U),
-                 cy + hink_v2_scale(hink_v2_y60[clock_idx], 6U), BLACK);
-    hink_d7a_box(cx - 1, cy - 1, cx + 1, cy + 1, BLACK);
+    /* Phone-style digital time in the top-right header gap. */
+    hink_put_2(&timebuf[0], h);
+    timebuf[2] = ':';
+    hink_put_2(&timebuf[3], m);
+    timebuf[5] = 0;
+    draw_text(214, 8, timebuf, BLACK);
 
     wbuf[2] = 0;
     for (col = 0U; col < 7U; col++)

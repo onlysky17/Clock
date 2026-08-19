@@ -233,26 +233,10 @@
     ctx.textAlign='left';
     ctx.fillText(`${monthName} \u00B7 TU\u1EA6N ${data.week}`,7,10);
 
-    /* Mini analog clock mirrors the firmware header. */
-    const clockX=236,clockY=10,clockR=8;
-    ctx.lineWidth=.8;
-    ctx.beginPath();
-    ctx.arc(clockX,clockY,clockR,0,Math.PI*2);
-    ctx.stroke();
-    for(const minute of [0,15,30,45]){
-      const angle=(minute*Math.PI/30)-Math.PI/2;
-      ctx.beginPath();
-      ctx.moveTo(clockX+Math.cos(angle)*6,clockY+Math.sin(angle)*6);
-      ctx.lineTo(clockX+Math.cos(angle)*7,clockY+Math.sin(angle)*7);
-      ctx.stroke();
-    }
-    const hourAngle=(((now.getHours()%12)+(now.getMinutes()/60))*Math.PI/6)-Math.PI/2;
-    const minuteAngle=(now.getMinutes()*Math.PI/30)-Math.PI/2;
-    ctx.lineWidth=1.4;
-    ctx.beginPath();ctx.moveTo(clockX,clockY);ctx.lineTo(clockX+Math.cos(hourAngle)*4,clockY+Math.sin(hourAngle)*4);ctx.stroke();
-    ctx.lineWidth=.8;
-    ctx.beginPath();ctx.moveTo(clockX,clockY);ctx.lineTo(clockX+Math.cos(minuteAngle)*6,clockY+Math.sin(minuteAngle)*6);ctx.stroke();
-    ctx.fillRect(clockX-1,clockY-1,2,2);
+    /* Phone-style digital HH:MM mirrors firmware. */
+    ctx.font='900 8px ui-monospace, SFMono-Regular, Consolas, monospace';
+    ctx.textAlign='right';
+    ctx.fillText(`${pad(now.getHours())}:${pad(now.getMinutes())}`,243,10);
 
     const left=6;
     const top=20;

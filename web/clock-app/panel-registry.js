@@ -335,7 +335,7 @@
     ctx.font='700 7px Arial, sans-serif';
     ctx.fillText(lunarLabel,10,108);
 
-    const cx=202,cy=61,outerRadius=47,hourLabelRadius=36.5,minuteTickRadius=29.5,minuteLabelRadius=21.5;
+    const cx=202,cy=61,outerRadius=47,hourLabelRadius=31.5;
     ctx.lineWidth=1.7;
     ctx.beginPath();
     ctx.arc(cx,cy,outerRadius,0,Math.PI*2);
@@ -345,7 +345,7 @@
       const angle=(hour*Math.PI/6)-Math.PI/2;
       const longTick=hour%2===0;
       const tickOuter=outerRadius-1.2;
-      const tickInner=outerRadius-(longTick?6.4:4.0);
+      const tickInner=outerRadius-(longTick?5.0:3.0);
       ctx.lineWidth=longTick?1.6:1.05;
       ctx.beginPath();
       ctx.moveTo(cx+Math.cos(angle)*tickInner,cy+Math.sin(angle)*tickInner);
@@ -354,43 +354,9 @@
       drawCenteredText(ctx,hour,cx+Math.cos(angle)*hourLabelRadius,cy+Math.sin(angle)*hourLabelRadius,'800 8.2px Arial, sans-serif');
     }
 
-    if(cadence===1){
-      for(let minute=0;minute<60;minute++){
-        const angle=(minute*Math.PI/30)-Math.PI/2;
-        const major=minute%5===0;
-        const majorIndex=Math.floor(minute/5);
-        const longMajor=major&&majorIndex%2===0;
-        let inner,outer;
-        if(major){
-          inner=minuteTickRadius-(longMajor?3.6:2.4);
-          outer=minuteTickRadius+(longMajor?1.8:1.0);
-          ctx.lineWidth=longMajor?1.25:1.0;
-        }else{
-          inner=minuteTickRadius-.8;
-          outer=minuteTickRadius+.7;
-          ctx.lineWidth=.45;
-        }
-        ctx.beginPath();
-        ctx.moveTo(cx+Math.cos(angle)*inner,cy+Math.sin(angle)*inner);
-        ctx.lineTo(cx+Math.cos(angle)*outer,cy+Math.sin(angle)*outer);
-        ctx.stroke();
-      }
-    }else{
-      let markerIndex=0;
-      for(let minute=0;minute<60;minute+=cadence,markerIndex++){
-        const angle=(minute*Math.PI/30)-Math.PI/2;
-        const longTick=markerIndex%2===0;
-        const inner=minuteTickRadius-(longTick?3.7:2.2);
-        const outer=minuteTickRadius+(longTick?1.6:.8);
-        ctx.lineWidth=longTick?1.2:.9;
-        ctx.beginPath();
-        ctx.moveTo(cx+Math.cos(angle)*inner,cy+Math.sin(angle)*inner);
-        ctx.lineTo(cx+Math.cos(angle)*outer,cy+Math.sin(angle)*outer);
-        ctx.stroke();
-      }
-    }
+    /* Refresh cadence affects timing only.
+       Keep one clean hour scale like the physical target. */
 
-    /* Cadence is communicated by ticks only on the 250x122 target. */
 
     const hourAngle=(((hours%12)+(displayMinutes/60))*Math.PI/6)-Math.PI/2;
     const minuteAngle=(displayMinutes*Math.PI/30)-Math.PI/2;
