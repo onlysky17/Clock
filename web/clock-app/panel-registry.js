@@ -51,6 +51,9 @@
     style.id='einkClassicCadenceStyle';
     style.textContent=`
       .productClockCadence{grid-column:1/-1;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px;margin-top:2px;padding-top:10px;border-top:1px solid rgba(145,176,205,.12)}
+      .productProfileClock .productClockCopy,.productProfileClock .productAnalogClock{display:none!important}
+      .productProfileClock{display:block!important;margin:0!important;padding:0!important;border:0!important;background:transparent!important;box-shadow:none!important}
+      .productProfileClock[hidden]{display:none!important}
       .productClockCadence button{min-width:0!important;min-height:32px!important;padding:6px 4px!important;border-radius:9px!important;font-size:.72rem!important;font-weight:800!important;color:#93a9be!important;background:rgba(5,13,23,.5)!important}
       .productClockCadence button.selected{border-color:rgba(91,220,255,.42)!important;background:linear-gradient(135deg,rgba(91,220,255,.95),rgba(48,183,230,.95))!important;color:#03121b!important;box-shadow:0 5px 14px rgba(33,191,242,.16)}
       .productModeV2Workspace{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,1.25fr) minmax(330px,.75fr);gap:18px;align-items:start;min-width:0}
@@ -387,10 +390,7 @@
       }
     }
 
-    for(const minute of minuteLabelsForCadence(cadence)){
-      const angle=(minute*Math.PI/30)-Math.PI/2;
-      drawCenteredText(ctx,minute,cx+Math.cos(angle)*minuteLabelRadius,cy+Math.sin(angle)*minuteLabelRadius,'700 6px Arial, sans-serif');
-    }
+    /* Cadence is communicated by ticks only on the 250x122 target. */
 
     const hourAngle=(((hours%12)+(displayMinutes/60))*Math.PI/6)-Math.PI/2;
     const minuteAngle=(displayMinutes*Math.PI/30)-Math.PI/2;
@@ -472,14 +472,19 @@
   function syncClassicApply(active){
     const apply=document.getElementById('profileApply');
     if(!apply)return;
+    if(window.__einkCustomDeviceApplyReady){
+      delete apply.dataset.classicPreview;
+      if(apply.textContent==='Preview web â€” chÆ°a Ă¡p dá»¥ng')apply.textContent='Ăp dá»¥ng lĂªn mĂ n';
+      return;
+    }
     if(active){
-      if(!apply.dataset.classicOriginalLabel)apply.dataset.classicOriginalLabel=apply.textContent||'Áp dụng lên màn';
+      if(!apply.dataset.classicOriginalLabel)apply.dataset.classicOriginalLabel=apply.textContent||'Ăp dá»¥ng lĂªn mĂ n';
       apply.dataset.classicPreview='true';
-      apply.textContent='Preview web — chưa áp dụng';
+      apply.textContent='Preview web â€” chÆ°a Ă¡p dá»¥ng';
       apply.disabled=true;
       apply.setAttribute('aria-disabled','true');
     }else if(apply.dataset.classicPreview==='true'){
-      apply.textContent=apply.dataset.classicOriginalLabel||'Áp dụng lên màn';
+      apply.textContent=apply.dataset.classicOriginalLabel||'Ăp dá»¥ng lĂªn mĂ n';
       apply.disabled=false;
       apply.removeAttribute('aria-disabled');
       delete apply.dataset.classicPreview;
@@ -549,6 +554,12 @@
     const status=document.getElementById('profileStatus');
     if(active&&status)status.textContent='Đang xem Đồng hồ kim bằng web preview độ phân giải cao. Profile e-ink trên thiết bị chưa thay đổi.';
   }
+
+  window.EINK_CLASSIC_PREVIEW={
+    activate:()=>renderClassicState(true),
+    deactivate:()=>renderClassicState(false),
+    isActive:()=>document.querySelector('.productModeV2Profiles')?.dataset.webProfile===CLASSIC_VALUE
+  };
 
   function mountPremiumClock(){
     ensureOwnerPriorityLayout();

@@ -11,6 +11,7 @@
   let mode='web';
   let applyObserver=null;
   let applyObserverBusy=false;
+  let lastSyncedDeviceProfile=null;
 
   function ensureStyles(){
     if(document.getElementById(STYLE_ID))return;
@@ -148,6 +149,26 @@
     return value==='clock-classic'||value==='week-calendar'?value:'';
   }
 
+  function syncCustomSelectionFromDevice(){
+    try{
+      if(!server?.connected){
+        lastSyncedDeviceProfile=null;
+        return;
+      }
+      const profile=Number(activeClockProfile);
+      if(!Number.isFinite(profile)||profile===lastSyncedDeviceProfile)return;
+      lastSyncedDeviceProfile=profile;
+      if(profile===WEEK_PROFILE_ID){
+        window.EINK_CLASSIC_PREVIEW?.deactivate?.();
+        window.EINK_WEEK_PREVIEW?.activate?.();
+      }else if(profile===CLASSIC_PROFILE_ID){
+        window.EINK_WEEK_PREVIEW?.deactivate?.();
+        window.EINK_CLASSIC_PREVIEW?.activate?.();
+      }
+      syncUi();
+      syncDeviceApplyButton();
+    }catch(_error){}
+  }
   function selectedClassicCadence(){
     const selected=document.querySelector('[data-classic-cadence].selected');
     const value=Number(selected?.dataset.classicCadence||5);
@@ -292,6 +313,7 @@
 
     if(!window.__einkDeviceTargetPreviewTimer){
       window.__einkDeviceTargetPreviewTimer=setInterval(()=>{
+        syncCustomSelectionFromDevice();
         if(mode==='device')syncUi();
       },1000);
     }

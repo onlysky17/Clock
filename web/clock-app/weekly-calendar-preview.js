@@ -217,9 +217,7 @@
     const now=currentDate();
     const data=weekData(now);
     const currentKey=`${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
-    const monthName=`THÁNG ${now.getMonth()+1}`;
-    const rangeEnd=data.days[6].date;
-    const rangeLabel=`${pad(data.monday.getDate())}/${pad(data.monday.getMonth()+1)} – ${pad(rangeEnd.getDate())}/${pad(rangeEnd.getMonth()+1)}/${rangeEnd.getFullYear()}`;
+    const monthName=`THĂNG ${pad(now.getMonth()+1)}`;
     const weekdays=['T2','T3','T4','T5','T6','T7','CN'];
 
     ctx.save();
@@ -233,10 +231,28 @@
 
     ctx.font='900 8px Arial, sans-serif';
     ctx.textAlign='left';
-    ctx.fillText(`${monthName} · TUẦN ${data.week}`,7,10);
-    ctx.font='700 5.3px Arial, sans-serif';
-    ctx.textAlign='right';
-    ctx.fillText(rangeLabel,243,10);
+    ctx.fillText(`${monthName} Â· TUáº¦N ${data.week}`,7,10);
+
+    /* Mini analog clock mirrors the firmware header. */
+    const clockX=236,clockY=10,clockR=8;
+    ctx.lineWidth=.8;
+    ctx.beginPath();
+    ctx.arc(clockX,clockY,clockR,0,Math.PI*2);
+    ctx.stroke();
+    for(const minute of [0,15,30,45]){
+      const angle=(minute*Math.PI/30)-Math.PI/2;
+      ctx.beginPath();
+      ctx.moveTo(clockX+Math.cos(angle)*6,clockY+Math.sin(angle)*6);
+      ctx.lineTo(clockX+Math.cos(angle)*7,clockY+Math.sin(angle)*7);
+      ctx.stroke();
+    }
+    const hourAngle=(((now.getHours()%12)+(now.getMinutes()/60))*Math.PI/6)-Math.PI/2;
+    const minuteAngle=(now.getMinutes()*Math.PI/30)-Math.PI/2;
+    ctx.lineWidth=1.4;
+    ctx.beginPath();ctx.moveTo(clockX,clockY);ctx.lineTo(clockX+Math.cos(hourAngle)*4,clockY+Math.sin(hourAngle)*4);ctx.stroke();
+    ctx.lineWidth=.8;
+    ctx.beginPath();ctx.moveTo(clockX,clockY);ctx.lineTo(clockX+Math.cos(minuteAngle)*6,clockY+Math.sin(minuteAngle)*6);ctx.stroke();
+    ctx.fillRect(clockX-1,clockY-1,2,2);
 
     const left=6;
     const top=20;
@@ -250,31 +266,33 @@
       const key=`${item.date.getFullYear()}-${item.date.getMonth()}-${item.date.getDate()}`;
       const active=key===currentKey;
 
+      ctx.fillStyle='#fff';
+      ctx.fillRect(x,top,colWidth,colHeight);
+      ctx.strokeStyle='#111';
       ctx.lineWidth=.7;
-      if(active){
-        ctx.fillStyle='#050505';
-        ctx.fillRect(x,top,colWidth,colHeight);
-        ctx.fillStyle='#fff';
-      }else{
-        ctx.fillStyle='#fff';
-        ctx.fillRect(x,top,colWidth,colHeight);
-        ctx.strokeStyle='#111';
-        ctx.strokeRect(x+.35,top+.35,colWidth-.7,colHeight-.7);
-        ctx.fillStyle='#050505';
-      }
+      ctx.strokeRect(x+.35,top+.35,colWidth-.7,colHeight-.7);
 
+      ctx.fillStyle='#050505';
       ctx.textAlign='center';
       ctx.font='900 6px Arial, sans-serif';
       ctx.fillText(weekdays[index],x+colWidth/2,top+9);
+
+      if(active){
+        ctx.fillStyle='#050505';
+        ctx.fillRect(x+5,top+20,colWidth-10,26);
+        ctx.fillStyle='#fff';
+      }
       ctx.font='900 16px Arial, sans-serif';
       ctx.fillText(item.date.getDate(),x+colWidth/2,top+32);
+
+      ctx.fillStyle='#050505';
       const lunarLabel=item.lunar.day===1
         ?`1/${item.lunar.month}${item.lunar.leap?'N':''}`
         :String(item.lunar.day);
       ctx.font='800 5.8px Arial, sans-serif';
       ctx.fillText(lunarLabel,x+colWidth/2,top+54);
       ctx.font='700 4.6px Arial, sans-serif';
-      ctx.fillText('ÂM',x+colWidth/2,top+68);
+      ctx.fillText('Ă‚M',x+colWidth/2,top+68);
     });
 
     const currentLunar=solarToLunar(now);
@@ -284,7 +302,7 @@
     ctx.fillText(`${weekdays[(now.getDay()+6)%7]} ${pad(now.getDate())}/${pad(now.getMonth()+1)}`,7,108);
     ctx.textAlign='right';
     ctx.font='800 5.6px Arial, sans-serif';
-    ctx.fillText(`ÂM ${currentLunar.day}/${currentLunar.month}${currentLunar.leap?'N':''}`,243,108);
+    ctx.fillText(`Ă‚M ${currentLunar.day}/${currentLunar.month}${currentLunar.leap?'N':''}`,243,108);
 
     ctx.restore();
     syncWeekCard(now,data);
@@ -335,14 +353,19 @@
   function setApplyPreview(active){
     const apply=document.getElementById('profileApply');
     if(!apply)return;
+    if(window.__einkCustomDeviceApplyReady){
+      delete apply.dataset.weekPreview;
+      if(apply.textContent==='Preview web â€” chÆ°a Ă¡p dá»¥ng')apply.textContent='Ăp dá»¥ng lĂªn mĂ n';
+      return;
+    }
     if(active){
-      if(!apply.dataset.weekOriginalLabel)apply.dataset.weekOriginalLabel=apply.textContent||'Áp dụng lên màn';
+      if(!apply.dataset.weekOriginalLabel)apply.dataset.weekOriginalLabel=apply.textContent||'Ăp dá»¥ng lĂªn mĂ n';
       apply.dataset.weekPreview='true';
-      apply.textContent='Preview web — chưa áp dụng';
+      apply.textContent='Preview web â€” chÆ°a Ă¡p dá»¥ng';
       apply.disabled=true;
       apply.setAttribute('aria-disabled','true');
     }else if(apply.dataset.weekPreview==='true'){
-      apply.textContent=apply.dataset.weekOriginalLabel||'Áp dụng lên màn';
+      apply.textContent=apply.dataset.weekOriginalLabel||'Ăp dá»¥ng lĂªn mĂ n';
       apply.disabled=false;
       apply.removeAttribute('aria-disabled');
       delete apply.dataset.weekPreview;
@@ -350,11 +373,17 @@
   }
 
   function setWeekActive(active){
+    if(active)window.EINK_CLASSIC_PREVIEW?.deactivate?.();
     weekActive=active;
     const select=document.getElementById('productLayoutSelect');
-    const card=document.querySelector(`.${WEEK_CARD_CLASS}`);
+    const card=document.querySelector('.'+WEEK_CARD_CLASS);
     const button=document.querySelector('[data-eink-week-profile]');
-    if(card)card.hidden=!active;
+    const profile=document.querySelector('.productModeV2Profiles');
+    if(card)card.hidden=true;
+    if(profile){
+      if(active)profile.dataset.webProfile=WEEK_VALUE;
+      else if(profile.dataset.webProfile===WEEK_VALUE)profile.dataset.webProfile='device';
+    }
     button?.classList.toggle('selected',active);
     setApplyPreview(active);
 
@@ -376,7 +405,7 @@
     setWeekActive(false);
   }
 
-  window.EINK_WEEK_PREVIEW={deactivate,isActive:()=>weekActive};
+  window.EINK_WEEK_PREVIEW={activate:()=>setWeekActive(true),deactivate,isActive:()=>weekActive};
 
   function install(){
     ensureStyles();

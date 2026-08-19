@@ -222,16 +222,7 @@ static void hink_v2_draw_clock_classic(uint8_t h, uint8_t m,
         }
     }
 
-    for (minute = cadence; minute < 60U; minute = (uint8_t)(minute + cadence))
-    {
-        idx = minute;
-        hink_v2_small_uint_center(
-            cx + hink_v2_scale(hink_v2_x60[idx], 21U),
-            cy + hink_v2_scale(hink_v2_y60[idx], 21U),
-            minute,
-            BLACK
-        );
-    }
+    /* Inner cadence is represented by ticks only; omit minute numerals on 250x122 to prevent collisions. */
 
     /* Hands: hour short/thick, minute long/thin. No seconds on e-ink. */
     idx = (uint8_t)((((h % 12U) * 5U) + (m / 12U)) % 60U);
@@ -329,12 +320,12 @@ static void hink_v2_week_small_day(int cx, uint8_t y, uint8_t day, uint8_t color
     draw_text(x, y, buf, color);
 }
 
-static void hink_v2_draw_weekly(uint32_t local_day,
+static void hink_v2_draw_weekly(uint32_t local_day, uint8_t h, uint8_t m,
                                 uint16_t sy, uint8_t sm, uint8_t sd,
                                 uint8_t sw, uint8_t lunar_valid,
                                 uint8_t lm, uint8_t ld)
 {
-    char header[21];
+    char header[18];
     char footer[10];
     char wbuf[3];
     uint8_t iso_wday = (sw == 0U) ? 7U : sw;
@@ -350,18 +341,52 @@ static void hink_v2_draw_weekly(uint32_t local_day,
     uint8_t wlv;
     uint8_t active;
     uint8_t x;
-    uint8_t text_color;
+    uint8_t day_color;
+    uint8_t clock_idx;
     int x1;
     int x2;
+    int cx = 235;
+    int cy = 9;
 
+    /* Vietnamese header: THĂNG mm Â· TUáº¦N ww. The compact firmware font is ASCII,
+       so the accent marks and middle dot are drawn explicitly. */
     header[0] = 'T'; header[1] = 'H'; header[2] = 'A'; header[3] = 'N'; header[4] = 'G';
     header[5] = ' ';
     hink_put_2(&header[6], (uint8_t)(sm + 1U));
-    header[8] = ' '; header[9] = '-'; header[10] = ' ';
-    header[11] = 'T'; header[12] = 'U'; header[13] = 'A'; header[14] = 'N'; header[15] = ' ';
-    hink_put_2(&header[16], week);
-    header[18] = 0;
-    draw_text(6, 5, header, BLACK);
+    header[8] = ' '; header[9] = ' ';
+    header[10] = 'T'; header[11] = 'U'; header[12] = 'A'; header[13] = 'N'; header[14] = ' ';
+    hink_put_2(&header[15], week);
+    header[17] = 0;
+    draw_text(6, 8, header, BLACK);
+    /* acute over A in THĂNG */
+    hink_d7a_pixel(21, 4, BLACK); hink_d7a_pixel(22, 3, BLACK);
+    /* middle dot */
+    hink_d7a_box(61, 10, 62, 11, BLACK);
+    /* circumflex + grave over A in TUáº¦N */
+    hink_d7a_pixel(79, 6, BLACK); hink_d7a_pixel(80, 5, BLACK); hink_d7a_pixel(81, 6, BLACK);
+    hink_d7a_pixel(78, 3, BLACK); hink_d7a_pixel(79, 4, BLACK);
+
+    /* Mini analog clock in the top-right header gap. */
+    hink_v2_circle(cx, cy, 8, BLACK);
+    for (clock_idx = 0U; clock_idx < 60U; clock_idx = (uint8_t)(clock_idx + 15U))
+    {
+        hink_v2_line(
+            cx + hink_v2_scale(hink_v2_x60[clock_idx], 6U),
+            cy + hink_v2_scale(hink_v2_y60[clock_idx], 6U),
+            cx + hink_v2_scale(hink_v2_x60[clock_idx], 7U),
+            cy + hink_v2_scale(hink_v2_y60[clock_idx], 7U),
+            BLACK
+        );
+    }
+    clock_idx = (uint8_t)((((h % 12U) * 5U) + (m / 12U)) % 60U);
+    hink_v2_line(cx, cy,
+                 cx + hink_v2_scale(hink_v2_x60[clock_idx], 4U),
+                 cy + hink_v2_scale(hink_v2_y60[clock_idx], 4U), BLACK);
+    clock_idx = m;
+    hink_v2_line(cx, cy,
+                 cx + hink_v2_scale(hink_v2_x60[clock_idx], 6U),
+                 cy + hink_v2_scale(hink_v2_y60[clock_idx], 6U), BLACK);
+    hink_d7a_box(cx - 1, cy - 1, cx + 1, cy + 1, BLACK);
 
     wbuf[2] = 0;
     for (col = 0U; col < 7U; col++)
@@ -373,36 +398,35 @@ static void hink_v2_draw_weekly(uint32_t local_day,
         x1 = 3 + ((int)col * 35);
         x2 = x1 + 33;
 
+        /* Keep every column white/readable. Today gets a compact black date badge only. */
+        hink_v2_line(x1, 18, x2, 18, BLACK);
+        hink_v2_line(x2, 18, x2, 99, BLACK);
+        hink_v2_line(x2, 99, x1, 99, BLACK);
+        hink_v2_line(x1, 99, x1, 18, BLACK);
+        day_color = BLACK;
         if (active)
         {
-            hink_d7a_box(x1, 18, x2, 99, BLACK);
-            text_color = WHITE;
-        }
-        else
-        {
-            hink_v2_line(x1, 18, x2, 18, BLACK);
-            hink_v2_line(x2, 18, x2, 99, BLACK);
-            hink_v2_line(x2, 99, x1, 99, BLACK);
-            hink_v2_line(x1, 99, x1, 18, BLACK);
-            text_color = BLACK;
+            hink_d7a_box(x1 + 5, 40, x2 - 5, 62, BLACK);
+            day_color = WHITE;
         }
 
         wbuf[0] = (col == 6U) ? 'C' : 'T';
         wbuf[1] = (col == 6U) ? 'N' : (char)('2' + col);
-        draw_text((uint8_t)(x1 + 11), 23, wbuf, text_color);
+        draw_text((uint8_t)(x1 + 11), 23, wbuf, BLACK);
 
         x = (uint8_t)(x1 + ((wd >= 10U) ? 10U : 14U));
-        hink_d7a_draw_day(x, 45, wd, text_color);
+        hink_d7a_draw_day(x, 45, wd, day_color);
 
         if (wlv)
         {
-            hink_v2_week_small_day(x1 + 17, 70, wld, text_color);
+            hink_v2_week_small_day(x1 + 17, 70, wld, BLACK);
         }
         else
         {
-            draw_text((uint8_t)(x1 + 11), 70, "--", text_color);
+            draw_text((uint8_t)(x1 + 11), 70, "--", BLACK);
         }
-        draw_text((uint8_t)(x1 + 11), 87, "AM", text_color);
+        draw_text((uint8_t)(x1 + 11), 87, "AM", BLACK);
+        hink_d7a_draw_circumflex((uint8_t)(x1 + 11), 84U);
     }
 
     hink_weekday(footer, sw);

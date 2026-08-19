@@ -2770,8 +2770,8 @@ static void hink_d2_draw_current_framebuffer(void)
 	}
 	else if (hink_clock_profile == HINK_CLOCK_PROFILE_WEEKLY)
 	{
-		hink_v2_draw_weekly(local_day, sy, sm, sd, sw,
-		                    lunar_valid, lm, ld);
+		hink_v2_draw_weekly(local_day, h, m, sy, sm, sd, sw,
+	                    lunar_valid, lm, ld);
 	}
 	else if (hink_clock_profile == HINK_CLOCK_PROFILE_LARGE_TIME)
 	{
