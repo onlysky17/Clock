@@ -18,6 +18,7 @@
       .productPreviewModeButtons button{min-height:32px!important;padding:6px 10px!important;border-radius:9px!important;font-size:.72rem!important}
       .productPreviewModeButtons button.selected{border-color:rgba(91,220,255,.42)!important;background:linear-gradient(135deg,rgba(91,220,255,.95),rgba(48,183,230,.95))!important;color:#03121b!important}
       .productModeV2Preview canvas.deviceTargetPreview{display:block!important;width:min(100%,500px)!important;height:auto!important;max-width:100%!important;image-rendering:pixelated!important;image-rendering:crisp-edges!important;filter:none!important;background:#fff!important}
+      .productModeV2Preview canvas.deviceTargetPreview[hidden]{display:none!important}
       .devicePreviewSourceHidden{display:none!important}
       @media(max-width:560px){.productPreviewModeBar{align-items:stretch;flex-direction:column}.productPreviewModeButtons{display:grid;grid-template-columns:1fr 1fr;width:100%}.productPreviewModeButtons button{width:100%}}
     `;
