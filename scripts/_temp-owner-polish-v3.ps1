@@ -53,7 +53,7 @@ try {
     }
 
     Write-Host "`n=== PATCH FIRMWARE RENDERERS ===" -ForegroundColor Cyan
-    $r = Get-Content -LiteralPath $renderer -Raw
+    $r = (Get-Content -LiteralPath $renderer -Raw) -replace "`r`n","`n"
 
     $r = Replace-RegexSingle $r '(?ms)\n    for \(minute = cadence; minute < 60U; minute = \(uint8_t\)\(minute \+ cadence\)\)\n    \{\n        idx = minute;\n        hink_v2_small_uint_center\(\n            cx \+ hink_v2_scale\(hink_v2_x60\[idx\], 21U\),\n            cy \+ hink_v2_scale\(hink_v2_y60\[idx\], 21U\),\n            minute,\n            BLACK\n        \);\n    \}\n\n    /\* Hands:' "`n    /* Inner cadence is represented by ticks only; omit minute numerals on 250x122 to prevent collisions. */`n`n    /* Hands:" 'classic minute labels'
 
@@ -86,7 +86,7 @@ static void hink_v2_draw_weekly(uint32_t local_day, uint8_t h, uint8_t m,
     int cx = 235;
     int cy = 9;
 
-    /* Vietnamese header: THÁNG mm · TUẦN ww. The compact firmware font is ASCII,
+    /* Vietnamese header: THĂNG mm Â· TUáº¦N ww. The compact firmware font is ASCII,
        so the accent marks and middle dot are drawn explicitly. */
     header[0] = 'T'; header[1] = 'H'; header[2] = 'A'; header[3] = 'N'; header[4] = 'G';
     header[5] = ' ';
@@ -96,11 +96,11 @@ static void hink_v2_draw_weekly(uint32_t local_day, uint8_t h, uint8_t m,
     hink_put_2(&header[15], week);
     header[17] = 0;
     draw_text(6, 8, header, BLACK);
-    /* acute over A in THÁNG */
+    /* acute over A in THĂNG */
     hink_d7a_pixel(21, 4, BLACK); hink_d7a_pixel(22, 3, BLACK);
     /* middle dot */
     hink_d7a_box(61, 10, 62, 11, BLACK);
-    /* circumflex + grave over A in TUẦN */
+    /* circumflex + grave over A in TUáº¦N */
     hink_d7a_pixel(79, 6, BLACK); hink_d7a_pixel(80, 5, BLACK); hink_d7a_pixel(81, 6, BLACK);
     hink_d7a_pixel(78, 3, BLACK); hink_d7a_pixel(79, 4, BLACK);
 
@@ -180,12 +180,12 @@ static void hink_v2_draw_weekly(uint32_t local_day, uint8_t h, uint8_t m,
     $r = Replace-RegexSingle $r '(?ms)static void hink_v2_draw_weekly\(uint32_t local_day,.*?\n\}\s*$' ($newWeekly.TrimEnd() + "`n") 'weekly renderer'
     Write-Utf8NoBom $renderer $r
 
-    $fw = Get-Content -LiteralPath $firmware -Raw
+    $fw = (Get-Content -LiteralPath $firmware -Raw) -replace "`r`n","`n"
     $fw = Replace-RegexSingle $fw '(?ms)hink_v2_draw_weekly\(local_day, sy, sm, sd, sw,\s*\n\s*lunar_valid, lm, ld\);' "hink_v2_draw_weekly(local_day, h, m, sy, sm, sd, sw,`n`t                    lunar_valid, lm, ld);" 'weekly call passes time'
     Write-Utf8NoBom $firmware $fw
 
     Write-Host "`n=== PATCH WEB PREVIEWS / UX ===" -ForegroundColor Cyan
-    $p = Get-Content -LiteralPath $panel -Raw
+    $p = (Get-Content -LiteralPath $panel -Raw) -replace "`r`n","`n"
     $p = Replace-RegexSingle $p '(?m)(      \.productClockCadence\{[^\n]+\}\r?\n)' ('$1' + "      .productProfileClock .productClockCopy,.productProfileClock .productAnalogClock{display:none!important}`n      .productProfileClock{display:block!important;margin:0!important;padding:0!important;border:0!important;background:transparent!important;box-shadow:none!important}`n      .productProfileClock[hidden]{display:none!important}`n") 'compact classic controls'
     $p = Replace-RegexSingle $p '(?ms)\n    for\(const minute of minuteLabelsForCadence\(cadence\)\)\{.*?\n    \}\n\n    const hourAngle=' "`n    /* Cadence is communicated by ticks only on the 250x122 target. */`n`n    const hourAngle=" 'web classic minute labels'
 
@@ -195,17 +195,17 @@ static void hink_v2_draw_weekly(uint32_t local_day, uint8_t h, uint8_t m,
     if(!apply)return;
     if(window.__einkCustomDeviceApplyReady){
       delete apply.dataset.classicPreview;
-      if(apply.textContent==='Preview web — chưa áp dụng')apply.textContent='Áp dụng lên màn';
+      if(apply.textContent==='Preview web â€” chÆ°a Ă¡p dá»¥ng')apply.textContent='Ăp dá»¥ng lĂªn mĂ n';
       return;
     }
     if(active){
-      if(!apply.dataset.classicOriginalLabel)apply.dataset.classicOriginalLabel=apply.textContent||'Áp dụng lên màn';
+      if(!apply.dataset.classicOriginalLabel)apply.dataset.classicOriginalLabel=apply.textContent||'Ăp dá»¥ng lĂªn mĂ n';
       apply.dataset.classicPreview='true';
-      apply.textContent='Preview web — chưa áp dụng';
+      apply.textContent='Preview web â€” chÆ°a Ă¡p dá»¥ng';
       apply.disabled=true;
       apply.setAttribute('aria-disabled','true');
     }else if(apply.dataset.classicPreview==='true'){
-      apply.textContent=apply.dataset.classicOriginalLabel||'Áp dụng lên màn';
+      apply.textContent=apply.dataset.classicOriginalLabel||'Ăp dá»¥ng lĂªn mĂ n';
       apply.disabled=false;
       apply.removeAttribute('aria-disabled');
       delete apply.dataset.classicPreview;
@@ -216,7 +216,7 @@ static void hink_v2_draw_weekly(uint32_t local_day, uint8_t h, uint8_t m,
     $p = Replace-RegexSingle $p '(?ms)(  function renderClassicState\(active\)\{.*?\n  \}\n)(\n  function mountPremiumClock)' ('$1' + "`n  window.EINK_CLASSIC_PREVIEW={`n    activate:()=>renderClassicState(true),`n    deactivate:()=>renderClassicState(false),`n    isActive:()=>document.querySelector('.productModeV2Profiles')?.dataset.webProfile===CLASSIC_VALUE`n  };`n" + '$2') 'classic preview API'
     Write-Utf8NoBom $panel $p
 
-    $w = Get-Content -LiteralPath $week -Raw
+    $w = (Get-Content -LiteralPath $week -Raw) -replace "`r`n","`n"
     $newDrawWeek = @'
   function drawWeek(){
     const canvas=ensureCanvas();
@@ -226,7 +226,7 @@ static void hink_v2_draw_weekly(uint32_t local_day, uint8_t h, uint8_t m,
     const now=currentDate();
     const data=weekData(now);
     const currentKey=`${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
-    const monthName=`THÁNG ${pad(now.getMonth()+1)}`;
+    const monthName=`THĂNG ${pad(now.getMonth()+1)}`;
     const weekdays=['T2','T3','T4','T5','T6','T7','CN'];
 
     ctx.save();
@@ -240,7 +240,7 @@ static void hink_v2_draw_weekly(uint32_t local_day, uint8_t h, uint8_t m,
 
     ctx.font='900 8px Arial, sans-serif';
     ctx.textAlign='left';
-    ctx.fillText(`${monthName} · TUẦN ${data.week}`,7,10);
+    ctx.fillText(`${monthName} Â· TUáº¦N ${data.week}`,7,10);
 
     /* Mini analog clock mirrors the firmware header. */
     const clockX=236,clockY=10,clockR=8;
@@ -301,7 +301,7 @@ static void hink_v2_draw_weekly(uint32_t local_day, uint8_t h, uint8_t m,
       ctx.font='800 5.8px Arial, sans-serif';
       ctx.fillText(lunarLabel,x+colWidth/2,top+54);
       ctx.font='700 4.6px Arial, sans-serif';
-      ctx.fillText('ÂM',x+colWidth/2,top+68);
+      ctx.fillText('Ă‚M',x+colWidth/2,top+68);
     });
 
     const currentLunar=solarToLunar(now);
@@ -311,7 +311,7 @@ static void hink_v2_draw_weekly(uint32_t local_day, uint8_t h, uint8_t m,
     ctx.fillText(`${weekdays[(now.getDay()+6)%7]} ${pad(now.getDate())}/${pad(now.getMonth()+1)}`,7,108);
     ctx.textAlign='right';
     ctx.font='800 5.6px Arial, sans-serif';
-    ctx.fillText(`ÂM ${currentLunar.day}/${currentLunar.month}${currentLunar.leap?'N':''}`,243,108);
+    ctx.fillText(`Ă‚M ${currentLunar.day}/${currentLunar.month}${currentLunar.leap?'N':''}`,243,108);
 
     ctx.restore();
     syncWeekCard(now,data);
@@ -325,17 +325,17 @@ static void hink_v2_draw_weekly(uint32_t local_day, uint8_t h, uint8_t m,
     if(!apply)return;
     if(window.__einkCustomDeviceApplyReady){
       delete apply.dataset.weekPreview;
-      if(apply.textContent==='Preview web — chưa áp dụng')apply.textContent='Áp dụng lên màn';
+      if(apply.textContent==='Preview web â€” chÆ°a Ă¡p dá»¥ng')apply.textContent='Ăp dá»¥ng lĂªn mĂ n';
       return;
     }
     if(active){
-      if(!apply.dataset.weekOriginalLabel)apply.dataset.weekOriginalLabel=apply.textContent||'Áp dụng lên màn';
+      if(!apply.dataset.weekOriginalLabel)apply.dataset.weekOriginalLabel=apply.textContent||'Ăp dá»¥ng lĂªn mĂ n';
       apply.dataset.weekPreview='true';
-      apply.textContent='Preview web — chưa áp dụng';
+      apply.textContent='Preview web â€” chÆ°a Ă¡p dá»¥ng';
       apply.disabled=true;
       apply.setAttribute('aria-disabled','true');
     }else if(apply.dataset.weekPreview==='true'){
-      apply.textContent=apply.dataset.weekOriginalLabel||'Áp dụng lên màn';
+      apply.textContent=apply.dataset.weekOriginalLabel||'Ăp dá»¥ng lĂªn mĂ n';
       apply.disabled=false;
       apply.removeAttribute('aria-disabled');
       delete apply.dataset.weekPreview;
@@ -349,7 +349,7 @@ static void hink_v2_draw_weekly(uint32_t local_day, uint8_t h, uint8_t m,
     $w = Replace-RegexSingle $w 'window\.EINK_WEEK_PREVIEW=\{deactivate,isActive:\(\)=>weekActive\};' 'window.EINK_WEEK_PREVIEW={activate:()=>setWeekActive(true),deactivate,isActive:()=>weekActive};' 'week preview API'
     Write-Utf8NoBom $week $w
 
-    $d = Get-Content -LiteralPath $device -Raw
+    $d = (Get-Content -LiteralPath $device -Raw) -replace "`r`n","`n"
     $d = Replace-RegexSingle $d '  let applyObserverBusy=false;' "  let applyObserverBusy=false;`n  let lastSyncedDeviceProfile=null;" 'device profile sync state'
 
     $syncDeviceProfile = @'
@@ -392,7 +392,7 @@ static void hink_v2_draw_weekly(uint32_t local_day, uint8_t h, uint8_t m,
     Assert-True ($fwCheck.Contains('hink_v2_draw_weekly(local_day, h, m')) 'Weekly firmware receives hour/minute'
     Assert-True ($pCheck.Contains('window.EINK_CLASSIC_PREVIEW')) 'Classic preview exports state API'
     Assert-True ($wCheck.Contains('window.EINK_WEEK_PREVIEW={activate:')) 'Weekly preview exports activate API'
-    Assert-True ($wCheck.Contains("ctx.fillText('ÂM'")) 'Weekly web preview keeps lunar label visible'
+    Assert-True ($wCheck.Contains("ctx.fillText('Ă‚M'")) 'Weekly web preview keeps lunar label visible'
     Assert-True ($dCheck.Contains('syncCustomSelectionFromDevice')) 'Web reconnect syncs custom device profile'
 
     Write-Host "`n=== JS SYNTAX ===" -ForegroundColor Cyan
