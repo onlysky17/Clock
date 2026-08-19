@@ -139,6 +139,107 @@
     return parseDeviceClock()||new Date();
   }
 
+  function jdFromDate(dd,mm,yy){
+    const a=Math.floor((14-mm)/12);
+    const y=yy+4800-a;
+    const m=mm+12*a-3;
+    let jd=dd+Math.floor((153*m+2)/5)+365*y+Math.floor(y/4)-Math.floor(y/100)+Math.floor(y/400)-32045;
+    if(jd<2299161)jd=dd+Math.floor((153*m+2)/5)+365*y+Math.floor(y/4)-32083;
+    return jd;
+  }
+
+  function newMoon(k){
+    const T=k/1236.85;
+    const T2=T*T;
+    const T3=T2*T;
+    const dr=Math.PI/180;
+    let jd=2415020.75933+29.53058868*k+0.0001178*T2-0.000000155*T3;
+    jd+=0.00033*Math.sin((166.56+132.87*T-0.009173*T2)*dr);
+    const M=359.2242+29.10535608*k-0.0000333*T2-0.00000347*T3;
+    const Mp=306.0253+385.81691806*k+0.0107306*T2+0.00001236*T3;
+    const F=21.2964+390.67050646*k-0.0016528*T2-0.00000239*T3;
+    const C1=(0.1734-0.000393*T)*Math.sin(M*dr)+0.0021*Math.sin(2*M*dr)-0.4068*Math.sin(Mp*dr)+0.0161*Math.sin(2*Mp*dr)-0.0004*Math.sin(3*Mp*dr)+0.0104*Math.sin(2*F*dr)-0.0051*Math.sin((M+Mp)*dr)-0.0074*Math.sin((M-Mp)*dr)+0.0004*Math.sin((2*F+M)*dr)-0.0004*Math.sin((2*F-M)*dr)-0.0006*Math.sin((2*F+Mp)*dr)+0.001*Math.sin((2*F-Mp)*dr)+0.0005*Math.sin((2*Mp+M)*dr);
+    const delta=T<-11
+      ?0.001+0.000839*T+0.0002261*T2-0.00000845*T3-0.000000081*T*T3
+      :-0.000278+0.000265*T+0.000262*T2;
+    return jd+C1-delta;
+  }
+
+  function newMoonDay(k,timeZone){
+    return Math.floor(newMoon(k)+0.5+timeZone/24);
+  }
+
+  function sunLongitude(jdn){
+    const T=(jdn-2451545.0)/36525;
+    const T2=T*T;
+    const dr=Math.PI/180;
+    const M=357.52910+35999.05030*T-0.0001559*T2-0.00000048*T*T2;
+    const L0=280.46645+36000.76983*T+0.0003032*T2;
+    const DL=(1.914600-0.004817*T-0.000014*T2)*Math.sin(M*dr)+(0.019993-0.000101*T)*Math.sin(2*M*dr)+0.000290*Math.sin(3*M*dr);
+    let L=(L0+DL)*dr;
+    L-=Math.PI*2*Math.floor(L/(Math.PI*2));
+    return L;
+  }
+
+  function sunLongitudeSector(dayNumber,timeZone){
+    return Math.floor(sunLongitude(dayNumber-0.5-timeZone/24)/Math.PI*6);
+  }
+
+  function lunarMonth11(year,timeZone){
+    const off=jdFromDate(31,12,year)-2415021;
+    const k=Math.floor(off/29.530588853);
+    let nm=newMoonDay(k,timeZone);
+    if(sunLongitudeSector(nm,timeZone)>=9)nm=newMoonDay(k-1,timeZone);
+    return nm;
+  }
+
+  function leapMonthOffset(a11,timeZone){
+    const k=Math.floor(0.5+(a11-2415021.076998695)/29.530588853);
+    let last=0;
+    let i=1;
+    let arc=sunLongitudeSector(newMoonDay(k+i,timeZone),timeZone);
+    do{
+      last=arc;
+      i+=1;
+      arc=sunLongitudeSector(newMoonDay(k+i,timeZone),timeZone);
+    }while(arc!==last&&i<14);
+    return i-1;
+  }
+
+  function solarToLunar(date,timeZone=7){
+    const dd=date.getDate();
+    const mm=date.getMonth()+1;
+    const yy=date.getFullYear();
+    const dayNumber=jdFromDate(dd,mm,yy);
+    const k=Math.floor((dayNumber-2415021.076998695)/29.530588853);
+    let monthStart=newMoonDay(k+1,timeZone);
+    if(monthStart>dayNumber)monthStart=newMoonDay(k,timeZone);
+    let a11=lunarMonth11(yy,timeZone);
+    let b11=a11;
+    let lunarYear;
+    if(a11>=monthStart){
+      lunarYear=yy;
+      a11=lunarMonth11(yy-1,timeZone);
+    }else{
+      lunarYear=yy+1;
+      b11=lunarMonth11(yy+1,timeZone);
+    }
+    const lunarDay=dayNumber-monthStart+1;
+    const diff=Math.floor((monthStart-a11)/29);
+    let lunarLeap=0;
+    let lunarMonth=diff+11;
+    if(b11-a11>365){
+      const leapDiff=leapMonthOffset(a11,timeZone);
+      if(diff>=leapDiff){
+        lunarMonth=diff+10;
+        if(diff===leapDiff)lunarLeap=1;
+      }
+    }
+    if(lunarMonth>12)lunarMonth-=12;
+    if(lunarMonth>=11&&diff<4)lunarYear-=1;
+    return {day:lunarDay,month:lunarMonth,year:lunarYear,leap:lunarLeap};
+  }
+
   function getClassicCadence(){
     return CLASSIC_CADENCES.includes(classicCadence)?classicCadence:5;
   }
@@ -188,7 +289,7 @@
       webCanvas.className='classicWebPreview';
       webCanvas.width=1000;
       webCanvas.height=488;
-      webCanvas.setAttribute('aria-label','Clock Classic web preview high resolution');
+      webCanvas.setAttribute('aria-label','Xem trước Đồng hồ kim độ phân giải cao');
       deviceCanvas.insertAdjacentElement('afterend',webCanvas);
     }
     deviceCanvas.classList.add('classicDeviceCanvasHidden');
@@ -209,6 +310,8 @@
     const displayMinutes=cadence===1?actualMinutes:Math.floor(actualMinutes/cadence)*cadence;
     const weekdays=['CN','T2','T3','T4','T5','T6','T7'];
     const dateLabel=`${weekdays[now.getDay()]}  ${pad(now.getDate())}/${pad(now.getMonth()+1)}/${now.getFullYear()}`;
+    const lunar=solarToLunar(now);
+    const lunarLabel=`ÂM LỊCH ${pad(lunar.day)}/${pad(lunar.month)}${lunar.leap?' NHUẬN':''}`;
 
     ctx.save();
     ctx.setTransform(canvas.width/250,0,0,canvas.height/122,0,0);
@@ -221,13 +324,13 @@
     ctx.lineJoin='round';
 
     ctx.font='700 9px Arial, sans-serif';
-    ctx.fillText('CLOCK CLASSIC',10,14);
+    ctx.fillText('ĐỒNG HỒ KIM',10,14);
     ctx.font='700 8px Arial, sans-serif';
     ctx.fillText(dateLabel,10,27);
     ctx.font='800 40px ui-monospace, SFMono-Regular, Consolas, monospace';
     ctx.fillText(`${pad(hours)}:${pad(displayMinutes)}`,7,75);
     ctx.font='700 7px Arial, sans-serif';
-    ctx.fillText(`${parseDeviceClock()?'D2':'WEB'} · ${cadence} MIN · NO SEC`,10,108);
+    ctx.fillText(lunarLabel,10,108);
 
     const cx=202,cy=61,outerRadius=47,hourLabelRadius=36.5,minuteTickRadius=29.5,minuteLabelRadius=21.5;
     ctx.lineWidth=1.7;
@@ -325,7 +428,7 @@
     if(webCanvas)drawClassicScene(webCanvas,now,cadence);
 
     const note=document.querySelector('.productClassicNote');
-    if(note&&!note.hidden)note.textContent=`Clock Classic web preview high-res · cadence ${cadence} phút · output e-ink 250×122 xử lý riêng.`;
+    if(note&&!note.hidden)note.textContent=`Đồng hồ kim preview web độ phân giải cao · chu kỳ ${cadence} phút · output e-ink 250×122 xử lý riêng.`;
   }
 
   function restoreCanvasPreview(){
@@ -345,7 +448,7 @@
     const card=document.createElement('div');
     card.className='productProfileClock';
     card.dataset.einkPremiumClock='v2-profile';
-    card.innerHTML=`<div class="productClockCopy"><div class="productClockEyebrow">Clock Classic</div><div class="productClockTime" aria-live="polite">--:--</div><div class="productClockMeta"><strong class="productClockDate">--</strong><span class="productClockSource">Giờ trình duyệt</span></div></div><div class="productAnalogClock" aria-hidden="true"><span class="productAnalogHand productAnalogHour"></span><span class="productAnalogHand productAnalogMinute"></span><span class="productAnalogHand productAnalogSecond"></span><span class="productAnalogCenter"></span></div><div class="productClockCadence" aria-label="Chu kỳ làm mới Clock Classic">${cadenceButtons}</div>`;
+    card.innerHTML=`<div class="productClockCopy"><div class="productClockEyebrow">Đồng hồ kim</div><div class="productClockTime" aria-live="polite">--:--</div><div class="productClockMeta"><strong class="productClockDate">--</strong><span class="productClockSource">Giờ trình duyệt</span></div></div><div class="productAnalogClock" aria-hidden="true"><span class="productAnalogHand productAnalogHour"></span><span class="productAnalogHand productAnalogMinute"></span><span class="productAnalogHand productAnalogSecond"></span><span class="productAnalogCenter"></span></div><div class="productClockCadence" aria-label="Chu kỳ làm mới Đồng hồ kim">${cadenceButtons}</div>`;
     addTicks(card.querySelector('.productAnalogClock'));
     syncClassicCadenceButtons();
     return card;
@@ -414,7 +517,7 @@
     if(!select.querySelector(`option[value="${CLASSIC_VALUE}"]`)){
       const option=document.createElement('option');
       option.value=CLASSIC_VALUE;
-      option.textContent='Clock Classic — Số + Kim';
+      option.textContent='Đồng hồ kim — Số + Kim';
       select.append(option);
     }
     let classicButton=row.querySelector('[data-eink-classic-profile]');
@@ -423,14 +526,14 @@
       classicButton.type='button';
       classicButton.dataset.einkClassicProfile='true';
       classicButton.dataset.layoutProfile=CLASSIC_VALUE;
-      classicButton.textContent='Clock Classic';
+      classicButton.textContent='Đồng hồ kim';
       row.append(classicButton);
       row.style.setProperty('grid-template-columns','repeat(2,minmax(0,1fr))','important');
     }
     if(!profile.querySelector('.productClassicNote')){
       const note=document.createElement('p');
       note.className='productClassicNote';
-      note.textContent='Clock Classic web preview high-res. Output e-ink thật xử lý riêng ở bước firmware.';
+      note.textContent='Đồng hồ kim preview web độ phân giải cao. Output e-ink thật xử lý riêng ở bước firmware.';
       note.hidden=true;
       row.insertAdjacentElement('afterend',note);
     }
@@ -444,7 +547,7 @@
     if(note)note.hidden=!active;
     if(active)drawClassicCanvas();
     const status=document.getElementById('profileStatus');
-    if(active&&status)status.textContent='Đang xem Clock Classic bằng web preview high-res. Profile e-ink trên thiết bị chưa thay đổi.';
+    if(active&&status)status.textContent='Đang xem Đồng hồ kim bằng web preview độ phân giải cao. Profile e-ink trên thiết bị chưa thay đổi.';
   }
 
   function mountPremiumClock(){
