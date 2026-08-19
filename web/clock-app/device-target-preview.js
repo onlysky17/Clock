@@ -66,7 +66,7 @@
   }
 
   function activeSource(){
-    const value=document.getElementById('productLayoutSelect')?.value;
+    const value=customLayout()||document.getElementById('productLayoutSelect')?.value;
     if(value==='week-calendar')return document.getElementById('weekWebPreview')||document.getElementById('canvas');
     if(value==='clock-classic')return document.getElementById('classicWebPreview')||document.getElementById('canvas');
     return document.getElementById('canvas');
@@ -136,6 +136,11 @@
   }
 
   function customLayout(){
+    try{
+      if(window.EINK_WEEK_PREVIEW?.isActive?.())return 'week-calendar';
+    }catch(_error){}
+    const profile=document.querySelector('.productModeV2Profiles');
+    if(profile?.dataset.webProfile==='clock-classic')return 'clock-classic';
     const value=document.getElementById('productLayoutSelect')?.value;
     return value==='clock-classic'||value==='week-calendar'?value:'';
   }
@@ -158,22 +163,25 @@
     }
   }
 
-  function syncDeviceApplyButton(){
-    const layout=customLayout();
-    const apply=document.getElementById('profileApply');
-    if(!layout||!apply)return;
-    apply.textContent='Áp dụng lên màn';
-    apply.disabled=!deviceApplyAllowed();
-    if(apply.disabled)apply.setAttribute('aria-disabled','true');
-    else apply.removeAttribute('aria-disabled');
-  }
-
   function restoreCustomSelection(layout){
     const select=document.getElementById('productLayoutSelect');
     if(select)select.value=layout;
     document.querySelectorAll('#productPresetRow button[data-layout-profile]').forEach(button=>{
       button.classList.toggle('selected',button.dataset.layoutProfile===layout);
     });
+  }
+
+  function syncDeviceApplyButton(){
+    const layout=customLayout();
+    const apply=document.getElementById('profileApply');
+    if(!layout||!apply)return;
+    restoreCustomSelection(layout);
+    delete apply.dataset.classicPreview;
+    delete apply.dataset.weekPreview;
+    apply.textContent='Áp dụng lên màn';
+    apply.disabled=!deviceApplyAllowed();
+    if(apply.disabled)apply.setAttribute('aria-disabled','true');
+    else apply.removeAttribute('aria-disabled');
   }
 
   function friendlyApplyStatus(layout){
