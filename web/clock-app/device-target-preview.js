@@ -5,6 +5,8 @@
   const HEIGHT=122;
   const TARGET_ID='deviceTargetPreview';
   const STYLE_ID='einkDeviceTargetPreviewStyle';
+  const CLASSIC_PROFILE_ID=3;
+  const WEEK_PROFILE_ID=4;
   let mode='web';
 
   function ensureStyles(){
@@ -133,12 +135,103 @@
     document.dispatchEvent(new CustomEvent('eink-preview-mode-change',{detail:{mode}}));
   }
 
+  function customLayout(){
+    const value=document.getElementById('productLayoutSelect')?.value;
+    return value==='clock-classic'||value==='week-calendar'?value:'';
+  }
+
+  function selectedClassicCadence(){
+    const selected=document.querySelector('[data-classic-cadence].selected');
+    const value=Number(selected?.dataset.classicCadence||5);
+    return [1,5,10,15,30].includes(value)?value:5;
+  }
+
+  function deviceApplyAllowed(){
+    try{
+      const connected=!!server?.connected;
+      const conflictingLocked=unifiedDailyUpdateConflicting();
+      const locked=conflictingLocked||unifiedDailyUpdateRunning;
+      const identityBlocked=connected&&identityCompatibility!=='compatible';
+      return connected&&!locked&&!identityBlocked&&productD2State!==null&&productD2State!==0;
+    }catch(_error){
+      return false;
+    }
+  }
+
+  function syncDeviceApplyButton(){
+    const layout=customLayout();
+    const apply=document.getElementById('profileApply');
+    if(!layout||!apply)return;
+    apply.textContent='Áp dụng lên màn';
+    apply.disabled=!deviceApplyAllowed();
+    if(apply.disabled)apply.setAttribute('aria-disabled','true');
+    else apply.removeAttribute('aria-disabled');
+  }
+
+  function restoreCustomSelection(layout){
+    const select=document.getElementById('productLayoutSelect');
+    if(select)select.value=layout;
+    document.querySelectorAll('#productPresetRow button[data-layout-profile]').forEach(button=>{
+      button.classList.toggle('selected',button.dataset.layoutProfile===layout);
+    });
+  }
+
+  function friendlyApplyStatus(layout){
+    restoreCustomSelection(layout);
+    const status=document.getElementById('profileStatus');
+    if(status)status.textContent=layout==='clock-classic'
+      ?'Đồng hồ kim đã áp dụng lên thiết bị.'
+      :'Lịch Tuần đã áp dụng lên thiết bị.';
+    syncDeviceApplyButton();
+  }
+
+  function installDeviceApplyBridge(){
+    /* Window capture runs before the older document-capture preview guards. */
+    window.addEventListener('click',event=>{
+      const apply=event.target.closest?.('#profileApply');
+      const layout=customLayout();
+      if(!apply||!layout)return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if(!deviceApplyAllowed()){
+        syncDeviceApplyButton();
+        return;
+      }
+
+      try{
+        let run;
+        if(layout==='clock-classic'){
+          const cadence=selectedClassicCadence();
+          selectedClockProfile=CLASSIC_PROFILE_ID;
+          selectedRefreshMinutes=cadence;
+          run=runD2Flow(async()=>{
+            await d2ApplyClockPreferences();
+            return d2ApplyClockProfile();
+          });
+        }else{
+          selectedClockProfile=WEEK_PROFILE_ID;
+          run=runD2Flow(d2ApplyClockProfile);
+        }
+        if(run&&typeof run.then==='function'){
+          run.then(()=>friendlyApplyStatus(layout)).catch(error=>console.error('Profile device apply failed',error));
+        }
+      }catch(error){
+        console.error('Profile device apply bridge failed',error);
+      }
+    },true);
+
+    if(!window.__einkProfileDeviceApplyTimer){
+      window.__einkProfileDeviceApplyTimer=setInterval(syncDeviceApplyButton,250);
+    }
+  }
+
   function install(){
     ensureStyles();
     ensureControls();
     ensureTargetCanvas();
     document.documentElement.dataset.einkPreviewMode=mode;
     syncUi();
+    installDeviceApplyBridge();
 
     document.addEventListener('click',event=>{
       const button=event.target.closest?.('[data-preview-mode]');
@@ -148,11 +241,11 @@
     },true);
 
     document.addEventListener('change',event=>{
-      if(event.target?.id==='productLayoutSelect')setTimeout(syncUi,0);
+      if(event.target?.id==='productLayoutSelect')setTimeout(()=>{syncUi();syncDeviceApplyButton();},0);
     },true);
 
     document.addEventListener('click',event=>{
-      if(event.target.closest?.('#productPresetRow button[data-layout-profile]'))setTimeout(syncUi,0);
+      if(event.target.closest?.('#productPresetRow button[data-layout-profile]'))setTimeout(()=>{syncUi();syncDeviceApplyButton();},0);
     },true);
 
     const observer=new MutationObserver(()=>{
