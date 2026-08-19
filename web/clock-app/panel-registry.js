@@ -474,17 +474,17 @@
     if(!apply)return;
     if(window.__einkCustomDeviceApplyReady){
       delete apply.dataset.classicPreview;
-      if(apply.textContent==='Preview web â€” chÆ°a Ă¡p dá»¥ng')apply.textContent='Ăp dá»¥ng lĂªn mĂ n';
+      if(apply.textContent==='Preview web \u2014 ch\u01B0a \u00E1p d\u1EE5ng')apply.textContent='\u00C1p d\u1EE5ng l\u00EAn m\u00E0n';
       return;
     }
     if(active){
-      if(!apply.dataset.classicOriginalLabel)apply.dataset.classicOriginalLabel=apply.textContent||'Ăp dá»¥ng lĂªn mĂ n';
+      if(!apply.dataset.classicOriginalLabel)apply.dataset.classicOriginalLabel=apply.textContent||'\u00C1p d\u1EE5ng l\u00EAn m\u00E0n';
       apply.dataset.classicPreview='true';
-      apply.textContent='Preview web â€” chÆ°a Ă¡p dá»¥ng';
+      apply.textContent='Preview web \u2014 ch\u01B0a \u00E1p d\u1EE5ng';
       apply.disabled=true;
       apply.setAttribute('aria-disabled','true');
     }else if(apply.dataset.classicPreview==='true'){
-      apply.textContent=apply.dataset.classicOriginalLabel||'Ăp dá»¥ng lĂªn mĂ n';
+      apply.textContent=apply.dataset.classicOriginalLabel||'\u00C1p d\u1EE5ng l\u00EAn m\u00E0n';
       apply.disabled=false;
       apply.removeAttribute('aria-disabled');
       delete apply.dataset.classicPreview;

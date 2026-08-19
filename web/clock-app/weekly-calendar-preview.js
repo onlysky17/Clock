@@ -217,7 +217,7 @@
     const now=currentDate();
     const data=weekData(now);
     const currentKey=`${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
-    const monthName=`THĂNG ${pad(now.getMonth()+1)}`;
+    const monthName=`TH\u00C1NG ${pad(now.getMonth()+1)}`;
     const weekdays=['T2','T3','T4','T5','T6','T7','CN'];
 
     ctx.save();
@@ -231,7 +231,7 @@
 
     ctx.font='900 8px Arial, sans-serif';
     ctx.textAlign='left';
-    ctx.fillText(`${monthName} Â· TUáº¦N ${data.week}`,7,10);
+    ctx.fillText(`${monthName} \u00B7 TU\u1EA6N ${data.week}`,7,10);
 
     /* Mini analog clock mirrors the firmware header. */
     const clockX=236,clockY=10,clockR=8;
@@ -292,7 +292,7 @@
       ctx.font='800 5.8px Arial, sans-serif';
       ctx.fillText(lunarLabel,x+colWidth/2,top+54);
       ctx.font='700 4.6px Arial, sans-serif';
-      ctx.fillText('Ă‚M',x+colWidth/2,top+68);
+      ctx.fillText('\u00C2M',x+colWidth/2,top+68);
     });
 
     const currentLunar=solarToLunar(now);
@@ -302,7 +302,7 @@
     ctx.fillText(`${weekdays[(now.getDay()+6)%7]} ${pad(now.getDate())}/${pad(now.getMonth()+1)}`,7,108);
     ctx.textAlign='right';
     ctx.font='800 5.6px Arial, sans-serif';
-    ctx.fillText(`Ă‚M ${currentLunar.day}/${currentLunar.month}${currentLunar.leap?'N':''}`,243,108);
+    ctx.fillText(`\u00C2M ${currentLunar.day}/${currentLunar.month}${currentLunar.leap?'N':''}`,243,108);
 
     ctx.restore();
     syncWeekCard(now,data);
@@ -355,17 +355,17 @@
     if(!apply)return;
     if(window.__einkCustomDeviceApplyReady){
       delete apply.dataset.weekPreview;
-      if(apply.textContent==='Preview web â€” chÆ°a Ă¡p dá»¥ng')apply.textContent='Ăp dá»¥ng lĂªn mĂ n';
+      if(apply.textContent==='Preview web \u2014 ch\u01B0a \u00E1p d\u1EE5ng')apply.textContent='\u00C1p d\u1EE5ng l\u00EAn m\u00E0n';
       return;
     }
     if(active){
-      if(!apply.dataset.weekOriginalLabel)apply.dataset.weekOriginalLabel=apply.textContent||'Ăp dá»¥ng lĂªn mĂ n';
+      if(!apply.dataset.weekOriginalLabel)apply.dataset.weekOriginalLabel=apply.textContent||'\u00C1p d\u1EE5ng l\u00EAn m\u00E0n';
       apply.dataset.weekPreview='true';
-      apply.textContent='Preview web â€” chÆ°a Ă¡p dá»¥ng';
+      apply.textContent='Preview web \u2014 ch\u01B0a \u00E1p d\u1EE5ng';
       apply.disabled=true;
       apply.setAttribute('aria-disabled','true');
     }else if(apply.dataset.weekPreview==='true'){
-      apply.textContent=apply.dataset.weekOriginalLabel||'Ăp dá»¥ng lĂªn mĂ n';
+      apply.textContent=apply.dataset.weekOriginalLabel||'\u00C1p d\u1EE5ng l\u00EAn m\u00E0n';
       apply.disabled=false;
       apply.removeAttribute('aria-disabled');
       delete apply.dataset.weekPreview;
