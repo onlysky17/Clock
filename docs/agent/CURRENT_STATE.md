@@ -1,5 +1,96 @@
 # CURRENT_STATE
 
+## Current Canonical Checkpoint — 2026-08-20
+
+EINK Harness v0.7 one-command pre-test pipeline is MERGED / POST-MERGE VERIFIED.
+
+### Canonical repository state
+
+- Repository: `onlysky17/Clock`
+- Canonical workspace: `D:\EINK\Clock`
+- Canonical branch: `main`
+- Current merged main commit:
+  `4bbc64f0c5d6d7697b2bc6d17a10ecf1d04124bd`
+- PR #153: `feat: add EINK prepare-test automation`
+- PR #153 feature commit:
+  `3028e55c31be8516be8cef833d270bde50b2bb23`
+
+### Harness v0.7 verified behavior
+
+The canonical command is:
+
+`.\scripts\eink.ps1 prepare-test`
+
+It automatically performs:
+
+1. workspace/toolchain guard;
+2. canonical DA14585 Keil build using compiler V6.24;
+3. raw BIN freshness/size/SHA verification;
+4. full 256 KiB HINK SPI image packing;
+5. 7050 / 7051 / 7052 header and layout validation;
+6. packed image size validation;
+7. raw firmware payload byte-for-byte verification inside the packed image;
+8. packed SHA256 lock;
+9. manifest generation;
+10. stop at `OWNER_BURN_CONFIRMATION_REQUIRED`.
+
+`prepare-test` performs no destructive SPI write.
+
+### Post-merge proof on main
+
+- Smoke: PASS
+- Real Keil build: PASS
+- Raw size: `52876`
+- Raw SHA256:
+  `B30D124DCD14BCD2F362161CBE30515489F694639A40C702E8F67932D7D1E100`
+- Packed size: `262144`
+- Packed SHA256:
+  `E3365276293D032C75F737DF1978C42864F8D5CEDDAC936106AC216F71779D63`
+- Header / CRC / layout validation: PASS
+- Raw payload byte match: PASS
+- Destructive burn: NOT PERFORMED
+- Closeout backup:
+  `D:\EINK\Clock\_incoming\EINK_PREPARE_TEST_CLOSEOUT\20260820_113718`
+
+### Display Profiles v2 milestone
+
+PR #152 is MERGED / OWNER VISUAL PASS.
+
+- Merge commit:
+  `4ac1d0d120a5486861a867adcd0f28c2fbab8882`
+- Clock Classic physical e-ink visual: PASS
+- Clock Classic periodic refresh: PASS
+- Weekly 7-day profile: PASS
+- Mobile Preview Studio: PASS
+- Fixed preview URL:
+  `https://onlysky17.github.io/Clock/preview/test.html`
+
+### Fixed preview infrastructure
+
+PR #151 is MERGED.
+
+- Merge commit:
+  `cffdb6503cec78d47db0c30db2f7366af1d5cfc0`
+- Production:
+  `https://onlysky17.github.io/Clock/test.html`
+- Preview:
+  `https://onlysky17.github.io/Clock/preview/test.html`
+- Preview branch:
+  `preview-clock-classic-mobile`
+- GitHub Pages uses GitHub Actions.
+- `github-pages` environment allows both `main` and
+  `preview-clock-classic-mobile`.
+
+### Standing workflow
+
+For normal firmware/layout work:
+
+`source change -> validate -> prepare-test -> Owner burn gate -> cold boot/BLE/physical visual -> backup PASS -> commit/push/PR -> Owner merge`
+
+Machine PASS does not substitute for the Owner physical/visual gate.
+
+---
+
 ## EINK Harness v0.1 Closeout
 
 - PR #139 is merged to `main`.
