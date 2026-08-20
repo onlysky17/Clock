@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EINK Clock — Lịch Tuần Preview</title>
+<style>
+:root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;--bg:#050912;--surface:#0e1a2a;--line:rgba(148,184,220,.18);--text:#f6f9fc;--muted:#8fa4bb;--cyan:#5bdcff}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 15% 0%,rgba(51,151,210,.15),transparent 34rem),linear-gradient(180deg,#050912,#08111d 46%,#050912);color:var(--text)}
+main{width:min(1120px,100%);margin:auto;padding:28px 20px 48px}.header,.card{border:1px solid var(--line);background:linear-gradient(155deg,rgba(20,34,54,.9),rgba(8,17,29,.9));box-shadow:0 22px 70px rgba(0,0,0,.34)}.header{padding:24px 26px;border-radius:24px;margin-bottom:20px}.badge{display:inline-flex;padding:6px 10px;border:1px solid rgba(91,220,255,.32);border-radius:999px;background:rgba(91,220,255,.08);color:#aeeeff;font-size:.72rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase}.header h1{margin:10px 0 6px;font-size:clamp(2rem,4vw,2.8rem);letter-spacing:-.04em}.header p{margin:0;color:#9db0c6}.grid{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(300px,.7fr);gap:18px;align-items:start}.card{padding:20px;border-radius:20px}.card h2{margin:0 0 14px;font-size:1rem}.canvasWrap{display:grid;place-items:center;padding:28px 18px;border:1px solid rgba(91,220,255,.18);border-radius:20px;background:radial-gradient(circle at 50% 20%,rgba(91,220,255,.1),transparent 58%),#07101a}.screen{width:min(100%,760px);aspect-ratio:250/122;border:10px solid #1d252e;border-radius:8px;outline:1px solid #394652;box-shadow:0 22px 50px rgba(0,0,0,.48);background:#fff}.screen canvas{display:block;width:100%;height:100%;background:#fff}.profile{display:grid;gap:12px}.profilePreview{padding:14px;border:1px solid rgba(91,220,255,.18);border-radius:16px;background:linear-gradient(135deg,rgba(10,22,34,.92),rgba(16,29,43,.88))}.eyebrow{font-size:.62rem;font-weight:800;letter-spacing:.15em;text-transform:uppercase;color:#7890a7}.profileTitle{margin:5px 0 3px;font-size:1.35rem;font-weight:850}.meta{color:#9fb2c5;font-size:.82rem;line-height:1.45}.chipRow{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.chip{padding:11px 10px;border:1px solid rgba(141,178,211,.2);border-radius:12px;background:#091522;color:#dbe8f4;text-align:center;font-weight:750}.chip.selected{border-color:rgba(91,220,255,.36);background:linear-gradient(135deg,#5bdcff,#30b7e6);color:#03121b}.chipRow .chip:last-child{grid-column:1/-1}.note{margin:0;color:#91a6bb;font-size:.8rem;line-height:1.5}.legend{display:grid;gap:8px;padding-top:12px;border-top:1px solid rgba(145,176,205,.14)}.legend strong{font-size:.85rem}.legend span{color:#91a6bb;font-size:.78rem;line-height:1.45}
+@media(max-width:760px){main{padding:12px 10px 30px}.grid{grid-template-columns:1fr}.header{padding:18px}.card{padding:16px}.canvasWrap{padding:18px 8px}.screen{border-width:7px}}
+</style>
+</head>
+<body>
+<main>
+  <section class="header">
+    <span class="badge">EINK Clock</span>
+    <h1>Lịch Tuần</h1>
+    <p>Preview web high-res trước khi tối ưu xuống panel 250×122.</p>
+  </section>
+
+  <div class="grid">
+    <section class="card">
+      <h2>Preview Lịch Tuần</h2>
+      <div class="canvasWrap">
+        <div class="screen"><canvas id="weekCanvas" width="1000" height="488"></canvas></div>
+      </div>
+    </section>
+
+    <aside class="card profile">
+      <h2>Profile hiển thị</h2>
+      <div class="profilePreview">
+        <div class="eyebrow">Week Calendar</div>
+        <div class="profileTitle" id="profileTitle">Tháng -- · Tuần --</div>
+        <div class="meta" id="profileMeta">--</div>
+      </div>
+      <div class="chipRow">
+        <div class="chip selected">7 ngày</div>
+        <div class="chip">Âm lịch</div>
+        <div class="chip">Hôm nay đảo nền</div>
+      </div>
+      <div class="legend">
+        <strong>Logic visual</strong>
+        <span>7 cột T2→CN. Ngày hiện tại đảo nền đen. Ngày dương lớn, âm lịch nhỏ bên dưới. Header có Tháng + Tuần. Footer chỉ giữ ngày hiện tại và âm lịch.</span>
+      </div>
+      <p class="note">Bản này chỉ để duyệt giao diện web. Sau khi chốt visual mới tính mức chi tiết phù hợp khi render e-ink thật.</p>
+    </aside>
+  </div>
+</main>
+<script>
+const pad=v=>String(v).padStart(2,'0');
+function addDays(date,days){const d=new Date(date);d.setDate(d.getDate()+days);return d}
+function mondayOf(date){const d=new Date(date.getFullYear(),date.getMonth(),date.getDate());const day=d.getDay();d.setDate(d.getDate()+(day===0?-6:1-day));d.setHours(12,0,0,0);return d}
+function isoWeek(date){const d=new Date(Date.UTC(date.getFullYear(),date.getMonth(),date.getDate()));const day=d.getUTCDay()||7;d.setUTCDate(d.getUTCDate()+4-day);const start=new Date(Date.UTC(d.getUTCFullYear(),0,1));return Math.ceil((((d-start)/86400000)+1)/7)}
+function jdFromDate(dd,mm,yy){const a=Math.floor((14-mm)/12),y=yy+4800-a,m=mm+12*a-3;let jd=dd+Math.floor((153*m+2)/5)+365*y+Math.floor(y/4)-Math.floor(y/100)+Math.floor(y/400)-32045;if(jd<2299161)jd=dd+Math.floor((153*m+2)/5)+365*y+Math.floor(y/4)-32083;return jd}
+function newMoon(k){const T=k/1236.85,T2=T*T,T3=T2*T,dr=Math.PI/180;let jd=2415020.75933+29.53058868*k+0.0001178*T2-0.000000155*T3;jd+=0.00033*Math.sin((166.56+132.87*T-0.009173*T2)*dr);const M=359.2242+29.10535608*k-0.0000333*T2-0.00000347*T3,Mp=306.0253+385.81691806*k+0.0107306*T2+0.00001236*T3,F=21.2964+390.67050646*k-0.0016528*T2-0.00000239*T3;const C1=(0.1734-0.000393*T)*Math.sin(M*dr)+0.0021*Math.sin(2*M*dr)-0.4068*Math.sin(Mp*dr)+0.0161*Math.sin(2*Mp*dr)-0.0004*Math.sin(3*Mp*dr)+0.0104*Math.sin(2*F*dr)-0.0051*Math.sin((M+Mp)*dr)-0.0074*Math.sin((M-Mp)*dr)+0.0004*Math.sin((2*F+M)*dr)-0.0004*Math.sin((2*F-M)*dr)-0.0006*Math.sin((2*F+Mp)*dr)+0.001*Math.sin((2*F-Mp)*dr)+0.0005*Math.sin((2*Mp+M)*dr);const delta=T<-11?0.001+0.000839*T+0.0002261*T2-0.00000845*T3-0.000000081*T*T3:-0.000278+0.000265*T+0.000262*T2;return jd+C1-delta}
+function newMoonDay(k,tz){return Math.floor(newMoon(k)+0.5+tz/24)}
+function sunLongitude(jdn){const T=(jdn-2451545)/36525,T2=T*T,dr=Math.PI/180,M=357.52910+35999.05030*T-0.0001559*T2-0.00000048*T*T2,L0=280.46645+36000.76983*T+0.0003032*T2,DL=(1.914600-0.004817*T-0.000014*T2)*Math.sin(M*dr)+(0.019993-0.000101*T)*Math.sin(2*M*dr)+0.000290*Math.sin(3*M*dr);let L=(L0+DL)*dr;L-=Math.PI*2*Math.floor(L/(Math.PI*2));return L}
+function sunSector(day,tz){return Math.floor(sunLongitude(day-0.5-tz/24)/Math.PI*6)}
+function month11(year,tz){const off=jdFromDate(31,12,year)-2415021,k=Math.floor(off/29.530588853);let nm=newMoonDay(k,tz);if(sunSector(nm,tz)>=9)nm=newMoonDay(k-1,tz);return nm}
+function leapOffset(a11,tz){const k=Math.floor(0.5+(a11-2415021.076998695)/29.530588853);let last=0,i=1,arc=sunSector(newMoonDay(k+i,tz),tz);do{last=arc;i++;arc=sunSector(newMoonDay(k+i,tz),tz)}while(arc!==last&&i<14);return i-1}
+function lunar(date,tz=7){const dd=date.getDate(),mm=date.getMonth()+1,yy=date.getFullYear(),day=jdFromDate(dd,mm,yy),k=Math.floor((day-2415021.076998695)/29.530588853);let start=newMoonDay(k+1,tz);if(start>day)start=newMoonDay(k,tz);let a11=month11(yy,tz),b11=a11,year;if(a11>=start){year=yy;a11=month11(yy-1,tz)}else{year=yy+1;b11=month11(yy+1,tz)}const lunarDay=day-start+1,diff=Math.floor((start-a11)/29);let leap=0,month=diff+11;if(b11-a11>365){const ld=leapOffset(a11,tz);if(diff>=ld){month=diff+10;if(diff===ld)leap=1}}if(month>12)month-=12;if(month>=11&&diff<4)year--;return{day:lunarDay,month,year,leap}}
+function draw(){const canvas=document.getElementById('weekCanvas'),ctx=canvas.getContext('2d'),now=new Date(),monday=mondayOf(now),week=isoWeek(now),days=Array.from({length:7},(_,i)=>{const date=addDays(monday,i);return{date,lunar:lunar(date)}}),names=['T2','T3','T4','T5','T6','T7','CN'],todayKey=`${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`,end=days[6].date;
+ctx.setTransform(4,0,0,4,0,0);ctx.fillStyle='#fff';ctx.fillRect(0,0,250,122);ctx.fillStyle='#050505';ctx.strokeStyle='#050505';ctx.textBaseline='middle';ctx.textAlign='left';ctx.font='900 8px Arial';ctx.fillText(`THÁNG ${now.getMonth()+1} · TUẦN ${week}`,7,10);ctx.textAlign='right';ctx.font='700 5.3px Arial';ctx.fillText(`${pad(monday.getDate())}/${pad(monday.getMonth()+1)} – ${pad(end.getDate())}/${pad(end.getMonth()+1)}/${end.getFullYear()}`,243,10);
+const left=6,top=20,gap=2,total=238,w=(total-gap*6)/7,h=76;days.forEach((item,i)=>{const x=left+i*(w+gap),key=`${item.date.getFullYear()}-${item.date.getMonth()}-${item.date.getDate()}`,active=key===todayKey;ctx.lineWidth=.7;if(active){ctx.fillStyle='#050505';ctx.fillRect(x,top,w,h);ctx.fillStyle='#fff'}else{ctx.fillStyle='#fff';ctx.fillRect(x,top,w,h);ctx.strokeStyle='#111';ctx.strokeRect(x+.35,top+.35,w-.7,h-.7);ctx.fillStyle='#050505'}ctx.textAlign='center';ctx.font='900 6px Arial';ctx.fillText(names[i],x+w/2,top+9);ctx.font='900 16px Arial';ctx.fillText(item.date.getDate(),x+w/2,top+32);const l=item.lunar.day===1?`1/${item.lunar.month}${item.lunar.leap?'N':''}`:String(item.lunar.day);ctx.font='800 5.8px Arial';ctx.fillText(l,x+w/2,top+54);ctx.font='700 4.6px Arial';ctx.fillText('ÂM',x+w/2,top+68)});
+const cur=lunar(now);ctx.fillStyle='#050505';ctx.textAlign='left';ctx.font='800 6px Arial';ctx.fillText(`${names[(now.getDay()+6)%7]} ${pad(now.getDate())}/${pad(now.getMonth()+1)}`,7,108);ctx.textAlign='right';ctx.fillText(`ÂM ${cur.day}/${cur.month}${cur.leap?'N':''}`,243,108);
+document.getElementById('profileTitle').textContent=`Tháng ${now.getMonth()+1} · Tuần ${week}`;document.getElementById('profileMeta').textContent=`T2 ${pad(monday.getDate())}/${pad(monday.getMonth()+1)} → CN ${pad(end.getDate())}/${pad(end.getMonth()+1)} · hôm nay ${pad(now.getDate())}/${pad(now.getMonth()+1)}`}
+draw();
+</script>
+</body>
+</html>
