@@ -181,7 +181,7 @@ static void hink_v2_draw_clock_classic(uint8_t h, uint8_t m,
      *
      * 60 marks are kept well inside the 1..12 hour numerals:
      *   hour labels : radius 30
-     *   minute ring : radius 19..23
+     *   minute ring : 5-minute radius 19..22; other minutes 21..22
      *
      * This leaves a visible gap instead of letting the inner/outer
      * marks touch the hour numbers.
@@ -192,7 +192,7 @@ static void hink_v2_draw_clock_classic(uint8_t h, uint8_t m,
         if ((minute % 5U) == 0U)
         {
             inner = 19U;
-            outer = 23U;
+            outer = 22U;
         }
         else
         {

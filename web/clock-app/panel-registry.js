@@ -363,7 +363,7 @@
       const angle=(minute*Math.PI/30)-Math.PI/2;
       const major=minute%5===0;
       const inner=major?19:21;
-      const outer=major?23:22;
+      const outer=22;
 
       ctx.lineWidth=major?1.15:.72;
       ctx.beginPath();
