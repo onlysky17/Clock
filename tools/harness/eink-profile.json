@@ -1,5 +1,5 @@
 {
-  "version": "0.6",
+  "version": "0.7",
   "project": {
     "id": "eink",
     "repository": "onlysky17/Clock",
@@ -82,6 +82,7 @@
       "source_editing",
       "artifact_validation",
       "keil_build",
+      "prepare_test_build_pack_verify",
       "spi_backup_read",
       "spi_burn_guarded",
       "spi_readback_verify",

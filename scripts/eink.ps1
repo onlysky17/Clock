@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('status', 'sync', 'next', 'closeout', 'home-verify', 'build')]
+    [ValidateSet('status', 'sync', 'next', 'closeout', 'home-verify', 'build', 'prepare-test')]
     [string]$Action = 'status',
 
     [switch]$DryRun,
@@ -438,6 +438,183 @@ function Invoke-BuildImplementation {
     return 0
 }
 
+function Write-PrepareTestFailure {
+    param([Parameter(Mandatory = $true)][string]$Reason)
+
+    Write-Output 'EINK HARNESS: BLOCKED'
+    Write-Output 'ACTION: PREPARE-TEST'
+    Write-Output "REASON: $Reason"
+    Write-Output 'NEXT_STATE: BLOCKED'
+}
+
+function Invoke-PrepareTestImplementation {
+    $buildResult = @(Invoke-BuildImplementation)
+
+    if ($buildResult.Count -eq 0) {
+        Write-PrepareTestFailure -Reason 'BUILD_RESULT_MISSING'
+        return 1
+    }
+
+    $buildExit = [int]$buildResult[-1]
+
+    if ($buildResult.Count -gt 1) {
+        $buildResult[0..($buildResult.Count - 2)] | Write-Output
+    }
+
+    if ($buildExit -ne 0) {
+        return $buildExit
+    }
+
+    $profile = Get-Content -LiteralPath $profilePath -Raw | ConvertFrom-Json
+    $rawBin = [string]$profile.toolchain.rawBin
+    $packerPath = Join-Path $repoRoot ([string]$profile.toolchain.packerScript)
+
+    if (-not (Test-Path -LiteralPath $rawBin -PathType Leaf)) {
+        Write-PrepareTestFailure -Reason 'RAW_BIN_MISSING_AFTER_BUILD'
+        return 1
+    }
+
+    if (-not (Test-Path -LiteralPath $packerPath -PathType Leaf)) {
+        Write-PrepareTestFailure -Reason 'PACKER_MISSING'
+        return 1
+    }
+
+    $rawItem = Get-Item -LiteralPath $rawBin
+    $rawHash = ((Get-FileHash -LiteralPath $rawBin -Algorithm SHA256).Hash).ToUpperInvariant()
+
+    $stamp = Get-Date -Format 'yyyyMMdd_HHmmss'
+    $evidenceRoot = Join-Path $repoRoot '_incoming\EINK_HARNESS_PREPARE_TEST'
+    $evidenceDir = Join-Path $evidenceRoot $stamp
+    [void](New-Item -ItemType Directory -Path $evidenceDir -Force)
+
+    $packedBin = Join-Path $evidenceDir 'HINK213_CLOCK_READY.bin'
+
+    $packResult = Invoke-ChildPowerShell -ScriptPath $packerPath -Arguments @(
+        '-Raw', $rawBin,
+        '-Out', $packedBin,
+        '-Name', 'HINK213-CLOCK'
+    )
+
+    if ($packResult.ExitCode -ne 0) {
+        Write-PrepareTestFailure -Reason 'PACKER_FAILED'
+        return 1
+    }
+
+    $packText = $packResult.Output -join [Environment]::NewLine
+
+    foreach ($marker in @(
+        'STATUS: READY TO FLASH',
+        'HEADER: OK',
+        'LAYOUT: 7050@00000 7051@04000 PAYLOAD@04040 7052@38000'
+    )) {
+        if ($packText.IndexOf($marker, [System.StringComparison]::Ordinal) -lt 0) {
+            Write-PrepareTestFailure -Reason "PACKER_VALIDATION_MARKER_MISSING: $marker"
+            return 1
+        }
+    }
+
+    if (-not (Test-Path -LiteralPath $packedBin -PathType Leaf)) {
+        Write-PrepareTestFailure -Reason 'PACKED_BIN_MISSING'
+        return 1
+    }
+
+    $packedItem = Get-Item -LiteralPath $packedBin
+    $expectedPackedBytes = [int64]$profile.artifactPolicy.packedSpiBytes
+
+    if ($packedItem.Length -ne $expectedPackedBytes) {
+        Write-PrepareTestFailure -Reason "PACKED_SIZE_$($packedItem.Length)"
+        return 1
+    }
+
+    [byte[]]$packedBytes = [IO.File]::ReadAllBytes($packedBin)
+    [byte[]]$rawBytes = [IO.File]::ReadAllBytes($rawBin)
+
+    $headerOk = (
+        $packedBytes[0] -eq 0x70 -and
+        $packedBytes[1] -eq 0x50 -and
+        $packedBytes[0x4000] -eq 0x70 -and
+        $packedBytes[0x4001] -eq 0x51 -and
+        $packedBytes[0x4002] -eq 0xAA -and
+        $packedBytes[0x38000] -eq 0x70 -and
+        $packedBytes[0x38001] -eq 0x52
+    )
+
+    if (-not $headerOk) {
+        Write-PrepareTestFailure -Reason 'PACKED_HEADER_SIGNATURE_MISMATCH'
+        return 1
+    }
+
+    $payloadOffset = 0x4040
+
+    if (($payloadOffset + $rawBytes.Length) -gt $packedBytes.Length) {
+        Write-PrepareTestFailure -Reason 'PACKED_PAYLOAD_RANGE_INVALID'
+        return 1
+    }
+
+    for ($i = 0; $i -lt $rawBytes.Length; $i++) {
+        if ($packedBytes[$payloadOffset + $i] -ne $rawBytes[$i]) {
+            Write-PrepareTestFailure -Reason "PACKED_PAYLOAD_BYTE_MISMATCH_$i"
+            return 1
+        }
+    }
+
+    $packedHash = ((Get-FileHash -LiteralPath $packedBin -Algorithm SHA256).Hash).ToUpperInvariant()
+
+    $headResult = Invoke-GitCommand -Arguments @('rev-parse', 'HEAD')
+    $statusResult = Invoke-GitCommand -Arguments @(
+        'status',
+        '--porcelain=v1',
+        '--untracked-files=all'
+    )
+
+    $manifestPath = Join-Path $evidenceDir 'prepare-test-manifest.json'
+
+    $manifest = [ordered]@{
+        schema = 'eink-prepare-test-v1'
+        createdUtc = [DateTime]::UtcNow.ToString('o')
+        branch = Get-CurrentBranch
+        head = if ($headResult.ExitCode -eq 0) { $headResult.Output[-1].Trim() } else { '' }
+        workingTreeStatus = @($statusResult.Output)
+        raw = [ordered]@{
+            path = $rawBin
+            bytes = [int64]$rawItem.Length
+            sha256 = $rawHash
+        }
+        packed = [ordered]@{
+            path = $packedBin
+            bytes = [int64]$packedItem.Length
+            sha256 = $packedHash
+        }
+        validation = [ordered]@{
+            packer = 'PASS'
+            header = 'PASS'
+            layout = 'PASS'
+            payloadByteMatch = 'PASS'
+        }
+        nextState = 'OWNER_BURN_CONFIRMATION_REQUIRED'
+    }
+
+    [IO.File]::WriteAllText(
+        $manifestPath,
+        ($manifest | ConvertTo-Json -Depth 10),
+        [Text.UTF8Encoding]::new($false)
+    )
+
+    Write-Output 'EINK HARNESS: PASS'
+    Write-Output 'ACTION: PREPARE-TEST'
+    Write-Output "RAW_BIN: $rawBin"
+    Write-Output "RAW_SIZE: $($rawItem.Length)"
+    Write-Output "RAW_SHA256: $rawHash"
+    Write-Output "PACKED_BIN: $packedBin"
+    Write-Output "PACKED_SIZE: $($packedItem.Length)"
+    Write-Output "PACKED_SHA256: $packedHash"
+    Write-Output 'PACKER_VALIDATION: HEADER_CRC_LAYOUT_PASS'
+    Write-Output 'PAYLOAD_BYTE_MATCH: PASS'
+    Write-Output "MANIFEST: $manifestPath"
+    Write-Output 'NEXT_STATE: OWNER_BURN_CONFIRMATION_REQUIRED'
+    return 0
+}
+
 $actionName = $Action.ToUpperInvariant()
 
 switch ($Action) {
@@ -547,6 +724,20 @@ switch ($Action) {
 
         Write-Result -Result PASS -ActionName $actionName -Branch $guard.Data.branch -Head $guard.Data.head -NextState WORKSPACE_VERIFIED -Detail 'HOME_VERIFY: PASS'
         exit 0
+    }
+    'prepare-test' {
+        $prepareResult = @(Invoke-PrepareTestImplementation)
+
+        if ($prepareResult.Count -eq 0) {
+            Write-PrepareTestFailure -Reason 'PREPARE_TEST_RESULT_MISSING'
+            exit 1
+        }
+
+        if ($prepareResult.Count -gt 1) {
+            $prepareResult[0..($prepareResult.Count - 2)] | Write-Output
+        }
+
+        exit [int]$prepareResult[-1]
     }
     'build' {
         $buildResult = @(Invoke-BuildImplementation)
