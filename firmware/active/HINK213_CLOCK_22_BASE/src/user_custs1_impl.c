@@ -226,18 +226,22 @@ static uint8_t hink_epd_first_refresh_pending = 1U;
 #define HINK_EPD_PRIME_RECOVERY_TICKS 100UL
 
 /*
- * Dirty-pixel refresh V1.
- * The panel driver already exposes UPDATE_FLY / lut_fly.
- * Keep ten fly updates between maintenance full refreshes;
- * this matches the driver's own ten-iteration fly test.
+ * Dirty-pixel refresh V2.
+ *
+ * Classic/Weekly keep fast UPDATE_FLY refreshes between maintenance
+ * boundaries, but maintenance FULL refresh is aligned to real local
+ * wall-clock time:
+ *
+ *     00 / 05 / 10 / 15 / ... / 55
+ *
+ * It is intentionally NOT counted from boot, BLE sync, profile apply,
+ * or the previous full refresh.
  */
-#define HINK_EPD_FLY_MAINTENANCE_LIMIT 10U
+#define HINK_EPD_FULL_REFRESH_MINUTES 5UL
 
 static uint8_t hink_epd_fly_ready
     __SECTION_ZERO("retention_mem_area0");
 static uint8_t hink_epd_fly_profile
-    __SECTION_ZERO("retention_mem_area0");
-static uint8_t hink_epd_fly_count
     __SECTION_ZERO("retention_mem_area0");
 static uint32_t hink_epd_fly_day
     __SECTION_ZERO("retention_mem_area0");
@@ -1791,25 +1795,16 @@ static void epd_wait_timer(void)
             if ((hink_epd_refresh_profile == HINK_CLOCK_PROFILE_CLASSIC) ||
                 (hink_epd_refresh_profile == HINK_CLOCK_PROFILE_WEEKLY))
             {
-                if (hink_epd_refresh_was_fly)
-                {
-                    if (hink_epd_fly_count < 0xffU)
-                    {
-                        hink_epd_fly_count++;
-                    }
-                }
-                else
+                if (!hink_epd_refresh_was_fly)
                 {
                     hink_epd_fly_ready = 1U;
                     hink_epd_fly_profile = hink_epd_refresh_profile;
                     hink_epd_fly_day = hink_epd_refresh_day;
-                    hink_epd_fly_count = 0U;
                 }
             }
             else
             {
                 hink_epd_fly_ready = 0U;
-                hink_epd_fly_count = 0U;
             }
 
             hink_d2_render_state = HINK_D2_RENDER_COMPLETE;
@@ -2735,18 +2730,18 @@ static void hink_d2_render_notify(uint8_t result, uint8_t state)
 
 static uint8_t hink_d2_start_epd_refresh(void)
 {
-    uint32_t refresh_day = hink_auto_local_minute_key() / 1440UL;
+    uint32_t refresh_minute = hink_auto_local_minute_key();
+    uint32_t refresh_day = refresh_minute / 1440UL;
+    uint8_t wall_clock_full =
+        (uint8_t)((refresh_minute % HINK_EPD_FULL_REFRESH_MINUTES) == 0UL);
     uint8_t use_fly = 0U;
 
     /*
      * Only Classic and Weekly have mostly-static layouts.
      *
-     * Same profile + same local day:
-     *   use UPDATE_FLY so unchanged pixels remain visually static.
-     *
-     * First render, profile/day change, prime recovery, or every tenth
-     * fly update:
-     *   use a maintenance/full refresh.
+     * First render, profile/day change and prime recovery force FULL.
+     * Once a baseline is trusted, use UPDATE_FLY between real local
+     * 5-minute boundaries. At 00/05/10/.../55 always force UPDATE_FULL.
      */
     if (!hink_epd_first_refresh_pending &&
         ((hink_clock_profile == HINK_CLOCK_PROFILE_CLASSIC) ||
@@ -2754,7 +2749,7 @@ static uint8_t hink_d2_start_epd_refresh(void)
         hink_epd_fly_ready &&
         (hink_epd_fly_profile == hink_clock_profile) &&
         (hink_epd_fly_day == refresh_day) &&
-        (hink_epd_fly_count < HINK_EPD_FLY_MAINTENANCE_LIMIT))
+        !wall_clock_full)
     {
         use_fly = 1U;
     }
@@ -2766,7 +2761,6 @@ static uint8_t hink_d2_start_epd_refresh(void)
          * this full refresh reaches the normal COMPLETE path.
          */
         hink_epd_fly_ready = 0U;
-        hink_epd_fly_count = 0U;
     }
 
     hink_epd_refresh_was_fly = use_fly;
@@ -2790,7 +2784,6 @@ static uint8_t hink_d2_start_epd_refresh(void)
     }
 
     hink_epd_fly_ready = 0U;
-    hink_epd_fly_count = 0U;
 
     epd_power(0);
     epd_hw_close();
