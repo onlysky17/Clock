@@ -1,0 +1,85 @@
+name: EINK Pages Production + Fixed Preview
+
+on:
+  push:
+    branches:
+      - main
+      - preview-clock-classic-mobile
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: eink-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout production main
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          path: prod
+
+      - name: Checkout fixed preview channel
+        uses: actions/checkout@v6
+        with:
+          ref: preview-clock-classic-mobile
+          path: preview-src
+
+      - name: Compose production plus fixed preview
+        shell: bash
+        run: |
+          rm -rf site
+          mkdir -p site
+
+          rsync -a --delete \
+            --exclude='.git' \
+            --exclude='.github' \
+            prod/ site/
+
+          mkdir -p site/preview
+
+          rsync -a --delete \
+            --exclude='.git' \
+            --exclude='.github' \
+            preview-src/ site/preview/
+
+          PREVIEW_SHA="$(git -C preview-src rev-parse HEAD)"
+
+          printf '%s\n' \
+            "preview_ref=preview-clock-classic-mobile" \
+            "preview_sha=${PREVIEW_SHA}" \
+            > site/preview/preview-build.txt
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+          include-hidden-files: true
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+
+    permissions:
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
