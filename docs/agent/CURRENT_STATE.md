@@ -2,7 +2,7 @@
 
 ## Current Canonical Checkpoint — 2026-08-20
 
-EINK Harness v0.7 one-command pre-test pipeline is MERGED / POST-MERGE VERIFIED.
+EINK 5-minute wall-clock full-refresh fix is MERGED / OWNER PHYSICAL PASS.
 
 ### Canonical repository state
 
@@ -10,87 +10,91 @@ EINK Harness v0.7 one-command pre-test pipeline is MERGED / POST-MERGE VERIFIED.
 - Canonical workspace: `D:\EINK\Clock`
 - Canonical branch: `main`
 - Current merged main commit:
-  `4bbc64f0c5d6d7697b2bc6d17a10ecf1d04124bd`
-- PR #153: `feat: add EINK prepare-test automation`
-- PR #153 feature commit:
-  `3028e55c31be8516be8cef833d270bde50b2bb23`
+  `fbcc8562f678f7f6cf651c9f77e591e6b60b7be0`
+- PR #155:
+  `fix: align EINK full refresh to 5-minute wall clock`
+- Feature commit:
+  `d9d08c3354d0e5125afa36a580a6d0420928ae4c`
 
-### Harness v0.7 verified behavior
+### PR #155 verified behavior
 
-The canonical command is:
+Classic and Weekly retain fast `UPDATE_FLY` refreshes between maintenance
+boundaries.
 
-`.\scripts\eink.ps1 prepare-test`
+Maintenance `UPDATE_FULL` is aligned to real local wall-clock minute marks:
 
-It automatically performs:
+`00 / 05 / 10 / 15 / 20 / 25 / 30 / 35 / 40 / 45 / 50 / 55`
 
-1. workspace/toolchain guard;
-2. canonical DA14585 Keil build using compiler V6.24;
-3. raw BIN freshness/size/SHA verification;
-4. full 256 KiB HINK SPI image packing;
-5. 7050 / 7051 / 7052 header and layout validation;
-6. packed image size validation;
-7. raw firmware payload byte-for-byte verification inside the packed image;
-8. packed SHA256 lock;
-9. manifest generation;
-10. stop at `OWNER_BURN_CONFIRMATION_REQUIRED`.
+The cadence is not counted relative to boot, BLE sync, profile apply, or the
+previous full refresh.
 
-`prepare-test` performs no destructive SPI write.
+Example after sync/apply at 11:18:
 
-### Post-merge proof on main
+- 11:18: FULL baseline
+- 11:19: FLY
+- 11:20: FULL
+- 11:21 through 11:24: FLY
+- 11:25: FULL
+- 11:29: FLY
+- 11:30: FULL
 
-- Smoke: PASS
-- Real Keil build: PASS
-- Raw size: `52876`
-- Raw SHA256:
-  `B30D124DCD14BCD2F362161CBE30515489F694639A40C702E8F67932D7D1E100`
-- Packed size: `262144`
-- Packed SHA256:
-  `E3365276293D032C75F737DF1978C42864F8D5CEDDAC936106AC216F71779D63`
-- Header / CRC / layout validation: PASS
-- Raw payload byte match: PASS
-- Destructive burn: NOT PERFORMED
-- Closeout backup:
-  `D:\EINK\Clock\_incoming\EINK_PREPARE_TEST_CLOSEOUT\20260820_113718`
+### Validation and hardware proof
 
-### Display Profiles v2 milestone
+- static wall-clock policy validator: PASS
+- `git diff --check`: PASS
+- Harness v0.7 `prepare-test`: PASS
+- RAW size: `52872`
+- RAW SHA256:
+  `21D2B343151C30069539F44116BE452DB53705859C40B62A710A6A6C2EA401FE`
+- PACKED size: `262144`
+- PACKED SHA256:
+  `6B9FB8C6E7EE6D073350E99CBFE4C68CBC278D5A800A1083C39B80D968410D3E`
+- packer header / CRC / layout validation: PASS
+- raw payload byte match: PASS
+- fresh SPI backup: PASS
+- erase + write: PASS
+- full 262144-byte SPI readback: PASS
+- READBACK SHA256:
+  `6B9FB8C6E7EE6D073350E99CBFE4C68CBC278D5A800A1083C39B80D968410D3E`
+- packed/readback SHA exact match: PASS
+- cold boot / runtime test: PASS
+- Owner physical e-ink test: PASS
+- Owner confirmed full refresh occurs on the real 5-minute wall-clock boundary.
 
-PR #152 is MERGED / OWNER VISUAL PASS.
+Burn evidence:
 
-- Merge commit:
-  `4ac1d0d120a5486861a867adcd0f28c2fbab8882`
-- Clock Classic physical e-ink visual: PASS
-- Clock Classic periodic refresh: PASS
-- Weekly 7-day profile: PASS
-- Mobile Preview Studio: PASS
-- Fixed preview URL:
-  `https://onlysky17.github.io/Clock/preview/test.html`
+`D:\EINK\Clock\_incoming\EINK_HARNESS_SPI_BURN\20260820_115753`
 
-### Fixed preview infrastructure
+Physical-PASS backup:
 
-PR #151 is MERGED.
+`D:\EINK\Clock\_incoming\EINK_WALL_CLOCK_FULL_REFRESH_5M\PHYSICAL_PASS_20260820_132303`
 
-- Merge commit:
-  `cffdb6503cec78d47db0c30db2f7366af1d5cfc0`
-- Production:
-  `https://onlysky17.github.io/Clock/test.html`
-- Preview:
-  `https://onlysky17.github.io/Clock/preview/test.html`
-- Preview branch:
-  `preview-clock-classic-mobile`
-- GitHub Pages uses GitHub Actions.
-- `github-pages` environment allows both `main` and
-  `preview-clock-classic-mobile`.
+### Harness v0.7
 
-### Standing workflow
+Harness v0.7 remains the canonical execution pipeline.
 
 For normal firmware/layout work:
 
 `source change -> validate -> prepare-test -> Owner burn gate -> cold boot/BLE/physical visual -> backup PASS -> commit/push/PR -> Owner merge`
 
-Machine PASS does not substitute for the Owner physical/visual gate.
+Automatic PASS stages continue without repetitive Owner confirmation.
+
+Owner gates remain destructive SPI burn, device/physical validation where
+required, and final merge.
+
+### Existing merged product / preview milestones
+
+- PR #152 Display Profiles v2: MERGED / OWNER VISUAL PASS
+- Clock Classic physical visual: PASS
+- Weekly 7-day profile: PASS
+- Mobile Preview Studio: PASS
+- PR #151 fixed Pages preview infrastructure: MERGED
+- Production:
+  `https://onlysky17.github.io/Clock/test.html`
+- Fixed preview:
+  `https://onlysky17.github.io/Clock/preview/test.html`
 
 ---
-
 ## EINK Harness v0.1 Closeout
 
 - PR #139 is merged to `main`.

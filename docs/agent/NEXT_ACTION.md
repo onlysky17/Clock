@@ -2,29 +2,32 @@
 
 ## Current Checkpoint — 2026-08-20
 
-EINK Harness v0.7 is MERGED and post-merge proven on canonical `main`.
+PR #155 `fix: align EINK full refresh to 5-minute wall clock` is MERGED and
+Owner physical PASS.
 
-- Main commit:
-  `4bbc64f0c5d6d7697b2bc6d17a10ecf1d04124bd`
-- PR #153: merged
-- `prepare-test`: smoke PASS
-- real Keil build: PASS
-- full SPI pack validation: PASS
-- raw payload byte match: PASS
-- destructive burn during harness proof: NOT PERFORMED
+- Actual main merge commit:
+  `fbcc8562f678f7f6cf651c9f77e591e6b60b7be0`
+- Feature commit:
+  `d9d08c3354d0e5125afa36a580a6d0420928ae4c`
+- Full refresh cadence:
+  `00/05/10/15/20/25/30/35/40/45/50/55` local wall-clock minutes
+- Classic / Weekly FLY refresh between maintenance boundaries: PASS
+- Harness v0.7 `prepare-test`: PASS
+- Packed size: `262144`
+- Packed SHA256:
+  `6B9FB8C6E7EE6D073350E99CBFE4C68CBC278D5A800A1083C39B80D968410D3E`
+- Full SPI readback size: `262144`
+- Full SPI readback SHA256:
+  `6B9FB8C6E7EE6D073350E99CBFE4C68CBC278D5A800A1083C39B80D968410D3E`
+- fresh SPI backup / erase / write / readback verification: PASS
+- cold boot / runtime test: PASS
+- Owner physical e-ink test: PASS
 
-Display Profiles v2 is also merged and Owner-approved.
+Harness v0.7 remains merged and operational as the canonical build / pack /
+verify pipeline.
 
-- PR #152 merge:
-  `4ac1d0d120a5486861a867adcd0f28c2fbab8882`
-- Clock Classic physical visual: PASS
-- Weekly 7-day profile: PASS
-- Mobile Preview Studio: PASS
-- Fixed Preview URL:
-  `https://onlysky17.github.io/Clock/preview/test.html`
-
-Fixed Pages preview infrastructure is merged through PR #151.
-
+Display Profiles v2, Clock Classic, Weekly 7-day, Mobile Preview Studio, and
+the fixed Pages preview infrastructure remain merged / approved.
 ## Next Canonical Action
 
 UNRESOLVED — waiting for the Owner to select the next product/firmware feature.
