@@ -1,0 +1,42 @@
+{
+  "version": 2,
+  "projects": [
+    {
+      "id": "eink",
+      "name": "EINK / Clock",
+      "adapter": "eink",
+      "workspace": "D:\\EINK\\Clock",
+      "brainOptional": false,
+      "actions": [
+        {
+          "id": "prepare",
+          "method": "POST",
+          "destructive": false,
+          "ownerGate": false
+        },
+        {
+          "id": "burn",
+          "method": "POST",
+          "destructive": true,
+          "ownerGate": true
+        }
+      ]
+    },
+    {
+      "id": "electronic",
+      "name": "Electronic",
+      "adapter": "harness-core",
+      "workspace": "D:\\Private\\APP\\Electronic",
+      "brainOptional": true,
+      "paused": true,
+      "readOnly": true,
+      "core": {
+        "baseUrl": "http://127.0.0.1:5174",
+        "projectId": "electronic",
+        "script": "D:\\Private\\APP\\Electronic\\tools\\ElectricHarness\\harness-core.mjs",
+        "workingDirectory": "D:\\Private\\APP\\Electronic"
+      },
+      "actions": []
+    }
+  ]
+}

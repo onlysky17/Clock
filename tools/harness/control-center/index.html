@@ -1,0 +1,1419 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Harness Control Center</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, Segoe UI, Arial, sans-serif;
+      background: #0d1117;
+      color: #e6edf3;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at top right, #172033 0, transparent 36%),
+        #0d1117;
+    }
+
+    .shell {
+      width: min(1120px, calc(100% - 32px));
+      margin: 24px auto 48px;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(22px, 3vw, 34px);
+      letter-spacing: -0.03em;
+    }
+
+    .sub {
+      margin-top: 6px;
+      color: #8b949e;
+      font-size: 13px;
+    }
+
+    .badge {
+      padding: 8px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .05em;
+      background: #21262d;
+      border: 1px solid #30363d;
+    }
+
+    .badge.running {
+      background: #102a43;
+      border-color: #1f6feb;
+      color: #79c0ff;
+    }
+
+    .badge.ready {
+      background: #3b2f05;
+      border-color: #d29922;
+      color: #e3b341;
+    }
+
+    .badge.pass {
+      background: #0f2d1f;
+      border-color: #238636;
+      color: #56d364;
+    }
+
+    .badge.blocked {
+      background: #3d1519;
+      border-color: #da3633;
+      color: #ff7b72;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .grid.two {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 18px;
+      border-bottom: 1px solid #30363d;
+    }
+
+    .tab {
+      border: 0;
+      border-bottom: 3px solid transparent;
+      border-radius: 9px 9px 0 0;
+      background: transparent;
+      color: #8b949e;
+    }
+
+    .tab.active {
+      color: #e6edf3;
+      border-bottom-color: #58a6ff;
+      background: rgba(88, 166, 255, .08);
+    }
+
+    .card,
+    .panel {
+      background: rgba(22, 27, 34, .92);
+      border: 1px solid #30363d;
+      border-radius: 14px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.18);
+    }
+
+    .card {
+      padding: 14px;
+      min-height: 92px;
+    }
+
+    .label {
+      color: #8b949e;
+      text-transform: uppercase;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .08em;
+    }
+
+    .value {
+      margin-top: 10px;
+      font-size: 14px;
+      font-weight: 700;
+      overflow-wrap: anywhere;
+    }
+
+    .panel {
+      padding: 18px;
+      margin-bottom: 16px;
+    }
+
+    .artifact {
+      display: grid;
+      gap: 8px;
+    }
+
+    .artifact-line {
+      display: grid;
+      grid-template-columns: 150px 1fr;
+      gap: 12px;
+      font-size: 13px;
+    }
+
+    .artifact-line span:first-child {
+      color: #8b949e;
+    }
+
+    .artifact-line code {
+      overflow-wrap: anywhere;
+      color: #c9d1d9;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    button {
+      border: 0;
+      border-radius: 10px;
+      padding: 12px 18px;
+      font-weight: 800;
+      cursor: pointer;
+      background: #21262d;
+      color: #e6edf3;
+      border: 1px solid #30363d;
+    }
+
+    button:hover:not(:disabled) {
+      filter: brightness(1.12);
+    }
+
+    button:disabled {
+      opacity: .42;
+      cursor: not-allowed;
+    }
+
+    textarea,
+    input {
+      width: 100%;
+      border: 1px solid #30363d;
+      border-radius: 9px;
+      padding: 10px 12px;
+      background: #0d1117;
+      color: #e6edf3;
+      font: inherit;
+    }
+
+    textarea {
+      min-height: 92px;
+      resize: vertical;
+    }
+
+    input[type="file"] {
+      width: auto;
+      max-width: 100%;
+      padding: 7px;
+    }
+
+    .prepare {
+      background: #1f6feb;
+      border-color: #388bfd;
+      color: white;
+    }
+
+    .burn {
+      background: #da3633;
+      border-color: #f85149;
+      color: white;
+      min-width: 190px;
+    }
+
+    .pass-action {
+      background: #238636;
+      border-color: #3fb950;
+      color: white;
+    }
+
+    .fail-action,
+    .danger-action {
+      background: #8e2632;
+      border-color: #f85149;
+      color: white;
+    }
+
+    .stop {
+      margin-left: auto;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 14px;
+      color: #8b949e;
+      font-size: 12px;
+    }
+
+    .dot {
+      width: 9px;
+      height: 9px;
+      display: inline-block;
+      border-radius: 50%;
+      margin-right: 5px;
+    }
+
+    .blue { background: #58a6ff; }
+    .yellow { background: #d29922; }
+    .green { background: #3fb950; }
+    .red { background: #f85149; }
+    .gray { background: #8b949e; }
+
+    pre {
+      margin: 0;
+      max-height: 410px;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: Consolas, ui-monospace, monospace;
+      font-size: 12px;
+      line-height: 1.55;
+      color: #c9d1d9;
+    }
+
+    .warning {
+      margin-top: 14px;
+      border-left: 3px solid #d29922;
+      padding: 10px 12px;
+      background: rgba(210,153,34,.08);
+      color: #e3b341;
+      font-size: 12px;
+      border-radius: 6px;
+    }
+
+    .chip {
+      padding: 7px 11px;
+      border-radius: 999px;
+      border: 1px solid #1f6feb;
+      color: #79c0ff;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .05em;
+    }
+
+    .list {
+      display: grid;
+      gap: 9px;
+    }
+
+    .list-item {
+      padding: 12px;
+      border: 1px solid #30363d;
+      border-radius: 10px;
+      background: rgba(13, 17, 23, .55);
+    }
+
+    .list-title {
+      font-size: 13px;
+      font-weight: 800;
+      overflow-wrap: anywhere;
+    }
+
+    .list-meta {
+      margin-top: 5px;
+      color: #8b949e;
+      font-size: 11px;
+    }
+
+    .list-detail {
+      margin-top: 7px;
+      color: #c9d1d9;
+      font-size: 12px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+    }
+
+    .form-stack {
+      display: grid;
+      gap: 10px;
+    }
+
+    .status-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .electronic-sticky-summary {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: grid;
+      grid-template-columns: 1.4fr 1fr 1.25fr 1fr 1fr 1fr 1fr;
+      gap: 1px;
+      margin-bottom: 12px;
+      overflow: hidden;
+      border: 1px solid #33465b;
+      border-radius: 12px;
+      background: #33465b;
+      box-shadow: 0 10px 26px rgba(0, 0, 0, .36);
+    }
+
+    .summary-cell {
+      min-width: 0;
+      padding: 10px 11px;
+      background: rgba(16, 23, 32, .98);
+    }
+
+    .summary-cell .label { font-size: 9px; }
+
+    .summary-cell .value {
+      margin-top: 5px;
+      font-size: 12px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .electronic-primary-split {
+      display: grid;
+      grid-template-columns: minmax(0, 65fr) minmax(310px, 35fr);
+      gap: 12px;
+      align-items: start;
+    }
+
+    .electronic-status-split {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      align-items: start;
+    }
+
+    .dense-panel {
+      padding: 14px;
+      margin-bottom: 12px;
+    }
+
+    .dense-status-pre {
+      height: 230px;
+      max-height: 230px;
+      overflow: auto;
+    }
+
+    .electronic-subtabs {
+      display: flex;
+      gap: 4px;
+      padding: 0 8px;
+      overflow-x: auto;
+      border-bottom: 1px solid #30363d;
+    }
+
+    .electronic-subtab {
+      flex: 0 0 auto;
+      border: 0;
+      border-bottom: 3px solid transparent;
+      border-radius: 8px 8px 0 0;
+      background: transparent;
+      color: #8b949e;
+      padding: 10px 14px 8px;
+    }
+
+    .electronic-subtab.active {
+      color: #e6edf3;
+      border-bottom-color: #58a6ff;
+      background: rgba(88, 166, 255, .08);
+    }
+
+    .electronic-subtab-shell {
+      padding: 0;
+      overflow: hidden;
+    }
+
+    .electronic-subtab-panel {
+      height: 390px;
+      max-height: 390px;
+      overflow: auto;
+      padding: 12px;
+    }
+
+    .evidence-compact-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .evidence-compact-grid .list-item {
+      min-height: 82px;
+      padding: 9px;
+    }
+
+    .compact-rows {
+      display: grid;
+      gap: 6px;
+    }
+
+    details.compact-row {
+      border: 1px solid #30363d;
+      border-radius: 9px;
+      background: rgba(13, 17, 23, .55);
+    }
+
+    details.compact-row summary {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      padding: 9px 11px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 750;
+      list-style-position: inside;
+    }
+
+    details.compact-row summary span:last-child {
+      color: #8b949e;
+      font-size: 10px;
+      font-weight: 500;
+    }
+
+    details.compact-row pre {
+      max-height: 210px;
+      padding: 10px 12px;
+      border-top: 1px solid #30363d;
+      background: #090d12;
+    }
+
+    #electronicLog {
+      height: 320px;
+      max-height: 320px;
+      overflow: auto;
+    }
+
+    .pending-files {
+      color: #8b949e;
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+
+    .hidden { display: none !important; }
+
+    @media (max-width: 800px) {
+      .grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .artifact-line {
+        grid-template-columns: 1fr;
+        gap: 3px;
+      }
+
+      .grid.two {
+        grid-template-columns: 1fr;
+      }
+
+      .status-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .electronic-sticky-summary {
+        position: static;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .electronic-primary-split,
+      .electronic-status-split {
+        grid-template-columns: 1fr;
+      }
+
+      .evidence-compact-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 520px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      header {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .actions button {
+        width: 100%;
+      }
+
+      .stop {
+        margin-left: 0;
+      }
+
+      .evidence-compact-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div>
+        <h1>Harness Control Center</h1>
+        <div class="sub">Multiproject v0.2 · local-only · 127.0.0.1 · action allow-list</div>
+      </div>
+      <div id="stateBadge" class="badge">IDLE</div>
+    </header>
+
+    <nav id="projectTabs" class="tabs" aria-label="Projects"></nav>
+
+    <div id="einkView">
+
+    <section class="grid">
+      <div class="card">
+        <div class="label">Project</div>
+        <div id="project" class="value">EINK / Clock</div>
+      </div>
+
+      <div class="card">
+        <div class="label">Branch</div>
+        <div id="branch" class="value">-</div>
+      </div>
+
+      <div class="card">
+        <div class="label">HEAD</div>
+        <div id="head" class="value">-</div>
+      </div>
+
+      <div class="card">
+        <div class="label">Tracked / Untracked</div>
+        <div id="treeState" class="value">-</div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="label" style="margin-bottom:14px">Locked Artifact</div>
+
+      <div class="artifact">
+        <div class="artifact-line">
+          <span>Firmware</span>
+          <code id="artifactPath">Chưa có artifact hợp lệ</code>
+        </div>
+
+        <div class="artifact-line">
+          <span>Size</span>
+          <code id="artifactSize">-</code>
+        </div>
+
+        <div class="artifact-line">
+          <span>SHA256</span>
+          <code id="artifactSha">-</code>
+        </div>
+      </div>
+
+      <div class="warning">
+        Nút NẠP FIRMWARE chỉ sáng sau khi Build + Pack + SHA + manifest đều PASS.
+        Khi bấm nạp, Harness vẫn bắt buộc fresh SPI backup, erase, write và full readback SHA verify.
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="actions">
+        <button id="prepareButton" class="prepare">PREPARE TEST</button>
+        <button id="burnButton" class="burn" disabled>NẠP FIRMWARE</button>
+        <button id="refreshButton">REFRESH</button>
+        <button id="stopButton" class="stop">DỪNG SERVER</button>
+      </div>
+
+      <div class="legend">
+        <span><i class="dot blue"></i>Running</span>
+        <span><i class="dot yellow"></i>Waiting Owner</span>
+        <span><i class="dot green"></i>PASS</span>
+        <span><i class="dot red"></i>Blocked / Fail</span>
+        <span><i class="dot gray"></i>Idle</span>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="label" style="margin-bottom:14px">Live Log</div>
+      <pre id="log">Loading...</pre>
+    </section>
+    </div>
+
+    <div id="electronicView" class="hidden">
+      <section class="electronic-sticky-summary">
+        <div class="summary-cell"><div class="label">Task</div><div id="electronicTask" class="value">-</div></div>
+        <div class="summary-cell"><div class="label">State</div><div id="electronicState" class="value">-</div></div>
+        <div class="summary-cell"><div class="label">Next Action</div><div id="electronicNext" class="value">-</div></div>
+        <div class="summary-cell"><div class="label">Runtime</div><div id="electronicRuntimeSummary" class="value">-</div></div>
+        <div class="summary-cell"><div class="label">Brain</div><div id="electronicBrainSummary" class="value">-</div></div>
+        <div class="summary-cell"><div class="label">Oracle</div><div id="electronicOracle" class="value">-</div></div>
+        <div class="summary-cell"><div class="label">Provider</div><div id="electronicProviderSummary" class="value">-</div></div>
+      </section>
+
+      <section class="panel dense-panel">
+        <div class="actions">
+          <span id="coreChip" class="chip">ELECTRONIC · PAUSED / READ-ONLY</span>
+          <span id="coreBuild" class="chip">Core checking...</span>
+          <button id="electronicRefreshButton">REFRESH</button>
+          <button id="coreStartButton">START CORE</button>
+          <button id="rediscoverButton">REDISCOVER PROFILE</button>
+          <button id="coreRestartButton" class="danger-action">RESTART CORE</button>
+        </div>
+        <div class="warning">
+          Electronic đang tạm dừng và chỉ hiển thị dữ liệu tham chiếu từ Electric Harness Core tại 127.0.0.1:5174.
+          Mọi action đều bị khóa tại allow-list; EINK safety path hoàn toàn tách biệt.
+        </div>
+      </section>
+
+      <section class="electronic-primary-split">
+        <section class="panel dense-panel">
+          <div class="label" style="margin-bottom:14px">Task Intake tự nhiên</div>
+          <div class="form-stack">
+            <textarea id="electronicRequest" placeholder="Mô tả task bằng tiếng Việt tự nhiên... (có thể Ctrl+V screenshot)"></textarea>
+            <div class="actions">
+              <input id="taskEvidenceInput" type="file" multiple accept="image/*,video/*,.txt,.md,.json,.log,.pdf">
+              <button id="pasteTaskEvidenceButton">DÁN CLIPBOARD</button>
+              <button id="clearTaskEvidenceButton">XÓA FILE CHỜ</button>
+            </div>
+            <div id="taskPendingFiles" class="pending-files">Chưa có evidence chờ.</div>
+            <div class="actions">
+              <button id="createTaskButton" class="prepare">CREATE & RUN</button>
+              <button id="runTaskButton">RUN / RESUME</button>
+              <button id="recoverTaskButton">RECOVER SELECTED</button>
+              <button id="cancelTaskButton" class="danger-action">CANCEL STUCK RUN</button>
+            </div>
+            <div id="electronicMessage" class="pending-files"></div>
+          </div>
+        </section>
+
+        <section class="panel dense-panel">
+          <div class="label" style="margin-bottom:14px">Owner Gate</div>
+          <div class="form-stack">
+            <textarea id="ownerFeedback" placeholder="Nếu FAIL, mô tả ngắn điều nhìn thấy sai... (có thể Ctrl+V screenshot)"></textarea>
+            <div class="actions">
+              <input id="feedbackEvidenceInput" type="file" multiple accept="image/*,video/*,.txt,.md,.json,.log,.pdf">
+              <button id="pasteFeedbackEvidenceButton">DÁN CLIPBOARD</button>
+              <button id="clearFeedbackEvidenceButton">XÓA FILE CHỜ</button>
+            </div>
+            <div id="feedbackPendingFiles" class="pending-files">Chưa có evidence chờ.</div>
+            <div class="actions">
+              <button id="ownerFailButton" class="fail-action">FAIL & AUTO FIX</button>
+              <button id="ownerPassButton" class="pass-action">OWNER PASS</button>
+            </div>
+          </div>
+        </section>
+      </section>
+
+      <section class="electronic-status-split">
+        <section class="panel dense-panel"><div class="label" style="margin-bottom:10px">Current Strategy / Progress</div><pre id="electronicProgress" class="dense-status-pre">-</pre></section>
+        <section class="panel dense-panel"><div class="label" style="margin-bottom:10px">Runtime / Brain / Cost & Quota</div><pre id="electronicRuntimeBrain" class="dense-status-pre">-</pre></section>
+      </section>
+
+      <section class="panel electronic-subtab-shell">
+        <nav class="electronic-subtabs" aria-label="Electronic detail views">
+          <button class="electronic-subtab active" data-electronic-tab="evidence">Evidence</button>
+          <button class="electronic-subtab" data-electronic-tab="runs">Runs</button>
+          <button class="electronic-subtab" data-electronic-tab="history">History</button>
+          <button class="electronic-subtab" data-electronic-tab="memory">Memory</button>
+          <button class="electronic-subtab" data-electronic-tab="skills">Skills</button>
+          <button class="electronic-subtab" data-electronic-tab="agent-packets">Agent Packets</button>
+        </nav>
+
+        <div id="electronicTabEvidence" class="electronic-subtab-panel" data-electronic-panel="evidence">
+          <div id="evidenceList" class="evidence-compact-grid"></div>
+        </div>
+
+        <div id="electronicTabRuns" class="electronic-subtab-panel hidden" data-electronic-panel="runs">
+          <div class="label" style="margin-bottom:8px">Recent Tasks — click để chọn Recover</div>
+          <div id="taskList" class="compact-rows" style="margin-bottom:14px"></div>
+          <div class="label" style="margin-bottom:8px">Run History — click để mở details</div>
+          <div id="runsList" class="compact-rows"></div>
+        </div>
+
+        <div id="electronicTabHistory" class="electronic-subtab-panel hidden" data-electronic-panel="history">
+          <div id="historyList" class="list"></div>
+        </div>
+
+        <div id="electronicTabMemory" class="electronic-subtab-panel hidden" data-electronic-panel="memory">
+          <div id="memoryList" class="list"></div>
+        </div>
+
+        <div id="electronicTabSkills" class="electronic-subtab-panel hidden" data-electronic-panel="skills">
+          <div id="skillsList" class="list"></div>
+          <div class="form-stack" style="margin-top:12px">
+            <input id="skillName" placeholder="Tên skill (optional)">
+            <input id="skillInstruction" placeholder="Chỉ promote khi Owner yêu cầu">
+            <button id="promoteSkillButton">PROMOTE CURRENT TASK TO SKILL</button>
+          </div>
+        </div>
+
+        <div id="electronicTabAgentPackets" class="electronic-subtab-panel hidden" data-electronic-panel="agent-packets">
+          <div class="label" style="margin-bottom:8px">Current Task / Owner Contract</div>
+          <pre id="electronicSummary" style="max-height:170px;margin-bottom:12px">-</pre>
+          <div class="label" style="margin-bottom:8px">Agent Packets — click để mở details</div>
+          <div id="agentPacketsList" class="compact-rows"></div>
+        </div>
+      </section>
+
+      <section class="panel dense-panel"><div class="label" style="margin-bottom:10px">Live Log</div><pre id="electronicLog">Loading...</pre></section>
+    </div>
+
+    <section id="genericView" class="panel hidden">
+      <div id="genericTitle" class="label" style="margin-bottom:14px">Project</div>
+      <pre id="genericStatus">Adapter chưa sẵn sàng.</pre>
+    </section>
+  </main>
+
+  <script>
+    let token = "";
+    let current = null;
+    let polling = null;
+    let hub = null;
+    let activeProjectId = "";
+    let selectedElectronicTaskId = "";
+    let activeElectronicSubTab = "evidence";
+    const pendingEvidence = { task: [], feedback: [] };
+
+    const $ = (id) => document.getElementById(id);
+
+    function shortSha(value) {
+      if (!value) return "-";
+      return value.slice(0, 12);
+    }
+
+    function badgeClass(state) {
+      if (state === "RUNNING") return "running";
+      if (["READY_TO_BURN", "WAITING_OWNER_GATE"].includes(state)) return "ready";
+      if (["SPI_BURN_VERIFIED", "PASS"].includes(state)) return "pass";
+      if (["BLOCKED", "PLUGIN_UNAVAILABLE", "ADAPTER_UNAVAILABLE"].includes(state)) return "blocked";
+      return "";
+    }
+
+    function setVisible(viewId) {
+      ["einkView", "electronicView", "genericView"].forEach((id) => {
+        $(id).classList.toggle("hidden", id !== viewId);
+      });
+    }
+
+    function listItem(title, meta, detail) {
+      const item = document.createElement("article");
+      item.className = "list-item";
+      const titleNode = document.createElement("div");
+      titleNode.className = "list-title";
+      titleNode.textContent = title || "-";
+      const metaNode = document.createElement("div");
+      metaNode.className = "list-meta";
+      metaNode.textContent = meta || "";
+      item.append(titleNode, metaNode);
+      if (detail) {
+        const detailNode = document.createElement("div");
+        detailNode.className = "list-detail";
+        detailNode.textContent = detail;
+        item.appendChild(detailNode);
+      }
+      return item;
+    }
+
+    function renderList(id, items, renderer) {
+      const container = $(id);
+      container.replaceChildren();
+      if (!items || items.length === 0) {
+        container.appendChild(listItem("Không có dữ liệu", "", ""));
+        return;
+      }
+      items.forEach((item) => container.appendChild(renderer(item)));
+    }
+
+    function renderExpandableRows(id, items, mapRow) {
+      const container = $(id);
+      container.replaceChildren();
+      if (!items || items.length === 0) {
+        container.appendChild(listItem("Không có dữ liệu", "", ""));
+        return;
+      }
+      items.forEach((item) => {
+        const row = mapRow(item);
+        const details = document.createElement("details");
+        details.className = "compact-row";
+        const summary = document.createElement("summary");
+        const title = document.createElement("span");
+        const meta = document.createElement("span");
+        title.textContent = row.title || "-";
+        meta.textContent = row.meta || "";
+        summary.append(title, meta);
+        const body = document.createElement("pre");
+        body.textContent = row.detail || JSON.stringify(item, null, 2);
+        details.append(summary, body);
+        container.appendChild(details);
+      });
+    }
+
+    function setElectronicSubTab(tabId) {
+      activeElectronicSubTab = tabId;
+      document.querySelectorAll("[data-electronic-tab]").forEach((button) => {
+        button.classList.toggle("active", button.dataset.electronicTab === tabId);
+      });
+      document.querySelectorAll("[data-electronic-panel]").forEach((panel) => {
+        panel.classList.toggle("hidden", panel.dataset.electronicPanel !== tabId);
+      });
+    }
+
+    function render(data) {
+      current = data;
+      token = data.sessionToken || token;
+      setVisible("einkView");
+
+      $("project").textContent = data.projectName || "EINK / Clock";
+      $("branch").textContent = data.branch || "-";
+      $("head").textContent = shortSha(data.head);
+
+      $("treeState").textContent =
+        `${data.trackedDirtyCount || 0} tracked / ${data.untrackedCount || 0} untracked`;
+
+      const badge = $("stateBadge");
+      badge.textContent = data.state || "IDLE";
+      badge.className = `badge ${badgeClass(data.state)}`;
+
+      if (data.artifact) {
+        $("artifactPath").textContent = data.artifact.path;
+        $("artifactSize").textContent = `${data.artifact.size} bytes`;
+        $("artifactSha").textContent = data.artifact.sha256;
+      } else {
+        $("artifactPath").textContent = "Chưa có artifact hợp lệ";
+        $("artifactSize").textContent = "-";
+        $("artifactSha").textContent = "-";
+      }
+
+      $("prepareButton").disabled = !!data.busy;
+      $("burnButton").disabled = !data.readyToBurn || !!data.busy;
+
+      $("log").textContent = data.lastLog || "No log yet.";
+    }
+
+    function renderElectronic(data) {
+      current = data;
+      token = data.sessionToken || token;
+      setVisible("electronicView");
+
+      const task = data.currentTask || {};
+      const online = !!data.coreOnline;
+      const readOnly = !!data.readOnly || !!data.paused;
+      const strategy = data.strategy || {};
+      const progress = data.progress || {};
+      const runtime = data.runtime || {};
+      const brain = data.brain || {};
+      const cost = data.costQuota || brain.status?.costGuard || {};
+      selectedElectronicTaskId = selectedElectronicTaskId || task.taskId || "";
+
+      $("electronicTask").textContent = task.taskId || "-";
+      $("electronicState").textContent = data.state || "UNKNOWN";
+      $("electronicNext").textContent = task.nextAction || "-";
+      $("electronicRuntimeSummary").textContent =
+        runtime.appUrl || (runtime.profile?.port ? `Port ${runtime.profile.port}` : "OFFLINE");
+      $("electronicBrainSummary").textContent =
+        brain.status?.ready ? "READY" : brain.status?.configured ? "CONFIGURED" : "NOT CONFIGURED";
+      $("electronicOracle").textContent =
+        data.oracle?.locked ? "LOCKED" : "UNLOCKED";
+      $("electronicProviderSummary").textContent =
+        `${brain.status?.provider || brain.supervisor?.provider || "-"} · ${brain.status?.model || brain.supervisor?.model || "auto"}`;
+      $("coreChip").textContent = readOnly
+        ? `ELECTRONIC · PAUSED / READ-ONLY · ${online ? "ONLINE" : "OFFLINE"}`
+        : online ? "FULL HARNESS CORE · ONLINE" : "HARNESS CORE · OFFLINE";
+      $("coreBuild").textContent = data.coreBuildId || "Core unavailable";
+      $("electronicLog").textContent = data.liveLog || data.coreError || "Chưa có log.";
+      $("electronicProgress").textContent = JSON.stringify({
+        status: data.status || null,
+        phase: data.phase || null,
+        strategy: data.strategy || null,
+        attempt: progress.attempt || 0,
+        validationMetrics: progress.validationMetrics || null,
+        bestFailedCount: progress.bestFailedCount ?? null,
+        visualFailureRepeatCount: progress.visualFailureRepeatCount || 0,
+        ownerRejectionStreak: progress.ownerRejectionStreak || 0
+      }, null, 2);
+      $("electronicRuntimeBrain").textContent = JSON.stringify({
+        runtime: {
+          url: runtime.appUrl || "",
+          command: runtime.profile?.command || "",
+          port: runtime.profile?.port || null,
+          managedPid: runtime.managedRuntimePid || null,
+          gate: runtime.gate || null
+        },
+        brain: {
+          provider: brain.status?.provider || brain.supervisor?.provider || "",
+          configured: brain.status?.configured ?? brain.supervisor?.configured ?? false,
+          ready: brain.status?.ready ?? false,
+          model: brain.status?.model || brain.supervisor?.model || "",
+          error: brain.status?.error || ""
+        },
+        costQuota: cost,
+        updater: data.updater || null
+      }, null, 2);
+      $("electronicSummary").textContent = [
+        `Task: ${task.taskId || "-"}`,
+        `Run: ${task.runId || "-"}`,
+        `Result: ${task.result || "-"}`,
+        `Agent: ${task.agentResult || "-"}`,
+        `Owner intent: ${task.ownerIntentStatus || "-"}`,
+        `Visual gate: ${task.visualMachineGate || "-"}`,
+        `Next: ${task.nextAction || "-"}`,
+        "",
+        task.agentSummary || "",
+        "",
+        "Owner Contract:",
+        JSON.stringify(data.oracle?.ownerContract || null, null, 2)
+      ].join("\n");
+
+      renderList("taskList", data.recentTasks, (item) => {
+        const node = listItem(item.taskId, item.modifiedAt, item.title || item.objective);
+        node.style.cursor = "pointer";
+        node.title = "Chọn task này để RECOVER";
+        node.addEventListener("click", () => {
+          selectedElectronicTaskId = item.taskId;
+          $("electronicMessage").textContent = `Selected for recovery: ${item.taskId}`;
+        });
+        return node;
+      });
+
+      const runRows = (data.history || []).filter((item) =>
+        item.runId || /RUN|VALIDATION|RUNTIME/i.test(item.type || "")
+      );
+      renderExpandableRows("runsList", runRows, (item) => ({
+        title: item.runId || item.type || "RUN EVENT",
+        meta: `${item.at || ""} · ${item.taskId || ""}`,
+        detail: JSON.stringify(item, null, 2)
+      }));
+      renderList("historyList", data.history, (item) =>
+        listItem(
+          item.type || "EVENT",
+          `${item.at || ""} · ${item.taskId || ""}`,
+          item.feedback || item.requestText || item.summary || item.error || item.title || ""
+        )
+      );
+      renderList("memoryList", data.memory, (item) =>
+        listItem(item.category || "memory", item.sourceTaskId || item.at || "", item.summary || item.details || "")
+      );
+      renderList("skillsList", data.skills, (item) =>
+        listItem(item.name || item.id, `${item.projectId || ""} · ${item.taskId || ""}`, item.createdAt || "")
+      );
+      renderList("evidenceList", (data.evidence || []).slice(0, 40), (item) =>
+        listItem(item.filename || item.assetId, `${item.mime || ""} · ${item.size || 0} bytes`, item.note || item.derivativeType || "")
+      );
+
+      const agentRows = (data.history || []).filter((item) =>
+        /AGY|AGENT|PACKET|EXECUT/i.test(item.type || "") ||
+        item.agentResult || item.agentSummary
+      );
+      renderExpandableRows("agentPacketsList", agentRows, (item) => ({
+        title: item.type || "AGENT PACKET",
+        meta: `${item.at || ""} · ${item.taskId || ""}`,
+        detail: JSON.stringify(item, null, 2)
+      }));
+
+      setElectronicSubTab(activeElectronicSubTab);
+
+      $("coreStartButton").disabled = readOnly || online;
+      $("rediscoverButton").disabled = readOnly || !online || data.busy;
+      $("coreRestartButton").disabled = readOnly || !online;
+      $("createTaskButton").disabled = readOnly || !online || data.busy;
+      $("runTaskButton").disabled = readOnly || !online || data.busy || !task.taskId;
+      $("recoverTaskButton").disabled = readOnly || !online || data.busy || !selectedElectronicTaskId;
+      $("cancelTaskButton").disabled = readOnly || !online || !data.busy;
+      const ownerGate = !readOnly && online && !data.busy && data.state === "WAITING_OWNER_GATE";
+      $("ownerFailButton").disabled = !ownerGate;
+      $("ownerPassButton").disabled = !ownerGate;
+      $("promoteSkillButton").disabled = readOnly || !online || data.busy || !task.taskId;
+      for (const id of [
+        "electronicRequest", "taskEvidenceInput", "pasteTaskEvidenceButton",
+        "clearTaskEvidenceButton", "ownerFeedback", "feedbackEvidenceInput",
+        "pasteFeedbackEvidenceButton", "clearFeedbackEvidenceButton",
+        "skillName", "skillInstruction"
+      ]) {
+        if ($(id)) $(id).disabled = readOnly;
+      }
+      if (readOnly) {
+        $("electronicMessage").textContent = "Electronic đang PAUSED — tab này chỉ dùng để tham chiếu, mọi action đã bị khóa.";
+      }
+
+      const badge = $("stateBadge");
+      badge.textContent = data.state || "UNKNOWN";
+      badge.className = `badge ${badgeClass(data.state)}`;
+    }
+
+    function renderProject(data) {
+      if (data.adapter === "eink") {
+        render(data);
+        return;
+      }
+
+      if (data.adapter === "harness-core") {
+        renderElectronic(data);
+        return;
+      }
+
+      current = data;
+      setVisible("genericView");
+      $("genericTitle").textContent = data.projectName || data.projectId || "Project";
+      $("genericStatus").textContent = JSON.stringify(data, null, 2);
+    }
+
+    function renderTabs() {
+      const tabs = $("projectTabs");
+      tabs.replaceChildren();
+
+      (hub.projects || []).forEach((project) => {
+        const button = document.createElement("button");
+        button.className = `tab ${project.id === activeProjectId ? "active" : ""}`;
+        button.textContent = project.name;
+        button.addEventListener("click", async () => {
+          activeProjectId = project.id;
+          renderTabs();
+          await refresh();
+        });
+        tabs.appendChild(button);
+      });
+    }
+
+    async function refresh() {
+      try {
+        const response = await fetch(`/api/projects/${encodeURIComponent(activeProjectId)}/status`, {
+          cache: "no-store"
+        });
+
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        renderProject(await response.json());
+      } catch (error) {
+        $("stateBadge").textContent = "OFFLINE";
+        $("stateBadge").className = "badge blocked";
+        const target = activeProjectId === "electronic" ? $("electronicLog") : $("log");
+        target.textContent = `Control Center offline: ${error.message}`;
+      }
+    }
+
+    async function loadHub() {
+      const response = await fetch("/api/status", { cache: "no-store" });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      hub = await response.json();
+      token = hub.sessionToken || token;
+      activeProjectId = activeProjectId || hub.defaultProjectId || hub.projects[0].id;
+      renderTabs();
+      await refresh();
+    }
+
+    async function post(path, body = {}) {
+      const response = await fetch(path, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Eink-Control-Token": token
+        },
+        body: JSON.stringify(body)
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || `HTTP ${response.status}`);
+      }
+
+      return data;
+    }
+
+    async function electronicAction(actionId, body = {}) {
+      return post(`/api/projects/electronic/actions/${encodeURIComponent(actionId)}`, body);
+    }
+
+    function updatePendingEvidence(scope) {
+      const target = scope === "task" ? $("taskPendingFiles") : $("feedbackPendingFiles");
+      const files = pendingEvidence[scope];
+      target.textContent = files.length
+        ? files.map((file) => `${file.name} (${file.size} bytes)`).join(" · ")
+        : "Chưa có evidence chờ.";
+    }
+
+    function addEvidenceFiles(scope, files) {
+      const existing = pendingEvidence[scope];
+      const keys = new Set(existing.map((file) => `${file.name}:${file.size}:${file.lastModified}`));
+      for (const file of files || []) {
+        if (!file || file.size > 50 * 1024 * 1024) continue;
+        const key = `${file.name}:${file.size}:${file.lastModified}`;
+        if (!keys.has(key)) {
+          existing.push(file);
+          keys.add(key);
+        }
+      }
+      updatePendingEvidence(scope);
+    }
+
+    function fileToBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || "").split(",")[1] || "");
+        reader.onerror = () => reject(reader.error || new Error("Không đọc được evidence."));
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function uploadPendingEvidence(scope, note, taskId) {
+      const refs = [];
+      const files = [...pendingEvidence[scope]];
+      for (let index = 0; index < files.length; index += 1) {
+        const file = files[index];
+        $("electronicMessage").textContent = `Uploading ${index + 1}/${files.length}: ${file.name}`;
+        const result = await electronicAction("evidence-upload", {
+          filename: file.name,
+          mime: file.type || "application/octet-stream",
+          dataBase64: await fileToBase64(file),
+          note,
+          taskId
+        });
+        if (result.evidence) refs.push(result.evidence);
+      }
+      pendingEvidence[scope] = [];
+      updatePendingEvidence(scope);
+      return refs;
+    }
+
+    async function addClipboardEvidence(scope) {
+      if (!navigator.clipboard || !navigator.clipboard.read) {
+        throw new Error("Clipboard API không khả dụng; hãy Ctrl+V trực tiếp vào ô nội dung.");
+      }
+      const files = [];
+      for (const item of await navigator.clipboard.read()) {
+        for (const type of item.types) {
+          if (!type.startsWith("image/")) continue;
+          const blob = await item.getType(type);
+          files.push(new File([blob], `clipboard-${Date.now()}.png`, { type }));
+        }
+      }
+      addEvidenceFiles(scope, files);
+    }
+
+    function bindEvidencePaste(textareaId, scope) {
+      $(textareaId).addEventListener("paste", (event) => {
+        const files = [...(event.clipboardData?.files || [])];
+        if (files.length) addEvidenceFiles(scope, files);
+      });
+    }
+
+    $("prepareButton").addEventListener("click", async () => {
+      $("prepareButton").disabled = true;
+      $("burnButton").disabled = true;
+      $("stateBadge").textContent = "RUNNING";
+      $("stateBadge").className = "badge running";
+      $("log").textContent =
+        "Prepare Test đang chạy...\nKeil Build -> Pack -> Verify -> SHA lock";
+
+      try {
+        render(await post("/api/projects/eink/actions/prepare"));
+      } catch (error) {
+        $("log").textContent = `Prepare failed: ${error.message}`;
+      }
+
+      await refresh();
+    });
+
+    $("burnButton").addEventListener("click", async () => {
+      if (!current || !current.readyToBurn || !current.artifact) return;
+
+      const sha = current.artifact.sha256;
+
+      const ok = window.confirm(
+        "XÁC NHẬN NẠP FIRMWARE?\n\n" +
+        `Size: ${current.artifact.size} bytes\n` +
+        `SHA256: ${sha}\n\n` +
+        "Harness sẽ tự fresh backup SPI trước khi erase/write.\n" +
+        "Đây là thao tác ghi thật lên board."
+      );
+
+      if (!ok) return;
+
+      $("prepareButton").disabled = true;
+      $("burnButton").disabled = true;
+      $("stateBadge").textContent = "RUNNING";
+      $("stateBadge").className = "badge running";
+      $("log").textContent =
+        "Owner confirmed burn.\nFresh backup -> erase -> write -> readback -> SHA verify";
+
+      try {
+        render(await post("/api/projects/eink/actions/burn", {
+          confirm: "BURN",
+          sha256: sha
+        }));
+      } catch (error) {
+        $("log").textContent = `Burn failed: ${error.message}`;
+      }
+
+      await refresh();
+    });
+
+    $("taskEvidenceInput").addEventListener("change", (event) => {
+      addEvidenceFiles("task", [...(event.target.files || [])]);
+      event.target.value = "";
+    });
+    $("feedbackEvidenceInput").addEventListener("change", (event) => {
+      addEvidenceFiles("feedback", [...(event.target.files || [])]);
+      event.target.value = "";
+    });
+    bindEvidencePaste("electronicRequest", "task");
+    bindEvidencePaste("ownerFeedback", "feedback");
+
+    document.querySelectorAll("[data-electronic-tab]").forEach((button) => {
+      button.addEventListener("click", () => {
+        setElectronicSubTab(button.dataset.electronicTab);
+      });
+    });
+
+    $("pasteTaskEvidenceButton").addEventListener("click", async () => {
+      try { await addClipboardEvidence("task"); }
+      catch (error) { $("electronicMessage").textContent = error.message; }
+    });
+    $("pasteFeedbackEvidenceButton").addEventListener("click", async () => {
+      try { await addClipboardEvidence("feedback"); }
+      catch (error) { $("electronicMessage").textContent = error.message; }
+    });
+    $("clearTaskEvidenceButton").addEventListener("click", () => {
+      pendingEvidence.task = [];
+      updatePendingEvidence("task");
+    });
+    $("clearFeedbackEvidenceButton").addEventListener("click", () => {
+      pendingEvidence.feedback = [];
+      updatePendingEvidence("feedback");
+    });
+
+    $("coreStartButton").addEventListener("click", async () => {
+      try {
+        $("electronicMessage").textContent = "Đang khởi động Harness Core...";
+        await electronicAction("core-start");
+        await refresh();
+      } catch (error) { $("electronicMessage").textContent = error.message; }
+    });
+
+    $("createTaskButton").addEventListener("click", async () => {
+      const request = $("electronicRequest").value.trim();
+      if (!request) {
+        $("electronicMessage").textContent = "Hãy mô tả task bằng ngôn ngữ tự nhiên.";
+        return;
+      }
+      try {
+        const evidence = await uploadPendingEvidence("task", request, "");
+        await electronicAction("task-create", { request, evidence });
+        $("electronicRequest").value = "";
+        $("electronicMessage").textContent = "Core đã nhận task và bắt đầu pipeline.";
+        await refresh();
+      } catch (error) { $("electronicMessage").textContent = error.message; }
+    });
+
+    $("runTaskButton").addEventListener("click", async () => {
+      try {
+        await electronicAction("task-run", { taskId: current?.currentTask?.taskId || "" });
+        $("electronicMessage").textContent = "RUN / RESUME đã được Core nhận.";
+        await refresh();
+      } catch (error) { $("electronicMessage").textContent = error.message; }
+    });
+
+    $("recoverTaskButton").addEventListener("click", async () => {
+      try {
+        await electronicAction("task-recover", { taskId: selectedElectronicTaskId });
+        $("electronicMessage").textContent = `Core đã recover ${selectedElectronicTaskId}.`;
+        await refresh();
+      } catch (error) { $("electronicMessage").textContent = error.message; }
+    });
+
+    $("cancelTaskButton").addEventListener("click", async () => {
+      if (!window.confirm("Hủy phase Core đang bị treo? Core sẽ chuyển task sang RECOVERING.")) return;
+      try {
+        await electronicAction("task-cancel");
+        $("electronicMessage").textContent = "Core đã cancel phase và giữ task để resume.";
+        await refresh();
+      } catch (error) { $("electronicMessage").textContent = error.message; }
+    });
+
+    $("ownerFailButton").addEventListener("click", async () => {
+      const feedback = $("ownerFeedback").value.trim();
+      if (!feedback) {
+        $("electronicMessage").textContent = "FAIL cần feedback ngắn từ Owner.";
+        return;
+      }
+      if (!window.confirm("Gửi OWNER FAIL cho Core? Core sẽ compile feedback và AUTO FIX cùng task.")) return;
+      try {
+        const evidence = await uploadPendingEvidence(
+          "feedback",
+          feedback,
+          current?.currentTask?.taskId || ""
+        );
+        await electronicAction("review-fail", { feedback, evidence });
+        $("ownerFeedback").value = "";
+        $("electronicMessage").textContent = "Owner FAIL đã vào Core; auto-fix do Core quản lý.";
+        await refresh();
+      } catch (error) { $("electronicMessage").textContent = error.message; }
+    });
+
+    $("ownerPassButton").addEventListener("click", async () => {
+      if (!window.confirm("Xác nhận OWNER PASS cho task hiện tại?")) return;
+      try {
+        await electronicAction("review-pass");
+        $("electronicMessage").textContent = "Owner PASS đã vào Core.";
+        await refresh();
+      } catch (error) { $("electronicMessage").textContent = error.message; }
+    });
+
+    $("rediscoverButton").addEventListener("click", async () => {
+      try {
+        await electronicAction("project-rediscover");
+        $("electronicMessage").textContent = "Core đã rediscover technical profile.";
+        await refresh();
+      } catch (error) { $("electronicMessage").textContent = error.message; }
+    });
+
+    $("coreRestartButton").addEventListener("click", async () => {
+      if (!window.confirm("Restart Electric Harness Core? State trên disk vẫn được giữ.")) return;
+      try {
+        await electronicAction("core-restart");
+        $("electronicMessage").textContent = "Core đang restart...";
+        window.setTimeout(refresh, 2800);
+      } catch (error) { $("electronicMessage").textContent = error.message; }
+    });
+
+    $("promoteSkillButton").addEventListener("click", async () => {
+      if (!window.confirm("Promote task hiện tại thành skill theo yêu cầu Owner?")) return;
+      try {
+        const taskId = current?.currentTask?.taskId || "";
+        await electronicAction("skill-promote", {
+          taskId,
+          name: $("skillName").value.trim(),
+          instruction: $("skillInstruction").value.trim()
+        });
+        $("electronicMessage").textContent = "Core đã promote skill.";
+        await refresh();
+      } catch (error) { $("electronicMessage").textContent = error.message; }
+    });
+
+    $("refreshButton").addEventListener("click", refresh);
+    $("electronicRefreshButton").addEventListener("click", refresh);
+
+    $("stopButton").addEventListener("click", async () => {
+      const ok = window.confirm("Dừng Harness Control Center?");
+      if (!ok) return;
+
+      try {
+        await post("/api/shutdown");
+      } catch (_) {
+      }
+
+      window.setTimeout(refresh, 500);
+    });
+
+    loadHub().catch((error) => {
+      $("stateBadge").textContent = "OFFLINE";
+      $("stateBadge").className = "badge blocked";
+      $("log").textContent = `Control Center offline: ${error.message}`;
+    });
+
+    polling = window.setInterval(() => {
+      if (!current || current.adapter !== "eink" || !current.busy) refresh();
+    }, 2500);
+  </script>
+</body>
+</html>
