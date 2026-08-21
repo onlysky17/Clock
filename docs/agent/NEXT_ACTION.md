@@ -1,38 +1,61 @@
 # NEXT_ACTION
 
-## Current Checkpoint — 2026-08-20
+## Current Checkpoint â€” 2026-08-21
 
-PR #155 `fix: align EINK full refresh to 5-minute wall clock` is MERGED and
-Owner physical PASS.
+Portrait Analog v2 and Harness SHA compatibility are merged into `main`.
 
-- Actual main merge commit:
-  `fbcc8562f678f7f6cf651c9f77e591e6b60b7be0`
-- Feature commit:
-  `d9d08c3354d0e5125afa36a580a6d0420928ae4c`
-- Full refresh cadence:
-  `00/05/10/15/20/25/30/35/40/45/50/55` local wall-clock minutes
-- Classic / Weekly FLY refresh between maintenance boundaries: PASS
-- Harness v0.7 `prepare-test`: PASS
-- Packed size: `262144`
-- Packed SHA256:
-  `6B9FB8C6E7EE6D073350E99CBFE4C68CBC278D5A800A1083C39B80D968410D3E`
-- Full SPI readback size: `262144`
-- Full SPI readback SHA256:
-  `6B9FB8C6E7EE6D073350E99CBFE4C68CBC278D5A800A1083C39B80D968410D3E`
-- fresh SPI backup / erase / write / readback verification: PASS
-- cold boot / runtime test: PASS
-- Owner physical e-ink test: PASS
+Current main:
 
-Harness v0.7 remains merged and operational as the canonical build / pack /
-verify pipeline.
+`0a8387ccc75456da37f60f79561e1f403b00af42`
 
-Display Profiles v2, Clock Classic, Weekly 7-day, Mobile Preview Studio, and
-the fixed Pages preview infrastructure remain merged / approved.
+PR #157:
+
+`feat: add EINK portrait analog calendar`
+
+Actual main commit:
+
+`30c9efc4d2ad5e95f28147e99fc6b501358c93c5`
+
+Owner physical Portrait Analog v2 test: PASS.
+
+PR #158:
+
+`fix: make EINK SHA verification PowerShell-compatible`
+
+Actual main commit:
+
+`0a8387ccc75456da37f60f79561e1f403b00af42`
+
+Harness prepare-test smoke and real prepare-test: PASS.
+
+The canonical Clock Classic product baseline is now:
+
+- portrait `122 x 250`
+- `ROTATE_0`
+- analog clock
+- solar date
+- lunar date
+- 36 deterministic daily sayings
+- no large digital HH:MM
+- no title
+- no ordinary-minute display refresh
+- FULL refresh at local wall-clock `00/05/10/15/20/25/30/35/40/45/50/55`
+
+Weekly remains unchanged with `ROTATE_3 + UPDATE_FLY`.
+
 ## Next Canonical Action
 
-UNRESOLVED — waiting for the Owner to select the next product/firmware feature.
+UNRESOLVED - waiting for the Owner to select the next product/firmware feature.
+Possible future product work is not canonical until explicitly selected by the
+Owner.
 
-The Harness itself is no longer the blocker.
+In particular:
+
+- weather on the portrait lower area would require a separate
+  web/phone -> BLE -> firmware data pipeline;
+- one-minute analog hand movement would require a separately scoped refresh
+  experiment;
+- rejected V1-V6 local/partial refresh approaches must not be silently reused.
 
 For the next firmware/layout implementation, use:
 
@@ -40,7 +63,8 @@ For the next firmware/layout implementation, use:
 
 after source validation.
 
-The Harness must automatically build, pack, validate, and lock the candidate artifact before requesting the Owner burn/test gate.
+The Harness must automatically build, pack, validate, lock the candidate
+artifact, and stop before destructive burn.
 
 ## Standing Execution Contract
 
@@ -62,8 +86,7 @@ Automatic:
 Owner gates:
 
 - destructive SPI burn;
-- cold boot;
-- BLE/device interaction where required;
+- cold boot/device interaction where required;
 - physical e-ink visual approval;
 - final merge.
 
@@ -80,4 +103,5 @@ Do not:
 - use `git add .`, `git add -A`, or `git commit -a`;
 - force-push;
 - use SmartSnippets GUI fallback;
-- weaken fresh backup, packed SHA, readback SHA, cold-boot, BLE, or physical visual gates.
+- weaken fresh backup, packed SHA, readback SHA, cold-boot, BLE, or physical
+  visual gates.

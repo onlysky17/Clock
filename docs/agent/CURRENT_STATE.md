@@ -1,8 +1,8 @@
 # CURRENT_STATE
 
-## Current Canonical Checkpoint — 2026-08-20
+## Current Canonical Checkpoint — 2026-08-21
 
-EINK 5-minute wall-clock full-refresh fix is MERGED / OWNER PHYSICAL PASS.
+EINK Portrait Analog v2 and Harness SHA compatibility are MERGED.
 
 ### Canonical repository state
 
@@ -10,68 +10,129 @@ EINK 5-minute wall-clock full-refresh fix is MERGED / OWNER PHYSICAL PASS.
 - Canonical workspace: `D:\EINK\Clock`
 - Canonical branch: `main`
 - Current merged main commit:
-  `fbcc8562f678f7f6cf651c9f77e591e6b60b7be0`
-- PR #155:
-  `fix: align EINK full refresh to 5-minute wall clock`
-- Feature commit:
-  `d9d08c3354d0e5125afa36a580a6d0420928ae4c`
+  `0a8387ccc75456da37f60f79561e1f403b00af42`
+- PR #157 `feat: add EINK portrait analog calendar`:
+  MERGED
+- PR #157 actual main commit:
+  `30c9efc4d2ad5e95f28147e99fc6b501358c93c5`
+- PR #157 feature commit:
+  `32d5add076f599483d59abc69d0faea136dcaf70`
+- PR #158 `fix: make EINK SHA verification PowerShell-compatible`:
+  MERGED
+- PR #158 actual main commit:
+  `0a8387ccc75456da37f60f79561e1f403b00af42`
+- PR #158 feature commit:
+  `7511f0e1882199616016e58cee5203aa863171d1`
 
-### PR #155 verified behavior
+### Current product baseline — Portrait Analog v2
 
-Classic and Weekly retain fast `UPDATE_FLY` refreshes between maintenance
-boundaries.
+Clock Classic is now a portrait analog/calendar layout.
 
-Maintenance `UPDATE_FULL` is aligned to real local wall-clock minute marks:
+- Logical canvas: `122 x 250`
+- Rotation: `ROTATE_0`
+- Analog center: `(61,72)`
+- Analog radius: `51`
+- Large digital `HH:MM`: removed
+- `DONG HO KIM` title: removed
+- Seconds hand: absent
+- Solar date position: `(22,143)`
+- Lunar date position: `(37,163)`
+- Separator: `x=31..90`, `y=134`
+- Daily sayings: `36`
+- Daily saying selection: `local_day % 36`
+- Saying format: ASCII-safe, maximum 3 lines, maximum 18 characters per line
+- Saying baselines: `y=190/204/218`
+
+Owner physical inspection of Portrait Analog v2: PASS.
+
+### Refresh policy
+
+Clock Classic prioritizes clean e-ink output.
+
+Ordinary minutes do not open the EPD and do not trigger a display refresh.
+
+Maintenance FULL refresh remains aligned to local wall-clock minute marks:
 
 `00 / 05 / 10 / 15 / 20 / 25 / 30 / 35 / 40 / 45 / 50 / 55`
 
-The cadence is not counted relative to boot, BLE sync, profile apply, or the
-previous full refresh.
+Therefore the analog hands update on the stable five-minute display cadence.
 
-Example after sync/apply at 11:18:
+Weekly remains unchanged and keeps its canonical:
 
-- 11:18: FULL baseline
-- 11:19: FLY
-- 11:20: FULL
-- 11:21 through 11:24: FLY
-- 11:25: FULL
-- 11:29: FLY
-- 11:30: FULL
+- `ROTATE_3`
+- `UPDATE_FLY` ordinary-minute behavior
 
-### Validation and hardware proof
+### Portrait v2 validation / device proof
 
-- static wall-clock policy validator: PASS
+- Portrait v2 validator: PASS
 - `git diff --check`: PASS
-- Harness v0.7 `prepare-test`: PASS
-- RAW size: `52872`
+- Keil ARM Compiler: `V6.24`
+- build: `0 Error(s), 0 Warning(s)`
+- RAW size: `54016`
 - RAW SHA256:
-  `21D2B343151C30069539F44116BE452DB53705859C40B62A710A6A6C2EA401FE`
+  `D2E6CAE8BDD25A1C88DB4AB14439EBEC0BFEEB7C8F1B1175C1196C2922F52FF2`
 - PACKED size: `262144`
 - PACKED SHA256:
-  `6B9FB8C6E7EE6D073350E99CBFE4C68CBC278D5A800A1083C39B80D968410D3E`
-- packer header / CRC / layout validation: PASS
+  `D987C0651DBC76507E2E8FF984BDE415ACA4B6B50D5B503546A8629E42F2494A`
+- header / CRC / layout: PASS
 - raw payload byte match: PASS
 - fresh SPI backup: PASS
 - erase + write: PASS
 - full 262144-byte SPI readback: PASS
-- READBACK SHA256:
-  `6B9FB8C6E7EE6D073350E99CBFE4C68CBC278D5A800A1083C39B80D968410D3E`
 - packed/readback SHA exact match: PASS
-- cold boot / runtime test: PASS
-- Owner physical e-ink test: PASS
-- Owner confirmed full refresh occurs on the real 5-minute wall-clock boundary.
+- Owner portrait orientation/layout/date/lunar/daily-saying physical test: PASS
 
-Burn evidence:
+Validated Portrait package:
 
-`D:\EINK\Clock\_incoming\EINK_HARNESS_SPI_BURN\20260820_115753`
+`D:\EINK\Clock\_incoming\PORTRAIT_ANALOG_V2_VALIDATED_20260821_100046`
 
-Physical-PASS backup:
+### Rejected partial/local refresh research
 
-`D:\EINK\Clock\_incoming\EINK_WALL_CLOCK_FULL_REFRESH_5M\PHYSICAL_PASS_20260820_132303`
+The V1 through V6 partial/local FAST experiments are rejected and are not
+part of the canonical product implementation.
 
-### Harness v0.7
+Observed failure modes included:
 
-Harness v0.7 remains the canonical execution pipeline.
+- invalid/corrupt window geometry;
+- differential/custom LUT darkening;
+- whole-panel partial greying;
+- RAM-window-only noise;
+- local-gate noise caused by incomplete RAM coverage;
+- local FAST region visual greying/discontinuity even with full-row RAM data.
+
+Do not silently revive V1-V6 local refresh techniques in future product work.
+
+### Harness v0.7 + SHA compatibility
+
+Harness v0.7 remains the canonical build / pack / verify pipeline.
+
+PR #158 adds PowerShell-compatible SHA256 verification through the .NET
+cryptography implementation so the Harness does not depend exclusively on
+`Get-FileHash`.
+
+PR #158 validation:
+
+- exact scope: `scripts/eink.ps1` + `tools/pack-hink.ps1`
+- `git diff --check`: PASS
+- prepare-test smoke: PASS
+- real `scripts/eink.ps1 prepare-test`: PASS
+- RAW size: `54016`
+- RAW SHA256:
+  `2F4C0FC751F6AEA6C08EC945F1D5181F0307BE0B2F8FF76964A7D741445DF1B9`
+- PACKED size: `262144`
+- PACKED SHA256:
+  `DD5681CFF1AB087743009C58949E375FC1B761D6E9A4C2A8C1D1B82A0071A27D`
+- header / CRC / layout: PASS
+- payload byte match: PASS
+- safe stop:
+  `OWNER_BURN_CONFIRMATION_REQUIRED`
+- destructive burn for PR #158: NOT PERFORMED
+
+Validated SHA compatibility backup:
+
+`D:\EINK\Clock\_incoming\EINK_HARNESS_SHA_COMPAT_VALIDATED_20260821_102535`
+
+### Canonical execution flow
 
 For normal firmware/layout work:
 
@@ -79,20 +140,11 @@ For normal firmware/layout work:
 
 Automatic PASS stages continue without repetitive Owner confirmation.
 
-Owner gates remain destructive SPI burn, device/physical validation where
-required, and final merge.
+Owner gates remain:
 
-### Existing merged product / preview milestones
-
-- PR #152 Display Profiles v2: MERGED / OWNER VISUAL PASS
-- Clock Classic physical visual: PASS
-- Weekly 7-day profile: PASS
-- Mobile Preview Studio: PASS
-- PR #151 fixed Pages preview infrastructure: MERGED
-- Production:
-  `https://onlysky17.github.io/Clock/test.html`
-- Fixed preview:
-  `https://onlysky17.github.io/Clock/preview/test.html`
+- destructive SPI burn;
+- physical/device validation where required;
+- final merge.
 
 ---
 ## EINK Harness v0.1 Closeout
@@ -135,9 +187,9 @@ Current final firmware milestone:
 - SPI Burn PASS, SPI Verify PASS, and cold boot PASS.
 - PRIME recovery is approximately one second.
 - Weather row is shifted right to x=6 and its first character is not clipped.
-- Confirmed flow: `Lấy thời tiết ngay` -> `Áp dụng lên màn`.
-- `Đồng bộ giờ` alone does not display the weather row; this is the confirmed current behavior.
-- Rain threshold is `>= 0.20 mm`; `0.10 mm` maps to `MÂY`.
+- Confirmed flow: `Láº¥y thá»i tiáº¿t ngay` -> `Ăp dá»¥ng lĂªn mĂ n`.
+- `Äá»“ng bá»™ giá»` alone does not display the weather row; this is the confirmed current behavior.
+- Rain threshold is `>= 0.20 mm`; `0.10 mm` maps to `MĂ‚Y`.
 - Final package: `D:\EINK\Clock\_incoming\D13D_FIX1_FINAL_SPI_20260723_160645`.
 - Packed file: `firmware\D13D_FIX1_FINAL_PACKED_256KB.bin`.
 - Packed size: `262144` bytes.
@@ -162,7 +214,7 @@ Current persistent firmware milestone:
 - SmartSnippets Burn/Verify, cold boot, restored preferences, both profiles, 24/12-hour modes, cadence 1/5/10, disconnected scheduler, and BLE reconnect: PASS.
 - D12C supersedes D11C as the latest known-good persistent SPI baseline.
 
-Firmware milestone cuối đã đóng:
+Firmware milestone cuá»‘i Ä‘Ă£ Ä‘Ă³ng:
 
 - `TASK D11C` clock profiles persistent SPI final is CLOSED / MERGED / PHYSICAL PASS.
 - D11B implementation commit: `a355d5f398e9acd9ca631dd78e69fbe930b6e58d`.
@@ -197,7 +249,7 @@ Historical firmware milestone:
   - Firmware `D8A1` and Source ID `D8A00001`: PASS.
   - Cold-boot `STALE / PRIME / STORE`: PASS.
   - Running `TIME / TIMER / STORE`: PASS.
-  - Balanced left clock pane and uniformly bold `ÂL dd/MM`: PASS.
+  - Balanced left clock pane and uniformly bold `Ă‚L dd/MM`: PASS.
   - Right monthly calendar remains correct: PASS.
   - BLE-disconnected five-minute scheduler: PASS.
   - BLE reconnect: PASS.
@@ -232,15 +284,15 @@ Product and web milestones:
 - D4B smoke PASS.
 - D4B automated browser 4/4 PASS: `A_STALE`, `B_NOTIFY_RACE_GUARD`, `C_FOLLOW_UP_CONFIRM`, `D_RECOVERY_ERROR`.
 - Owner physical test at `https://onlysky17.github.io/Clock/test.html` PASS:
-  - stale warning đúng;
-  - CTA đúng;
-  - render bị khóa khi stale;
-  - SET_TIME recovery thành công;
+  - stale warning Ä‘Ăºng;
+  - CTA Ä‘Ăºng;
+  - render bá»‹ khĂ³a khi stale;
+  - SET_TIME recovery thĂ nh cĂ´ng;
   - stale flag clear;
-  - warning ẩn;
-  - render mở lại;
-  - BLE thật PASS;
-  - màn e-ink render đúng giờ PASS.
+  - warning áº©n;
+  - render má»Ÿ láº¡i;
+  - BLE tháº­t PASS;
+  - mĂ n e-ink render Ä‘Ăºng giá» PASS.
 - D4B did not change firmware or protocol.
 - D4B required no Keil build or flash.
 - `TASK D5A` flagship daily layout is CLOSED.
@@ -250,8 +302,8 @@ Product and web milestones:
 - D5B-FIX2 implementation commit: `642738c0b4d4f4bbf763838fe9eb43dca7b4749b`.
 - D5B-FIX2 automated smoke PASS.
 - D5B-FIX2 automated browser/metrics PASS.
-- Owner physical màn e-ink PASS on `19/07/2026`:
-  - `THÁNG` and `ÂM` show correct accents;
+- Owner physical mĂ n e-ink PASS on `19/07/2026`:
+  - `THĂNG` and `Ă‚M` show correct accents;
   - baseline is straight;
   - solar date does not overflow the divider;
   - `HH:mm` is clear and prominent;
@@ -300,16 +352,16 @@ Verified final state:
 - Panel remained unchanged after 30 seconds.
 - After BLE disconnect and another 30 seconds, panel still remained unchanged.
 - No unintended refresh to black.
-- D1A clock web PASS: preview uses browser local time, shows large HH:mm, shows short Vietnamese weekday/date, and `Cáº­p nháº­t giá» hiá»‡n táº¡i` only redraws/re-packs without sending BLE.
-- D1B one-tap clock sync PASS: `Äá»“ng bá»™ giá» lÃªn mÃ n` draws current clock, sends E5, waits for E5 COMPLETE plus CRC match, then sends E6 and waits for E6 COMPLETE.
+- D1A clock web PASS: preview uses browser local time, shows large HH:mm, shows short Vietnamese weekday/date, and `CĂ¡ÂºÂ­p nhĂ¡ÂºÂ­t giĂ¡Â»Â hiĂ¡Â»â€¡n tĂ¡ÂºÂ¡i` only redraws/re-packs without sending BLE.
+- D1B one-tap clock sync PASS: `Ă„ÂĂ¡Â»â€œng bĂ¡Â»â„¢ giĂ¡Â»Â lĂƒÂªn mĂƒÂ n` draws current clock, sends E5, waits for E5 COMPLETE plus CRC match, then sends E6 and waits for E6 COMPLETE.
 - D1B physical panel PASS: the panel displayed the correct real local time.
-- D1C auto minute sync PASS: `Tá»± Ä‘á»“ng bá»™ khi phÃºt Ä‘á»•i` defaults OFF, first enable does not send immediately, sends only when the minute key changes, prevents overlap, and turns OFF on disconnect/error.
+- D1C auto minute sync PASS: `TĂ¡Â»Â± Ă„â€˜Ă¡Â»â€œng bĂ¡Â»â„¢ khi phĂƒÂºt Ă„â€˜Ă¡Â»â€¢i` defaults OFF, first enable does not send immediately, sends only when the minute key changes, prevents overlap, and turns OFF on disconnect/error.
 - D1C physical auto minute sync PASS.
 
 Current web labels:
 - Title: `TASK D1C - Auto Minute Clock Sync`
-- Badge: `TASK D1C â€¢ AUTO MINUTE CLOCK SYNC â€¢ HINK213 BW`
-- Heading: `250Ã—122 Clock Preview â†’ Auto E5/E6 Minute Sync`
+- Badge: `TASK D1C Ă¢â‚¬Â¢ AUTO MINUTE CLOCK SYNC Ă¢â‚¬Â¢ HINK213 BW`
+- Heading: `250Ăƒâ€”122 Clock Preview Ă¢â€ â€™ Auto E5/E6 Minute Sync`
 - The current page does not show old `TASK C2G`, `C2G`, or `C1 TEST` labels.
 
 Important geometry note:
@@ -380,11 +432,11 @@ Build/package facts:
 
 Runtime note:
 - D2 time state is still RAM-only and is lost after reset/cold boot.
-- After cold boot, use: Connect -> Gá»­i giá» xuá»‘ng thiáº¿t bá»‹ -> Váº½ giá» tá»« thiáº¿t bá»‹ lÃªn mÃ n.
+- After cold boot, use: Connect -> GĂ¡Â»Â­i giĂ¡Â»Â xuĂ¡Â»â€˜ng thiĂ¡ÂºÂ¿t bĂ¡Â»â€¹ -> VĂ¡ÂºÂ½ giĂ¡Â»Â tĂ¡Â»Â« thiĂ¡ÂºÂ¿t bĂ¡Â»â€¹ lĂƒÂªn mĂƒÂ n.
 - QR and low-battery legacy visual redraw paths are disabled as an accepted firmware-size tradeoff; current HINK213 clock-panel flow is unaffected.
 
 Historical next milestone at that time:
-- TASK D3A â€” device auto-minute clock policy/design.
+- TASK D3A Ă¢â‚¬â€ device auto-minute clock policy/design.
 
 ## Historical D3A auto-minute policy design
 
@@ -408,7 +460,7 @@ Policy now defined:
 - D3B implementation must fit within the approximate 364-byte raw headroom.
 
 Historical next implementation milestone at that time:
-- TASK D3B â€” auto-minute scheduler implementation.
+- TASK D3B Ă¢â‚¬â€ auto-minute scheduler implementation.
 
 ## Historical D3C persistent clock state
 
@@ -537,7 +589,7 @@ TASK D17A is CLOSED and MERGED.
 
 D17A defines:
 
-- One primary Product Mode action: `Cập nhật màn hình hôm nay`.
+- One primary Product Mode action: `Cáº­p nháº­t mĂ n hĂ¬nh hĂ´m nay`.
 - Manual BLE connection only; no browser auto-connect.
 - Weather, agenda, device-time, daily-context, and final-render sequencing.
 - Independent degraded behavior for weather and Calendar failures.
@@ -559,7 +611,7 @@ TASK D17B is CLOSED, MERGED, and Owner-tested.
 - Post-merge smoke: PASS.
 - Owner web and BLE test: PASS.
 - Canonical URL: `https://onlysky17.github.io/Clock/test.html`.
-- Product Mode exposes `Cập nhật màn hình hôm nay` as the single primary daily action.
+- Product Mode exposes `Cáº­p nháº­t mĂ n hĂ¬nh hĂ´m nay` as the single primary daily action.
 - Weather, optional Google agenda, D2 time sync, daily context, and one final render run in a guarded sequence.
 - Google Calendar is skipped cleanly when not authorized; the unified flow does not force login.
 - The web never auto-connects BLE and does not allow overlapping unified runs.
@@ -601,7 +653,7 @@ verified.
 - PR #107 merge commit: `eab04d49ccb5ff8ab84d73d2b5555b5631db7201`.
 - Canonical app: `https://onlysky17.github.io/Clock/test.html`.
 - Public privacy policy: `https://onlysky17.github.io/Clock/privacy.html`.
-- Product Mode now exposes a visible `Quyền riêng tư` link outside Advanced.
+- Product Mode now exposes a visible `Quyá»n riĂªng tÆ°` link outside Advanced.
 - Google Calendar stays optional and requests only `calendar.readonly`.
 - Users who skip Calendar retain time sync, weather, BLE, and rendering.
 - No firmware, BLE protocol, `test.html`, BIN, build, pack, flash, or device
@@ -621,10 +673,10 @@ canonical public page.
 - D20B feature commit: `2b3e92e`.
 - D20B merge commit: `90c42451c595cfc62ed53ca99998824a2807ab3f`.
 - Canonical URL: `https://onlysky17.github.io/Clock/test.html`.
-- Product Mode shows one primary `Cập nhật màn hình hôm nay` action.
+- Product Mode shows one primary `Cáº­p nháº­t mĂ n hĂ¬nh hĂ´m nay` action.
 - Clock-face selection remains directly available.
-- Optional weather remains available through `Tóm tắt trong ngày`.
-- `Kỹ thuật / Nâng cao` is closed by default and retains detailed progress,
+- Optional weather remains available through `TĂ³m táº¯t trong ngĂ y`.
+- `Ká»¹ thuáº­t / NĂ¢ng cao` is closed by default and retains detailed progress,
   preferences, identity, preview, D2, E5, and E6 controls.
 - Desktop and 360 px mobile canonical-page checks passed without horizontal
   overflow.
