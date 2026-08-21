@@ -3,16 +3,42 @@ param(
     [ValidateRange(1024, 65535)]
     [int]$Port = 5175,
 
-    [switch]$NoBrowser
+    [switch]$NoBrowser,
+
+    [switch]$AcceptanceMode,
+
+    [string]$AcceptanceWorkspace = '',
+
+    [string]$AcceptanceFixturePath = ''
 )
 
 $ErrorActionPreference = 'Stop'
 
-$repoRoot = (
-    Resolve-Path (
-        Join-Path $PSScriptRoot '..\..\..'
-    )
-).Path
+$repoRoot = if ($AcceptanceMode) {
+    if (
+        $Port -eq 5175 -or
+        [string]::IsNullOrWhiteSpace($AcceptanceWorkspace) -or
+        [string]::IsNullOrWhiteSpace($AcceptanceFixturePath)
+    ) {
+        throw 'Acceptance mode requires an isolated workspace, fixture, and non-production port.'
+    }
+
+    (Resolve-Path $AcceptanceWorkspace).Path
+}
+else {
+    if (
+        -not [string]::IsNullOrWhiteSpace($AcceptanceWorkspace) -or
+        -not [string]::IsNullOrWhiteSpace($AcceptanceFixturePath)
+    ) {
+        throw 'Acceptance fixture parameters are forbidden in production mode.'
+    }
+
+    (
+        Resolve-Path (
+            Join-Path $PSScriptRoot '..\..\..'
+        )
+    ).Path
+}
 
 Set-Location $repoRoot
 
@@ -23,6 +49,9 @@ $prepareScript = Join-Path $repoRoot 'scripts\eink.ps1'
 $burnScript    = Join-Path $repoRoot 'scripts\eink-spi-burn.ps1'
 $prepareEvidenceRoot = Join-Path $repoRoot '_incoming\EINK_HARNESS_PREPARE_TEST'
 $prepareTrustStatePath = Join-Path $prepareEvidenceRoot 'control-center-prepare-state.json'
+$ownerFinalizeRoot = Join-Path $repoRoot '_incoming\EINK_HARNESS_CONTROL_CENTER_FINALIZE'
+$burnVerificationStatePath = Join-Path $ownerFinalizeRoot 'burn-verification-state.json'
+$ownerFinalizeStatePath = Join-Path $ownerFinalizeRoot 'owner-finalize-state.json'
 
 $profile = [IO.File]::ReadAllText(
     $profilePath,
@@ -51,8 +80,9 @@ $script:StopRequested = $false
 $script:LastAction = 'START'
 $script:LastResult = 'IDLE'
 $script:PrepareTrustFailureOverride = $null
+$script:BurnVerificationOverride = $null
 $script:LastLog = @(
-    'Harness Control Center Multiproject v0.2 started.',
+    'Harness Control Center Multiproject v0.3 started.',
     'Waiting for action.'
 )
 
@@ -1085,7 +1115,10 @@ function Get-RepoState {
         ''
     }
 
-    $statusLines = @($statusResult.Output)
+    $statusLines = @(
+        $statusResult.Output |
+        Where-Object { $_ -match '^.{2} ' }
+    )
 
     $untracked = @(
         $statusLines |
@@ -1106,14 +1139,641 @@ function Get-RepoState {
         TrackedStatus = $trackedStatus
         DirtyTrackedFiles = @(
             $dirtyResult.Output |
-            Where-Object { $_ }
+            Where-Object {
+                $_ -and
+                $_ -notmatch '^(warning|hint):'
+            }
         )
         StagedFiles = @(
             $stagedResult.Output |
-            Where-Object { $_ }
+            Where-Object {
+                $_ -and
+                $_ -notmatch '^(warning|hint):'
+            }
         )
         Untracked = $untracked
     }
+}
+
+function Write-Utf8JsonFile {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$Path,
+
+        [Parameter(Mandatory=$true)]
+        $Value
+    )
+
+    $parent = Split-Path -Parent $Path
+
+    if (-not (Test-Path -LiteralPath $parent -PathType Container)) {
+        [void](New-Item -ItemType Directory -Path $parent -Force)
+    }
+
+    [IO.File]::WriteAllText(
+        $Path,
+        ($Value | ConvertTo-Json -Depth 12),
+        (New-Object Text.UTF8Encoding($false))
+    )
+}
+
+function Get-ApprovedFinalizeFiles {
+    $files = @(
+        $einkRegistryProject.finalize.approvedFiles |
+        ForEach-Object {
+            ([string]$_).Replace('\', '/').Trim()
+        } |
+        Where-Object { $_ } |
+        Select-Object -Unique
+    )
+
+    if ($files.Count -eq 0) {
+        throw 'Finalize approved file list is empty.'
+    }
+
+    $rootPrefix = [IO.Path]::GetFullPath($repoRoot).TrimEnd('\') + '\'
+
+    foreach ($relativePath in $files) {
+        if (
+            [IO.Path]::IsPathRooted($relativePath) -or
+            $relativePath -match '(^|/)\.\.(/|$)' -or
+            $relativePath -eq '.'
+        ) {
+            throw "Unsafe finalize path: $relativePath"
+        }
+
+        $fullPath = [IO.Path]::GetFullPath(
+            (Join-Path $repoRoot $relativePath)
+        )
+
+        if (-not $fullPath.StartsWith(
+            $rootPrefix,
+            [StringComparison]::OrdinalIgnoreCase
+        )) {
+            throw "Finalize path escaped workspace: $relativePath"
+        }
+    }
+
+    @($files | Sort-Object)
+}
+
+function Get-ApprovedFilesFingerprint {
+    $builder = New-Object Text.StringBuilder
+
+    foreach ($relativePath in Get-ApprovedFinalizeFiles) {
+        $fullPath = Join-Path $repoRoot $relativePath
+        $sha = if (Test-Path -LiteralPath $fullPath -PathType Leaf) {
+            Get-Sha256Hex -Path $fullPath
+        }
+        else {
+            'MISSING'
+        }
+        [void]$builder.AppendLine("$relativePath|$sha")
+    }
+
+    Get-TextSha256 -Text $builder.ToString()
+}
+
+function Get-BurnVerificationState {
+    if ($script:BurnVerificationOverride) {
+        return $script:BurnVerificationOverride
+    }
+
+    Read-Utf8JsonFile -Path $burnVerificationStatePath
+}
+
+function Get-OwnerFinalizeState {
+    Read-Utf8JsonFile -Path $ownerFinalizeStatePath
+}
+
+function Set-BurnVerificationState {
+    param(
+        [Parameter(Mandatory=$true)]
+        $Candidate,
+
+        [bool]$Simulated = $false
+    )
+
+    if ($Simulated -and -not $AcceptanceMode) {
+        throw 'Simulated burn verification is forbidden in production mode.'
+    }
+
+    $repo = Get-RepoState
+    $record = [ordered]@{
+        schema = 'eink-control-center-burn-verification-v1'
+        taskId = [string]$einkRegistryProject.finalize.taskId
+        status = 'SPI_BURN_VERIFIED'
+        simulated = [bool]$Simulated
+        verifiedUtc = [DateTime]::UtcNow.ToString('o')
+        branch = [string]$repo.Branch
+        head = [string]$repo.Head
+        workspaceFingerprint = Get-WorkspaceFingerprint
+        approvedFilesFingerprint = Get-ApprovedFilesFingerprint
+        artifactPath = [string]$Candidate.Path
+        artifactSha256 = ([string]$Candidate.Sha256).ToUpperInvariant()
+        prepareAttemptId = [string]$Candidate.AttemptId
+    }
+
+    Write-Utf8JsonFile -Path $burnVerificationStatePath -Value $record
+    $record
+}
+
+function Get-ValidBurnVerification {
+    param(
+        [Parameter(Mandatory=$true)]
+        $RepoState
+    )
+
+    $record = Get-BurnVerificationState
+
+    if (
+        -not $record -or
+        [string]$record.status -ne 'SPI_BURN_VERIFIED' -or
+        ([bool]$record.simulated -and -not $AcceptanceMode) -or
+        [string]$record.taskId -ne [string]$einkRegistryProject.finalize.taskId -or
+        [string]$record.branch -ne [string]$RepoState.Branch -or
+        [string]$record.head -ne [string]$RepoState.Head
+    ) {
+        return $null
+    }
+
+    $artifactPath = [string]$record.artifactPath
+
+    if (-not (Test-Path -LiteralPath $artifactPath -PathType Leaf)) {
+        return $null
+    }
+
+    $actualSha = Get-Sha256Hex -Path $artifactPath
+
+    if (
+        $actualSha -ne (
+            [string]$record.artifactSha256
+        ).ToUpperInvariant() -or
+        (Get-WorkspaceFingerprint) -ne (
+            [string]$record.workspaceFingerprint
+        ).ToUpperInvariant() -or
+        (Get-ApprovedFilesFingerprint) -ne (
+            [string]$record.approvedFilesFingerprint
+        ).ToUpperInvariant()
+    ) {
+        return $null
+    }
+
+    $record
+}
+
+function Initialize-AcceptanceBurnFixture {
+    if (-not $AcceptanceMode) {
+        return
+    }
+
+    $fixture = Read-Utf8JsonFile -Path $AcceptanceFixturePath
+
+    if (
+        -not $fixture -or
+        [string]$fixture.schema -ne 'eink-control-center-post-burn-fixture-v1' -or
+        -not [bool]$fixture.simulated -or
+        -not [bool]$fixture.autoBindCurrentWorkspace
+    ) {
+        throw 'Invalid isolated post-burn acceptance fixture.'
+    }
+
+    $artifactPath = [IO.Path]::GetFullPath([string]$fixture.artifactPath)
+    $workspacePrefix = [IO.Path]::GetFullPath($repoRoot).TrimEnd('\') + '\'
+
+    if (-not $artifactPath.StartsWith(
+        $workspacePrefix,
+        [StringComparison]::OrdinalIgnoreCase
+    )) {
+        throw 'Acceptance artifact must stay inside the isolated workspace.'
+    }
+
+    if (-not (Test-Path -LiteralPath $artifactPath -PathType Leaf)) {
+        throw 'Acceptance artifact is missing.'
+    }
+
+    $candidate = [PSCustomObject]@{
+        Path = $artifactPath
+        Sha256 = Get-Sha256Hex -Path $artifactPath
+        AttemptId = 'SIMULATED_POST_BURN_FIXTURE'
+    }
+
+    $script:BurnVerificationOverride = Set-BurnVerificationState `
+        -Candidate $candidate `
+        -Simulated $true
+
+    Set-LastLog `
+        -Action 'ACCEPTANCE_FIXTURE' `
+        -Result 'SPI_BURN_VERIFIED' `
+        -Lines @(
+            'SIMULATED POST-BURN FIXTURE ACTIVE.',
+            'No hardware command was executed.',
+            'Production port 5175 rejects this mode.'
+        )
+}
+
+function Save-OwnerEvidence {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$Decision,
+
+        [Parameter(Mandatory=$true)]
+        [string]$AttemptId,
+
+        $Body
+    )
+
+    $evidenceDir = Join-Path $ownerFinalizeRoot (
+        'evidence\' + $AttemptId
+    )
+    [void](New-Item -ItemType Directory -Path $evidenceDir -Force)
+
+    $items = @($Body.evidence)
+
+    if ($items.Count -gt 8) {
+        throw 'Owner evidence exceeds the 8-file limit.'
+    }
+
+    $saved = @()
+    $totalBytes = 0L
+
+    for ($i = 0; $i -lt $items.Count; $i++) {
+        $item = $items[$i]
+        $base64 = [string]$item.dataBase64
+
+        if ([string]::IsNullOrWhiteSpace($base64)) {
+            continue
+        }
+
+        try {
+            $bytes = [Convert]::FromBase64String($base64)
+        }
+        catch {
+            throw 'Owner evidence contains invalid base64.'
+        }
+
+        $totalBytes += $bytes.Length
+
+        if ($bytes.Length -gt 10MB -or $totalBytes -gt 25MB) {
+            throw 'Owner evidence exceeds the safe size limit.'
+        }
+
+        $originalName = [IO.Path]::GetFileName([string]$item.filename)
+
+        if ([string]::IsNullOrWhiteSpace($originalName)) {
+            $originalName = "evidence-$i.bin"
+        }
+
+        $safeName = $originalName -replace '[^A-Za-z0-9._-]', '_'
+        $storedName = ('{0:D2}-{1}' -f ($i + 1), $safeName)
+        $storedPath = Join-Path $evidenceDir $storedName
+        [IO.File]::WriteAllBytes($storedPath, $bytes)
+
+        $saved += [ordered]@{
+            filename = $originalName
+            mime = [string]$item.mime
+            size = [int64]$bytes.Length
+            sha256 = Get-Sha256Hex -Path $storedPath
+            storedPath = $storedPath
+        }
+    }
+
+    $feedback = ([string]$Body.feedback).Trim()
+
+    if ([string]::IsNullOrWhiteSpace($feedback) -and $saved.Count -eq 0) {
+        throw "$Decision requires Owner feedback or evidence."
+    }
+
+    [ordered]@{
+        feedback = $feedback
+        files = $saved
+        evidenceDir = $evidenceDir
+    }
+}
+
+function New-ValidatedStateBackup {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$AttemptId,
+
+        [Parameter(Mandatory=$true)]
+        $OwnerEvidence
+    )
+
+    $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
+    $backupDir = Join-Path $ownerFinalizeRoot (
+        "validated\${timestamp}_$AttemptId"
+    )
+    $filesRoot = Join-Path $backupDir 'files'
+    [void](New-Item -ItemType Directory -Path $filesRoot -Force)
+
+    $manifestFiles = @()
+
+    foreach ($relativePath in Get-ApprovedFinalizeFiles) {
+        $sourcePath = Join-Path $repoRoot $relativePath
+
+        if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
+            throw "Approved task file is missing: $relativePath"
+        }
+
+        $destinationPath = Join-Path $filesRoot $relativePath
+        $destinationParent = Split-Path -Parent $destinationPath
+        [void](New-Item -ItemType Directory -Path $destinationParent -Force)
+        [IO.File]::Copy($sourcePath, $destinationPath, $true)
+
+        $manifestFiles += [ordered]@{
+            path = $relativePath
+            size = [int64](Get-Item -LiteralPath $sourcePath).Length
+            sha256 = Get-Sha256Hex -Path $sourcePath
+        }
+    }
+
+    $repo = Get-RepoState
+    $manifest = [ordered]@{
+        schema = 'eink-control-center-validated-backup-v1'
+        taskId = [string]$einkRegistryProject.finalize.taskId
+        createdUtc = [DateTime]::UtcNow.ToString('o')
+        branch = [string]$repo.Branch
+        headBeforeFinalize = [string]$repo.Head
+        workspaceFingerprint = Get-WorkspaceFingerprint
+        ownerEvidence = $OwnerEvidence
+        approvedFiles = $manifestFiles
+    }
+
+    Write-Utf8JsonFile `
+        -Path (Join-Path $backupDir 'validated-state.json') `
+        -Value $manifest
+
+    $backupDir
+}
+
+function Open-FinalizePullRequest {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$Branch
+    )
+
+    if ($AcceptanceMode) {
+        return [PSCustomObject]@{
+            Url = 'https://example.invalid/eink-harness-acceptance/pull/1'
+            State = 'OPEN'
+        }
+    }
+
+    $title = 'EINK Harness Control Center v0.3 Finalize'
+    $body = (
+        'Owner PHYSICAL PASS verified after SPI_BURN_VERIFIED. ' +
+        'Validated state was backed up and only approved task files were staged. ' +
+        'This PR is intentionally left open for Owner review; no auto-merge.'
+    )
+    $result = Invoke-NativeText `
+        -FilePath 'gh' `
+        -Arguments @(
+            'pr', 'create',
+            '--base', [string]$einkRegistryProject.finalize.baseBranch,
+            '--head', $Branch,
+            '--title', $title,
+            '--body', $body
+        )
+
+    if ($result.ExitCode -ne 0) {
+        throw ('PR creation failed: ' + ($result.Output -join ' '))
+    }
+
+    $url = @(
+        $result.Output |
+        Where-Object { $_ -match '^https://github\.com/.+/pull/\d+$' }
+    ) | Select-Object -Last 1
+
+    if ([string]::IsNullOrWhiteSpace([string]$url)) {
+        throw 'PR creation did not return a GitHub PR URL.'
+    }
+
+    [PSCustomObject]@{
+        Url = [string]$url
+        State = 'OPEN'
+    }
+}
+
+function Invoke-PhysicalFailAction {
+    param($Body)
+
+    if ($script:Busy) {
+        return Get-ControlStatus
+    }
+
+    $repo = Get-RepoState
+    $burn = Get-ValidBurnVerification -RepoState $repo
+
+    if (-not $burn) {
+        Set-LastLog -Action 'PHYSICAL_FAIL' -Result 'BLOCKED' -Lines @(
+            'BLOCKED: SPI_BURN_VERIFIED_REQUIRED'
+        )
+        return Get-ControlStatus
+    }
+
+    $attemptId = [Guid]::NewGuid().ToString('N')
+
+    try {
+        $ownerEvidence = Save-OwnerEvidence `
+            -Decision 'PHYSICAL FAIL' `
+            -AttemptId $attemptId `
+            -Body $Body
+
+        $record = [ordered]@{
+            schema = 'eink-control-center-owner-finalize-v1'
+            taskId = [string]$einkRegistryProject.finalize.taskId
+            decision = 'PHYSICAL_FAIL'
+            resolved = $false
+            state = 'UNRESOLVED'
+            recordedUtc = [DateTime]::UtcNow.ToString('o')
+            branch = [string]$repo.Branch
+            head = [string]$repo.Head
+            burnVerification = $burn
+            feedback = [string]$ownerEvidence.feedback
+            evidence = @($ownerEvidence.files)
+            commitSha = ''
+            prUrl = ''
+            prState = ''
+        }
+
+        Write-Utf8JsonFile -Path $ownerFinalizeStatePath -Value $record
+        Set-LastLog -Action 'PHYSICAL_FAIL' -Result 'PHYSICAL_FAIL' -Lines @(
+            'OWNER PHYSICAL FAIL RECORDED.',
+            'Task remains unresolved.',
+            'No stage, commit, push, PR, burn, or merge was performed.'
+        )
+    }
+    catch {
+        Set-LastLog -Action 'PHYSICAL_FAIL' -Result 'BLOCKED' -Lines @(
+            "EXCEPTION: $($_.Exception.Message)"
+        )
+    }
+
+    Get-ControlStatus
+}
+
+function Invoke-PhysicalPassAction {
+    param($Body)
+
+    if ($script:Busy) {
+        return Get-ControlStatus
+    }
+
+    $repoBefore = Get-RepoState
+    $burn = Get-ValidBurnVerification -RepoState $repoBefore
+
+    if (-not $burn) {
+        Set-LastLog -Action 'PHYSICAL_PASS' -Result 'BLOCKED' -Lines @(
+            'BLOCKED: SPI_BURN_VERIFIED_REQUIRED'
+        )
+        return Get-ControlStatus
+    }
+
+    if (@($repoBefore.StagedFiles).Count -gt 0) {
+        Set-LastLog -Action 'PHYSICAL_PASS' -Result 'BLOCKED' -Lines @(
+            'BLOCKED: PREEXISTING_STAGED_FILES'
+        )
+        return Get-ControlStatus
+    }
+
+    if ([string]$repoBefore.Branch -eq [string]$einkRegistryProject.finalize.baseBranch) {
+        Set-LastLog -Action 'PHYSICAL_PASS' -Result 'BLOCKED' -Lines @(
+            'BLOCKED: FINALIZE_BRANCH_MUST_NOT_BE_BASE_BRANCH'
+        )
+        return Get-ControlStatus
+    }
+
+    $approved = @(Get-ApprovedFinalizeFiles)
+    $outsideTracked = @(
+        $repoBefore.DirtyTrackedFiles |
+        ForEach-Object { ([string]$_).Replace('\', '/') } |
+        Where-Object { $approved -notcontains $_ }
+    )
+
+    if ($outsideTracked.Count -gt 0) {
+        Set-LastLog -Action 'PHYSICAL_PASS' -Result 'BLOCKED' -Lines @(
+            'BLOCKED: TRACKED_CHANGES_OUTSIDE_APPROVED_SCOPE',
+            ($outsideTracked -join ', ')
+        )
+        return Get-ControlStatus
+    }
+
+    $script:Busy = $true
+    $attemptId = [Guid]::NewGuid().ToString('N')
+
+    try {
+        $ownerEvidence = Save-OwnerEvidence `
+            -Decision 'PHYSICAL PASS' `
+            -AttemptId $attemptId `
+            -Body $Body
+
+        $backupPath = New-ValidatedStateBackup `
+            -AttemptId $attemptId `
+            -OwnerEvidence $ownerEvidence
+
+        $addResult = Invoke-Git -Arguments (
+            @('add', '--') + $approved
+        )
+
+        if ($addResult.ExitCode -ne 0) {
+            throw ('Exact staging failed: ' + ($addResult.Output -join ' '))
+        }
+
+        $staged = @((Get-RepoState).StagedFiles | Sort-Object)
+        $outsideStaged = @($staged | Where-Object { $approved -notcontains $_ })
+
+        if ($staged.Count -eq 0 -or $outsideStaged.Count -gt 0) {
+            throw 'Exact staging safety verification failed.'
+        }
+
+        $commitResult = Invoke-Git -Arguments @(
+            'commit',
+            '-m',
+            'feat: finalize EINK Harness Control Center v0.3'
+        )
+
+        if ($commitResult.ExitCode -ne 0) {
+            throw ('Commit failed: ' + ($commitResult.Output -join ' '))
+        }
+
+        $repoAfterCommit = Get-RepoState
+        $commitScopeResult = Invoke-Git -Arguments @(
+            'diff-tree',
+            '--no-commit-id',
+            '--name-only',
+            '-r',
+            'HEAD'
+        )
+        $commitFiles = @(
+            $commitScopeResult.Output |
+            Where-Object {
+                $_ -and
+                $_ -notmatch '^(warning|hint):'
+            } |
+            Sort-Object
+        )
+
+        if (
+            $commitScopeResult.ExitCode -ne 0 -or
+            @($commitFiles | Where-Object { $approved -notcontains $_ }).Count -gt 0
+        ) {
+            throw 'Committed file scope escaped the approved task list; push blocked.'
+        }
+
+        $pushResult = Invoke-Git -Arguments @(
+            'push',
+            '-u',
+            'origin',
+            [string]$repoAfterCommit.Branch
+        )
+
+        if ($pushResult.ExitCode -ne 0) {
+            throw ('Push failed: ' + ($pushResult.Output -join ' '))
+        }
+
+        $pr = Open-FinalizePullRequest -Branch $repoAfterCommit.Branch
+        $record = [ordered]@{
+            schema = 'eink-control-center-owner-finalize-v1'
+            taskId = [string]$einkRegistryProject.finalize.taskId
+            decision = 'PHYSICAL_PASS'
+            resolved = $true
+            state = 'OPEN_PR'
+            recordedUtc = [DateTime]::UtcNow.ToString('o')
+            branch = [string]$repoAfterCommit.Branch
+            headBeforeFinalize = [string]$repoBefore.Head
+            commitSha = [string]$repoAfterCommit.Head
+            prUrl = [string]$pr.Url
+            prState = [string]$pr.State
+            backupPath = $backupPath
+            burnVerification = $burn
+            feedback = [string]$ownerEvidence.feedback
+            evidence = @($ownerEvidence.files)
+            approvedFiles = $approved
+            autoMerge = $false
+        }
+
+        Write-Utf8JsonFile -Path $ownerFinalizeStatePath -Value $record
+        Set-LastLog -Action 'PHYSICAL_PASS' -Result 'OPEN_PR' -Lines @(
+            'OWNER PHYSICAL PASS RECORDED.',
+            "BACKUP: $backupPath",
+            "COMMIT: $($repoAfterCommit.Head)",
+            "PR: $($pr.Url)",
+            '[OPEN PR]',
+            'AUTO_MERGE: DISABLED'
+        )
+    }
+    catch {
+        Set-LastLog -Action 'PHYSICAL_PASS' -Result 'BLOCKED' -Lines @(
+            "EXCEPTION: $($_.Exception.Message)",
+            'AUTO_MERGE: DISABLED'
+        )
+    }
+    finally {
+        $script:Busy = $false
+    }
+
+    Get-ControlStatus
 }
 
 function Get-PrepareTrustState {
@@ -1402,11 +2062,46 @@ function Get-ControlStatus {
     $repo = Get-RepoState
     $trust = Get-PrepareTrustState
     $candidate = Get-LatestPrepareCandidate -RepoState $repo
+    $burnVerification = Get-ValidBurnVerification -RepoState $repo
+    $ownerFinalize = Get-OwnerFinalizeState
+    $ownerFinalizeCurrent = if (
+        $ownerFinalize -and
+        [string]$ownerFinalize.taskId -eq [string]$einkRegistryProject.finalize.taskId -and
+        [string]$ownerFinalize.branch -eq [string]$repo.Branch -and
+        (
+            (
+                [string]$ownerFinalize.state -eq 'OPEN_PR' -and
+                [string]$ownerFinalize.commitSha -eq [string]$repo.Head
+            ) -or
+            (
+                [string]$ownerFinalize.decision -eq 'PHYSICAL_FAIL' -and
+                [string]$ownerFinalize.head -eq [string]$repo.Head
+            )
+        )
+    ) {
+        $ownerFinalize
+    }
+    else {
+        $null
+    }
 
     $state = if ($script:Busy) {
         'RUNNING'
     }
-    elseif ($script:LastResult -eq 'SPI_BURN_VERIFIED') {
+    elseif (
+        $ownerFinalizeCurrent -and
+        [string]$ownerFinalizeCurrent.state -eq 'OPEN_PR'
+    ) {
+        'OPEN_PR'
+    }
+    elseif (
+        $ownerFinalizeCurrent -and
+        [string]$ownerFinalizeCurrent.decision -eq 'PHYSICAL_FAIL' -and
+        -not [bool]$ownerFinalizeCurrent.resolved
+    ) {
+        'PHYSICAL_FAIL'
+    }
+    elseif ($burnVerification) {
         'SPI_BURN_VERIFIED'
     }
     elseif (
@@ -1428,7 +2123,7 @@ function Get-ControlStatus {
     [ordered]@{
         projectId = 'eink'
         projectName = 'EINK / Clock'
-        version = '0.2'
+        version = '0.3'
         url = "http://127.0.0.1:$Port/"
         branch = $repo.Branch
         head = $repo.Head
@@ -1438,6 +2133,39 @@ function Get-ControlStatus {
         stagedCount = @($repo.StagedFiles).Count
         untrackedCount = @($repo.Untracked).Count
         readyToBurn = [bool]($candidate -and -not $script:Busy)
+        physicalReviewEnabled = [bool](
+            $burnVerification -and
+            -not $script:Busy
+        )
+        burnVerification = if ($burnVerification) {
+            [ordered]@{
+                status = [string]$burnVerification.status
+                verifiedUtc = [string]$burnVerification.verifiedUtc
+                artifactSha256 = [string]$burnVerification.artifactSha256
+                simulated = [bool]$burnVerification.simulated
+            }
+        }
+        else {
+            $null
+        }
+        ownerFinalize = if ($ownerFinalizeCurrent) {
+            [ordered]@{
+                taskId = [string]$ownerFinalizeCurrent.taskId
+                decision = [string]$ownerFinalizeCurrent.decision
+                resolved = [bool]$ownerFinalizeCurrent.resolved
+                state = [string]$ownerFinalizeCurrent.state
+                recordedUtc = [string]$ownerFinalizeCurrent.recordedUtc
+                feedback = [string]$ownerFinalizeCurrent.feedback
+                evidenceCount = @($ownerFinalizeCurrent.evidence).Count
+                backupPath = [string]$ownerFinalizeCurrent.backupPath
+                commitSha = [string]$ownerFinalizeCurrent.commitSha
+                prUrl = [string]$ownerFinalizeCurrent.prUrl
+                prState = [string]$ownerFinalizeCurrent.prState
+            }
+        }
+        else {
+            $null
+        }
         prepareTrust = if ($trust) {
             [ordered]@{
                 attemptId = [string]$trust.attemptId
@@ -1526,7 +2254,7 @@ function Get-HubStatus {
     [ordered]@{
         hubId = 'harness-control-center'
         name = 'Harness Control Center'
-        version = '0.2'
+        version = '0.3'
         bind = "127.0.0.1:$Port"
         defaultProjectId = 'eink'
         projects = $projects
@@ -2039,6 +2767,20 @@ function Invoke-BurnAction {
         $script:Busy = $false
     }
 
+    if ($script:LastResult -eq 'SPI_BURN_VERIFIED') {
+        try {
+            [void](Set-BurnVerificationState -Candidate $candidate)
+            $script:LastLog += 'BURN_VERIFICATION_STATE: DURABLE'
+        }
+        catch {
+            $script:LastResult = 'BLOCKED'
+            $script:LastLog += @(
+                'BLOCKED: BURN_VERIFICATION_STATE_NOT_DURABLE',
+                "EXCEPTION: $($_.Exception.Message)"
+            )
+        }
+    }
+
     Get-ControlStatus
 }
 
@@ -2265,17 +3007,29 @@ $einkRegistryProject = Get-RegistryProject -ProjectId 'eink'
 if (
     -not $einkRegistryProject -or
     [string]$einkRegistryProject.adapter -ne 'eink' -or
-    -not [IO.Path]::GetFullPath(
-        [string]$einkRegistryProject.workspace
-    ).Equals(
-        [IO.Path]::GetFullPath($repoRoot),
-        [StringComparison]::OrdinalIgnoreCase
+    (
+        -not $AcceptanceMode -and
+        -not [IO.Path]::GetFullPath(
+            [string]$einkRegistryProject.workspace
+        ).Equals(
+            [IO.Path]::GetFullPath($repoRoot),
+            [StringComparison]::OrdinalIgnoreCase
+        )
     )
 ) {
     throw 'EINK registry workspace does not match the running repository.'
 }
 
+if (
+    [string]$einkRegistryProject.finalize.taskId -ne
+        'EINK-HARNESS-CONTROL-CENTER-V0.3-FINALIZE' -or
+    @(Get-ApprovedFinalizeFiles).Count -eq 0
+) {
+    throw 'EINK v0.3 finalize profile is invalid.'
+}
+
 Initialize-PrepareTrustState
+Initialize-AcceptanceBurnFixture
 
 $url = "http://127.0.0.1:$Port/"
 
@@ -2523,6 +3277,46 @@ try {
                         -Client $client `
                         -StatusCode 200 `
                         -Value (Invoke-BurnAction -Body $body)
+
+                    continue
+                }
+
+                if (
+                    [string]$project.adapter -eq 'eink' -and
+                    $actionId -in @('physical-pass', 'physical-fail')
+                ) {
+                    try {
+                        $body = if (
+                            [string]::IsNullOrWhiteSpace($request.Body)
+                        ) {
+                            @{}
+                        }
+                        else {
+                            $request.Body | ConvertFrom-Json
+                        }
+                    }
+                    catch {
+                        Write-Json `
+                            -Client $client `
+                            -StatusCode 400 `
+                            -Value @{
+                                error = 'INVALID_JSON'
+                            }
+
+                        continue
+                    }
+
+                    $value = if ($actionId -eq 'physical-pass') {
+                        Invoke-PhysicalPassAction -Body $body
+                    }
+                    else {
+                        Invoke-PhysicalFailAction -Body $body
+                    }
+
+                    Write-Json `
+                        -Client $client `
+                        -StatusCode 200 `
+                        -Value $value
 
                     continue
                 }

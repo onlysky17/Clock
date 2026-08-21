@@ -30,7 +30,7 @@ function Test-ControlCenter {
 
         return (
             [string]$status.hubId -eq 'harness-control-center' -and
-            [string]$status.version -eq '0.2' -and
+            [string]$status.version -eq '0.3' -and
             @($status.projects.id) -contains 'eink'
         )
     }

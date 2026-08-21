@@ -77,6 +77,13 @@ foreach ($marker in @(
     'packedSha256',
     'PREPARE_PASS_LOCKED_ARTIFACT',
     'PREPARE_PASS_TRUST_NOT_DURABLE_BURN_DISABLED',
+    'Get-ValidBurnVerification',
+    'Get-ApprovedFilesFingerprint',
+    'Invoke-PhysicalPassAction',
+    'Invoke-PhysicalFailAction',
+    'New-ValidatedStateBackup',
+    "@('add', '--') + `$approved",
+    'AUTO_MERGE: DISABLED',
     'eink-spi-burn.ps1',
     'OWNER_BURN_CONFIRMATION_REQUIRED'
 )) {
@@ -103,6 +110,9 @@ foreach ($marker in @(
     'CREATE & RUN',
     'FAIL & AUTO FIX',
     'OWNER PASS',
+    'PHYSICAL PASS',
+    'PHYSICAL FAIL',
+    'OPEN PR',
     'prepareButton',
     'burnButton',
     'stateBadge',
@@ -124,6 +134,28 @@ if (
     @($registryObject.projects.id) -notcontains 'electronic'
 ) {
     throw 'Multiproject registry is incomplete.'
+}
+
+$einkProfile = @(
+    $registryObject.projects |
+    Where-Object { [string]$_.id -eq 'eink' }
+) | Select-Object -First 1
+
+if (
+    [string]$einkProfile.finalize.taskId -ne
+        'EINK-HARNESS-CONTROL-CENTER-V0.3-FINALIZE' -or
+    @($einkProfile.finalize.approvedFiles).Count -ne 6 -or
+    @($einkProfile.actions.id) -notcontains 'physical-pass' -or
+    @($einkProfile.actions.id) -notcontains 'physical-fail'
+) {
+    throw 'EINK v0.3 finalize profile is invalid.'
+}
+
+if (
+    $serverText -match '(?im)git\s+add\s+\.' -or
+    $serverText.Contains("@('add', '.')")
+) {
+    throw 'Broad git add is forbidden in finalize path.'
 }
 
 $electronicProfile = @(
@@ -215,7 +247,7 @@ try {
 
     if (
         [string]$status.hubId -ne 'harness-control-center' -or
-        [string]$status.version -ne '0.2' -or
+        [string]$status.version -ne '0.3' -or
         @($status.projects.id) -notcontains 'eink' -or
         @($status.projects.id) -notcontains 'electronic'
     ) {
@@ -249,7 +281,8 @@ try {
 
     if (
         [string]$einkStatus.adapter -ne 'eink' -or
-        [bool]$einkStatus.readOnly
+        [bool]$einkStatus.readOnly -or
+        [bool]$einkStatus.physicalReviewEnabled
     ) {
         throw 'EINK adapter status failed.'
     }
@@ -318,6 +351,22 @@ try {
         throw 'Write action without session token was not blocked.'
     }
 
+    $headBeforeGateTest = (& git -C $repoRoot rev-parse HEAD).Trim()
+    $physicalPassBlocked = Invoke-RestMethod `
+        -Uri ($url + 'api/projects/eink/actions/physical-pass') `
+        -Method Post `
+        -Headers $headers `
+        -ContentType 'application/json' `
+        -Body '{"feedback":"must remain gated","evidence":[]}'
+
+    if (
+        [string]$physicalPassBlocked.lastResult -ne 'BLOCKED' -or
+        [bool]$physicalPassBlocked.physicalReviewEnabled -or
+        (& git -C $repoRoot rev-parse HEAD).Trim() -ne $headBeforeGateTest
+    ) {
+        throw 'Physical PASS was not safely gated before SPI_BURN_VERIFIED.'
+    }
+
     $shutdown = Invoke-RestMethod `
         -Uri ($url + 'api/shutdown') `
         -Method Post `
@@ -329,12 +378,13 @@ try {
         throw 'Shutdown API failed.'
     }
 
-    Write-Output 'HARNESS CONTROL CENTER V0.2 SMOKE: PASS'
+    Write-Output 'HARNESS CONTROL CENTER V0.3 SMOKE: PASS'
     Write-Output 'LOOPBACK_BIND: PASS'
     Write-Output 'STATUS_API: PASS'
     Write-Output 'MULTIPROJECT_REGISTRY: PASS'
     Write-Output 'EINK_ADAPTER: PASS'
     Write-Output 'EINK_STALE_ARTIFACT_FALLBACK: BLOCKED'
+    Write-Output 'PHYSICAL_GATE_BEFORE_BURN: BLOCKED'
     Write-Output 'ELECTRONIC_REFERENCE_TAB: PAUSED_READ_ONLY'
     Write-Output 'ELECTRONIC_ACTIONS: BLOCKED'
     Write-Output 'ARBITRARY_ACTION: BLOCKED'
