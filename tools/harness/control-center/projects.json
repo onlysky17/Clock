@@ -7,6 +7,19 @@
       "adapter": "eink",
       "workspace": "D:\\EINK\\Clock",
       "brainOptional": false,
+      "finalize": {
+        "taskId": "EINK-HARNESS-CONTROL-CENTER-V0.3-FINALIZE",
+        "approvedFiles": [
+          "scripts/eink-control-center.ps1",
+          "scripts/task-eink-control-center-smoke.ps1",
+          "scripts/task-eink-control-center-finalize-acceptance.ps1",
+          "tools/harness/control-center/index.html",
+          "tools/harness/control-center/projects.json",
+          "tools/harness/control-center/server.ps1"
+        ],
+        "backupRoot": "_incoming/EINK_HARNESS_CONTROL_CENTER_FINALIZE",
+        "baseBranch": "main"
+      },
       "actions": [
         {
           "id": "prepare",
@@ -18,6 +31,18 @@
           "id": "burn",
           "method": "POST",
           "destructive": true,
+          "ownerGate": true
+        },
+        {
+          "id": "physical-pass",
+          "method": "POST",
+          "destructive": true,
+          "ownerGate": true
+        },
+        {
+          "id": "physical-fail",
+          "method": "POST",
+          "destructive": false,
           "ownerGate": true
         }
       ]

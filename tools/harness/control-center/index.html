@@ -559,7 +559,7 @@
     <header>
       <div>
         <h1>Harness Control Center</h1>
-        <div class="sub">Multiproject v0.2 · local-only · 127.0.0.1 · action allow-list</div>
+        <div class="sub">Multiproject v0.3 · EINK-first · local-only · 127.0.0.1 · action allow-list</div>
       </div>
       <div id="stateBadge" class="badge">IDLE</div>
     </header>
@@ -587,6 +587,27 @@
       <div class="card">
         <div class="label">Tracked / Untracked</div>
         <div id="treeState" class="value">-</div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="label" style="margin-bottom:14px">Owner Physical Gate</div>
+      <div class="warning">
+        PHYSICAL PASS / FAIL chỉ mở sau trạng thái SPI_BURN_VERIFIED.
+        PASS sẽ backup, exact-stage file task được duyệt, commit, push và tạo PR mở; không tự merge và không tự burn.
+      </div>
+      <div class="form-stack" style="margin-top:14px">
+        <textarea id="einkPhysicalFeedback" placeholder="Ghi nhận kết quả quan sát vật lý hoặc mô tả lỗi..."></textarea>
+        <input id="einkPhysicalEvidence" type="file" multiple accept="image/*,video/*,.txt,.md,.json,.log,.pdf">
+        <div class="actions">
+          <button id="einkPhysicalPassButton" class="pass-action" disabled>PHYSICAL PASS</button>
+          <button id="einkPhysicalFailButton" class="fail-action" disabled>PHYSICAL FAIL</button>
+        </div>
+        <div id="einkFinalizeResult" class="pending-files">Chưa có Owner physical decision.</div>
+        <div class="artifact">
+          <div class="artifact-line"><span>Commit</span><code id="einkFinalizeCommit">-</code></div>
+          <div class="artifact-line"><span>Pull Request</span><a id="einkFinalizePr" href="#" target="_blank" rel="noreferrer">-</a></div>
+        </div>
       </div>
     </section>
 
@@ -784,8 +805,8 @@
     function badgeClass(state) {
       if (state === "RUNNING") return "running";
       if (["READY_TO_BURN", "WAITING_OWNER_GATE"].includes(state)) return "ready";
-      if (["SPI_BURN_VERIFIED", "PASS"].includes(state)) return "pass";
-      if (["BLOCKED", "PLUGIN_UNAVAILABLE", "ADAPTER_UNAVAILABLE"].includes(state)) return "blocked";
+      if (["SPI_BURN_VERIFIED", "PASS", "OPEN_PR"].includes(state)) return "pass";
+      if (["BLOCKED", "PHYSICAL_FAIL", "PLUGIN_UNAVAILABLE", "ADAPTER_UNAVAILABLE"].includes(state)) return "blocked";
       return "";
     }
 
@@ -886,6 +907,22 @@
 
       $("prepareButton").disabled = !!data.busy;
       $("burnButton").disabled = !data.readyToBurn || !!data.busy;
+      $("einkPhysicalPassButton").disabled = !data.physicalReviewEnabled || !!data.busy;
+      $("einkPhysicalFailButton").disabled = !data.physicalReviewEnabled || !!data.busy;
+
+      const finalize = data.ownerFinalize || {};
+      $("einkFinalizeCommit").textContent = finalize.commitSha || "-";
+      const pr = $("einkFinalizePr");
+      if (finalize.prUrl) {
+        pr.href = finalize.prUrl;
+        pr.textContent = `[${finalize.prState || "OPEN"} PR] ${finalize.prUrl}`;
+      } else {
+        pr.removeAttribute("href");
+        pr.textContent = "-";
+      }
+      $("einkFinalizeResult").textContent = finalize.decision
+        ? `${finalize.decision} · ${finalize.state || "UNRESOLVED"} · evidence ${finalize.evidenceCount || 0}`
+        : "Chưa có Owner physical decision.";
 
       $("log").textContent = data.lastLog || "No log yet.";
     }
@@ -1155,6 +1192,25 @@
       });
     }
 
+    async function collectEinkPhysicalEvidence() {
+      const files = [...($("einkPhysicalEvidence").files || [])];
+      if (files.length > 8) throw new Error("Tối đa 8 evidence files.");
+      let total = 0;
+      const evidence = [];
+      for (const file of files) {
+        total += file.size;
+        if (file.size > 10 * 1024 * 1024 || total > 25 * 1024 * 1024) {
+          throw new Error("Evidence vượt giới hạn an toàn 10 MB/file hoặc 25 MB tổng.");
+        }
+        evidence.push({
+          filename: file.name,
+          mime: file.type || "application/octet-stream",
+          dataBase64: await fileToBase64(file)
+        });
+      }
+      return evidence;
+    }
+
     async function uploadPendingEvidence(scope, note, taskId) {
       const refs = [];
       const files = [...pendingEvidence[scope]];
@@ -1245,6 +1301,41 @@
         $("log").textContent = `Burn failed: ${error.message}`;
       }
 
+      await refresh();
+    });
+
+    $("einkPhysicalFailButton").addEventListener("click", async () => {
+      if (!current?.physicalReviewEnabled) return;
+      const feedback = $("einkPhysicalFeedback").value.trim();
+      try {
+        const evidence = await collectEinkPhysicalEvidence();
+        render(await post("/api/projects/eink/actions/physical-fail", { feedback, evidence }));
+        $("einkPhysicalEvidence").value = "";
+      } catch (error) {
+        $("log").textContent = `Physical FAIL record failed: ${error.message}`;
+      }
+      await refresh();
+    });
+
+    $("einkPhysicalPassButton").addEventListener("click", async () => {
+      if (!current?.physicalReviewEnabled) return;
+      const feedback = $("einkPhysicalFeedback").value.trim();
+      const ok = window.confirm(
+        "XÁC NHẬN PHYSICAL PASS?\n\n" +
+        "Harness sẽ backup validated state, exact-stage file task được duyệt, commit, push và tạo OPEN PR.\n" +
+        "Không tự merge và không burn thêm."
+      );
+      if (!ok) return;
+      try {
+        const evidence = await collectEinkPhysicalEvidence();
+        $("einkPhysicalPassButton").disabled = true;
+        $("einkPhysicalFailButton").disabled = true;
+        $("log").textContent = "Recording PHYSICAL PASS -> backup -> exact stage -> commit -> push -> OPEN PR";
+        render(await post("/api/projects/eink/actions/physical-pass", { feedback, evidence }));
+        $("einkPhysicalEvidence").value = "";
+      } catch (error) {
+        $("log").textContent = `Physical PASS finalize failed: ${error.message}`;
+      }
       await refresh();
     });
 
