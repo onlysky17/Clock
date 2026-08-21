@@ -23,6 +23,28 @@ $ProductHeaderOffset = 0x38000
 $MaxRawSize = 0x10000
 $FallbackExpectedHash = "C52E3E96CA76B45245FE5457721FFE6163C25C1840D120EB45F398817DA49452"
 
+function Get-Sha256Hex {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $stream = $null
+    $sha256 = $null
+
+    try {
+        $stream = [System.IO.File]::OpenRead($Path)
+        $sha256 = [System.Security.Cryptography.SHA256]::Create()
+        $hashBytes = $sha256.ComputeHash($stream)
+        return ([System.BitConverter]::ToString($hashBytes)).Replace('-', '').ToUpperInvariant()
+    }
+    finally {
+        if ($null -ne $sha256) {
+            $sha256.Dispose()
+        }
+        if ($null -ne $stream) {
+            $stream.Dispose()
+        }
+    }
+}
+
 
 function Read-U32LE {
     param([byte[]]$Bytes, [int]$Offset)
@@ -151,7 +173,7 @@ function Test-HinkFullImage {
         Valid = $valid
         Score = $score
         FullName = $item.FullName
-        SHA256 = (Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash
+        SHA256 = Get-Sha256Hex -Path $item.FullName
         PayloadSize = [int]$payloadSize
         PayloadCRC = if ($endian) { "{0:X8}" -f $storedCrc } else { "" }
         Endian = if ($endian) { $endian } else { "" }
@@ -288,6 +310,6 @@ Write-Host "DEVICE: $Name"
 Write-Host "RAW_SIZE: $($rawBytes.Length)"
 Write-Host "RAW_CRC32: $('{0:X8}' -f $newCrc)"
 Write-Host "TEMPLATE_SHA256: $($templateCheck.SHA256)"
-Write-Host "OUTPUT_SHA256: $((Get-FileHash -LiteralPath $Out -Algorithm SHA256).Hash)"
+Write-Host "OUTPUT_SHA256: $(Get-Sha256Hex -Path $Out)"
 Write-Host "HEADER: OK"
 Write-Host "LAYOUT: 7050@00000 7051@04000 PAYLOAD@04040 7052@38000"
