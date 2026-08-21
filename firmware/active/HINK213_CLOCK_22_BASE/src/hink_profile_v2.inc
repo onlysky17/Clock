@@ -106,22 +106,86 @@ static void hink_v2_small_uint_center(int cx, int cy, uint8_t value, uint8_t col
     draw_text(x, (uint8_t)(cy - 3), buf, color);
 }
 
-static void hink_v2_clock_title(void)
+#define HINK_V2_SAYING_LINE_CHARS 18U
+#define HINK_V2_SAYING_LINE_COUNT 3U
+
+static const char * const hink_v2_daily_sayings[] = {
+    "CO CONG MAI SAT|CO NGAY NEN KIM",
+    "UONG NUOC|NHO NGUON",
+    "AN QUA|NHO KE TRONG CAY",
+    "LA LANH|DUM LA RACH",
+    "CHAM MA CHAC",
+    "TOT GO HON|TOT NUOC SON",
+    "DI MOT NGAY DANG|HOC MOT SANG KHON",
+    "GAN MUC THI DEN|GAN DEN THI SANG",
+    "CO CHI THI NEN",
+    "THAT BAI LA ME|THANH CONG",
+    "KIEN THA LAU|DAY TO",
+    "TICH TIEU|THANH DAI",
+    "MOT CAY LAM CHANG|NEN NON",
+    "BA CAY CHUM LAI|NEN HON NUI CAO",
+    "LOI NOI|GOI VANG",
+    "HOC AN HOC NOI|HOC GOI HOC MO",
+    "DOI KHI|IM LANG LA VANG",
+    "THUONG NGUOI|NHU THUONG THAN",
+    "O HIEN GAP LANH",
+    "GIEO GIO|GAT BAO",
+    "AN CHAC|MAC BEN",
+    "NANG NHAT|TAY QUEN VIEC GIOI",
+    "LUA THU VANG|GIAN NAN THU SUC",
+    "TRE GIA|MANG MOC",
+    "THUOC HAY|DANG MIENG",
+    "HON MOT NGAY|KHON MOT CHUT",
+    "KHON NGOAN|DOI DAP BEN NGOAI",
+    "DAU XUOI|DUOI LOT",
+    "CHON BAN MA CHOI|CHON NOI MA O",
+    "MO CUA|DON NGAY MOI",
+    "GIU LONG AN NHIEN|VIEC SE THANH",
+    "SONG CHAM|NGHI SAU",
+    "BIET DU|THAY VUI",
+    "NGAY MOI|HY VONG MOI",
+    "BINH AN|LA PHUC",
+    "HOM NAY|LAM DIEU TOT"
+};
+
+static void hink_v2_draw_daily_saying(uint32_t local_day)
 {
-    /* Firmware font is ASCII. Add tiny marks so DONG HO reads as Vietnamese DONG HO. */
-    draw_text(7, 8, "DONG HO KIM", BLACK);
+    const char *text;
+    char line[HINK_V2_SAYING_LINE_CHARS + 1U];
+    uint8_t row = 0U;
+    uint8_t len;
+    uint8_t x;
 
-    /* D crossbar -> D-stroke approximation. */
-    hink_d7a_box(6, 11, 11, 11, BLACK);
+    text = hink_v2_daily_sayings[
+        local_day % (sizeof(hink_v2_daily_sayings) /
+                     sizeof(hink_v2_daily_sayings[0]))
+    ];
 
-    /* Circumflex + grave over both O characters. */
-    hink_d7a_pixel(14, 6, BLACK); hink_d7a_pixel(15, 5, BLACK); hink_d7a_pixel(16, 6, BLACK);
-    hink_d7a_pixel(13, 3, BLACK); hink_d7a_pixel(14, 4, BLACK);
-    hink_d7a_pixel(44, 6, BLACK); hink_d7a_pixel(45, 5, BLACK); hink_d7a_pixel(46, 6, BLACK);
-    hink_d7a_pixel(43, 3, BLACK); hink_d7a_pixel(44, 4, BLACK);
+    while ((*text != 0) && (row < HINK_V2_SAYING_LINE_COUNT))
+    {
+        len = 0U;
+        while ((*text != 0) && (*text != '|'))
+        {
+            if (len < HINK_V2_SAYING_LINE_CHARS)
+            {
+                line[len++] = *text;
+            }
+            text++;
+        }
+        if (*text == '|')
+        {
+            text++;
+        }
+
+        line[len] = 0;
+        x = (uint8_t)((EPD_FRAME_WIDTH - ((uint16_t)len * 6U)) / 2U);
+        draw_text(x, (uint8_t)(190U + (row * 14U)), line, BLACK);
+        row++;
+    }
 }
 
 static void hink_v2_draw_clock_classic(uint8_t h, uint8_t m,
+                                       uint32_t local_day,
                                        uint16_t sy, uint8_t sm, uint8_t sd,
                                        uint8_t sw, uint8_t lunar_valid,
                                        uint8_t lm, uint8_t ld)
@@ -133,14 +197,13 @@ static void hink_v2_draw_clock_classic(uint8_t h, uint8_t m,
     uint8_t long_tick;
     uint8_t inner;
     uint8_t outer;
-    int cx = 201;
-    int cy = 61;
+    int cx = 61;
+    int cy = 72;
     int x0;
     int y0;
     int x1;
     int y1;
 
-    hink_v2_clock_title();
     hink_weekday(date_buf, sw);
     date_buf[2] = ' ';
     hink_put_2(&date_buf[3], sd);
@@ -149,28 +212,28 @@ static void hink_v2_draw_clock_classic(uint8_t h, uint8_t m,
     date_buf[8] = '/';
     hink_put_4(&date_buf[9], sy);
     date_buf[13] = 0;
-    draw_text(7, 21, date_buf, BLACK);
+    hink_v2_line(31, 134, 90, 134, BLACK);
+    draw_text(22, 143, date_buf, BLACK);
+    hink_d9a_draw_lunar(37, 163, lunar_valid, lm, ld);
+    hink_v2_draw_daily_saying(local_day);
 
-    hink_d7a_draw_hhmm(8, 43, h, m, BLACK);
-    hink_d9a_draw_lunar(9, 103, lunar_valid, lm, ld);
-
-    hink_v2_circle(cx, cy, 46, BLACK);
+    hink_v2_circle(cx, cy, 51, BLACK);
 
     /* Outer hour layer: alternating long/short ticks + labels 1..12. */
     for (hour = 1U; hour <= 12U; hour++)
     {
         idx = (uint8_t)((hour * 5U) % 60U);
         long_tick = (uint8_t)((hour & 1U) == 0U);
-        inner = long_tick ? 41U : 43U;
-        outer = 45U;
+        inner = long_tick ? 46U : 48U;
+        outer = 50U;
         x0 = cx + hink_v2_scale(hink_v2_x60[idx], inner);
         y0 = cy + hink_v2_scale(hink_v2_y60[idx], inner);
         x1 = cx + hink_v2_scale(hink_v2_x60[idx], outer);
         y1 = cy + hink_v2_scale(hink_v2_y60[idx], outer);
         hink_v2_line(x0, y0, x1, y1, BLACK);
         hink_v2_small_uint_center(
-            cx + hink_v2_scale(hink_v2_x60[idx], 30U),
-            cy + hink_v2_scale(hink_v2_y60[idx], 30U),
+            cx + hink_v2_scale(hink_v2_x60[idx], 36U),
+            cy + hink_v2_scale(hink_v2_y60[idx], 36U),
             hour,
             BLACK
         );
@@ -180,8 +243,8 @@ static void hink_v2_draw_clock_classic(uint8_t h, uint8_t m,
      * Inner minute ring.
      *
      * 60 marks are kept well inside the 1..12 hour numerals:
-     *   hour labels : radius 30
-     *   minute ring : 5-minute radius 19..22; other minutes 21..22
+     *   hour labels : radius 36
+     *   minute ring : 5-minute radius 26..30; other minutes 29..30
      *
      * This leaves a visible gap instead of letting the inner/outer
      * marks touch the hour numbers.
@@ -191,13 +254,13 @@ static void hink_v2_draw_clock_classic(uint8_t h, uint8_t m,
         idx = minute;
         if ((minute % 5U) == 0U)
         {
-            inner = 19U;
-            outer = 22U;
+            inner = 26U;
+            outer = 30U;
         }
         else
         {
-            inner = 21U;
-            outer = 22U;
+            inner = 29U;
+            outer = 30U;
         }
 
         hink_v2_line(
@@ -211,14 +274,14 @@ static void hink_v2_draw_clock_classic(uint8_t h, uint8_t m,
 
     /* Hands: hour short/thick, minute long/thin. No seconds on e-ink. */
     idx = (uint8_t)((((h % 12U) * 5U) + (m / 12U)) % 60U);
-    x1 = cx + hink_v2_scale(hink_v2_x60[idx], 14U);
-    y1 = cy + hink_v2_scale(hink_v2_y60[idx], 14U);
+    x1 = cx + hink_v2_scale(hink_v2_x60[idx], 21U);
+    y1 = cy + hink_v2_scale(hink_v2_y60[idx], 21U);
     hink_v2_line(cx, cy, x1, y1, BLACK);
     hink_v2_line(cx + 1, cy, x1 + 1, y1, BLACK);
 
     idx = m;
-    x1 = cx + hink_v2_scale(hink_v2_x60[idx], 22U);
-    y1 = cy + hink_v2_scale(hink_v2_y60[idx], 22U);
+    x1 = cx + hink_v2_scale(hink_v2_x60[idx], 33U);
+    y1 = cy + hink_v2_scale(hink_v2_y60[idx], 33U);
     hink_v2_line(cx, cy, x1, y1, BLACK);
     hink_d7a_box(cx - 2, cy - 2, cx + 2, cy + 2, BLACK);
 }
