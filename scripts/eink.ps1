@@ -291,6 +291,28 @@ function Test-BuildGuard {
     return ($errors.Count -eq 1 -and [string]$errors[0] -eq 'DIRTY_TRACKED_TREE')
 }
 
+function Get-Sha256Hex {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $stream = $null
+    $sha256 = $null
+
+    try {
+        $stream = [System.IO.File]::OpenRead($Path)
+        $sha256 = [System.Security.Cryptography.SHA256]::Create()
+        $hashBytes = $sha256.ComputeHash($stream)
+        return ([System.BitConverter]::ToString($hashBytes)).Replace('-', '').ToUpperInvariant()
+    }
+    finally {
+        if ($null -ne $sha256) {
+            $sha256.Dispose()
+        }
+        if ($null -ne $stream) {
+            $stream.Dispose()
+        }
+    }
+}
+
 function Invoke-BuildImplementation {
     $guard = Invoke-WorkspaceGuard -AllowDirtyTrackedTree
     if (-not (Test-BuildGuard -Guard $guard)) {
@@ -410,22 +432,7 @@ function Invoke-BuildImplementation {
         return 1
     }
 
-    $rawStream = $null
-    $sha256 = $null
-    try {
-        $rawStream = [System.IO.File]::OpenRead($rawBin)
-        $sha256 = [System.Security.Cryptography.SHA256]::Create()
-        $rawHashBytes = $sha256.ComputeHash($rawStream)
-        $rawHash = ([System.BitConverter]::ToString($rawHashBytes)).Replace('-', '').ToUpperInvariant()
-    }
-    finally {
-        if ($null -ne $sha256) {
-            $sha256.Dispose()
-        }
-        if ($null -ne $rawStream) {
-            $rawStream.Dispose()
-        }
-    }
+    $rawHash = Get-Sha256Hex -Path $rawBin
     Write-Output 'EINK HARNESS: PASS'
     Write-Output 'ACTION: BUILD'
     Write-Output "TARGET: $($toolchain.target)"
@@ -480,7 +487,7 @@ function Invoke-PrepareTestImplementation {
     }
 
     $rawItem = Get-Item -LiteralPath $rawBin
-    $rawHash = ((Get-FileHash -LiteralPath $rawBin -Algorithm SHA256).Hash).ToUpperInvariant()
+    $rawHash = Get-Sha256Hex -Path $rawBin
 
     $stamp = Get-Date -Format 'yyyyMMdd_HHmmss'
     $evidenceRoot = Join-Path $repoRoot '_incoming\EINK_HARNESS_PREPARE_TEST'
@@ -558,7 +565,7 @@ function Invoke-PrepareTestImplementation {
         }
     }
 
-    $packedHash = ((Get-FileHash -LiteralPath $packedBin -Algorithm SHA256).Hash).ToUpperInvariant()
+    $packedHash = Get-Sha256Hex -Path $packedBin
 
     $headResult = Invoke-GitCommand -Arguments @('rev-parse', 'HEAD')
     $statusResult = Invoke-GitCommand -Arguments @(
