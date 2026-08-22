@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     [string]$ProfilePath = (Join-Path $PSScriptRoot '..\tools\harness\eink-profile.json'),
-    [string]$JtagSerial
+    [string]$JtagSerial,
+    [switch]$AllowDirtyTrackedTree
 )
 
 $ErrorActionPreference = 'Stop'
@@ -143,9 +144,11 @@ if ($origin -ne [string]$profile.workspace.origin) {
 $statusLines = @(& git status --porcelain=v1 --untracked-files=all 2>$null)
 $trackedDirty = @($statusLines | Where-Object { $_ -and -not $_.StartsWith('?? ') })
 if ($trackedDirty.Count -gt 0) {
-    Write-Blocked -Reason 'DIRTY_TRACKED_TREE'
     $trackedDirty | ForEach-Object { Write-Output "DIRTY: $_" }
-    exit 1
+    if (-not $AllowDirtyTrackedTree) {
+        Write-Blocked -Reason 'DIRTY_TRACKED_TREE'
+        exit 1
+    }
 }
 
 $config = $profile.spiBackup

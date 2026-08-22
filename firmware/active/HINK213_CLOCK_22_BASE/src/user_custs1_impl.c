@@ -226,11 +226,10 @@ static uint8_t hink_epd_first_refresh_pending = 1U;
 #define HINK_EPD_PRIME_RECOVERY_TICKS 100UL
 
 /*
- * Portrait Analog v1 keeps Classic on clean FULL refreshes only.
- *
- * Classic ordinary minutes do not touch the panel. Weekly retains its
- * canonical UPDATE_FLY path between maintenance boundaries. Maintenance
- * FULL refresh remains aligned to real local wall-clock time:
+ * Portrait Analog keeps the Classic layout unchanged. Classic ordinary
+ * minutes and Weekly use the canonical full-frame UPDATE_FLY path between
+ * maintenance boundaries. Maintenance FULL refresh remains aligned to real
+ * local wall-clock time:
  *
  *     00 / 05 / 10 / 15 / ... / 55
  *
@@ -2737,14 +2736,15 @@ static uint8_t hink_d2_start_epd_refresh(void)
     uint8_t use_fly = 0U;
 
     /*
-     * Weekly retains the canonical mostly-static UPDATE_FLY path.
+     * Classic and Weekly share the canonical full-frame UPDATE_FLY path.
      *
      * First render, profile/day change and prime recovery force FULL.
      * Once a baseline is trusted, use UPDATE_FLY between real local
      * 5-minute boundaries. At 00/05/10/.../55 always force UPDATE_FULL.
      */
     if (!hink_epd_first_refresh_pending &&
-        (hink_clock_profile == HINK_CLOCK_PROFILE_WEEKLY) &&
+        ((hink_clock_profile == HINK_CLOCK_PROFILE_CLASSIC) ||
+         (hink_clock_profile == HINK_CLOCK_PROFILE_WEEKLY)) &&
         hink_epd_fly_ready &&
         (hink_epd_fly_profile == hink_clock_profile) &&
         (hink_epd_fly_day == refresh_day) &&
@@ -2889,42 +2889,6 @@ static void hink_d2_draw_current_framebuffer(void)
 	}
 }
 
-static uint8_t hink_portrait_ordinary_minute(void)
-{
-    uint32_t refresh_minute = hink_auto_local_minute_key();
-    uint32_t refresh_day = refresh_minute / 1440UL;
-
-    return (uint8_t)(
-        (hink_clock_profile == HINK_CLOCK_PROFILE_CLASSIC) &&
-        !hink_epd_first_refresh_pending &&
-        hink_epd_fly_ready &&
-        (hink_epd_fly_profile == HINK_CLOCK_PROFILE_CLASSIC) &&
-        (hink_epd_fly_day == refresh_day) &&
-        ((refresh_minute % HINK_EPD_FULL_REFRESH_MINUTES) != 0UL)
-    );
-}
-
-static void hink_d2_complete_without_display_refresh(void)
-{
-    uint32_t auto_minute = hink_auto_rendering_minute;
-
-    if (auto_minute == HINK_AUTO_SENTINEL)
-    {
-        auto_minute = hink_auto_local_minute_key();
-    }
-
-    hink_d2_render_state = HINK_D2_RENDER_COMPLETE;
-    hink_auto_last_rendered_minute = auto_minute;
-    if ((hink_auto_flags & HINK_AUTO_FLAG_PENDING) &&
-        (hink_auto_pending_minute == auto_minute))
-    {
-        hink_auto_flags &= (uint8_t)~HINK_AUTO_FLAG_PENDING;
-    }
-    hink_auto_rendering_minute = HINK_AUTO_SENTINEL;
-    hink_d2_render_notify(HINK_D2_RESULT_OK, HINK_D2_RENDER_COMPLETE);
-    HINK_AUTO_TRY_SCHEDULE();
-}
-
 static void hink_d2_prime_retry_cb(void)
 {
     epd_wait_hnd = EASY_TIMER_INVALID_TIMER;
@@ -2953,12 +2917,6 @@ static void hink_d2_render_timer_cb(void)
 
     hink_d2_render_state = HINK_D2_RENDER_RENDERING;
     hink_d2_render_notify(HINK_D2_RESULT_OK, HINK_D2_RENDER_RENDERING);
-
-    if (hink_portrait_ordinary_minute())
-    {
-        hink_d2_complete_without_display_refresh();
-        return;
-    }
 
     hink_d2_draw_current_framebuffer();
 
