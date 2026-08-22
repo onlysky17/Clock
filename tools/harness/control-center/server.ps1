@@ -9,7 +9,19 @@ param(
 
     [string]$AcceptanceWorkspace = '',
 
-    [string]$AcceptanceFixturePath = ''
+    [string]$AcceptanceFixturePath = '',
+
+    [switch]$BurnPlanAcceptance,
+
+    [string]$BurnPlanPackedBin = '',
+
+    [switch]$BurnSafetyAcceptance,
+
+    [string]$BurnSafetyProfilePath = '',
+
+    [string]$BurnSafetyPackedBin = '',
+
+    [switch]$FeedbackTransportAcceptance
 )
 
 $ErrorActionPreference = 'Stop'
@@ -47,11 +59,76 @@ $indexPath   = Join-Path $PSScriptRoot 'index.html'
 $registryPath = Join-Path $PSScriptRoot 'projects.json'
 $prepareScript = Join-Path $repoRoot 'scripts\eink.ps1'
 $burnScript    = Join-Path $repoRoot 'scripts\eink-spi-burn.ps1'
+$launcherPath  = Join-Path $repoRoot 'scripts\eink-control-center.ps1'
 $prepareEvidenceRoot = Join-Path $repoRoot '_incoming\EINK_HARNESS_PREPARE_TEST'
 $prepareTrustStatePath = Join-Path $prepareEvidenceRoot 'control-center-prepare-state.json'
 $ownerFinalizeRoot = Join-Path $repoRoot '_incoming\EINK_HARNESS_CONTROL_CENTER_FINALIZE'
 $burnVerificationStatePath = Join-Path $ownerFinalizeRoot 'burn-verification-state.json'
 $ownerFinalizeStatePath = Join-Path $ownerFinalizeRoot 'owner-finalize-state.json'
+$activeFinalizeTaskPath = Join-Path $ownerFinalizeRoot 'active-task.json'
+$runtimeRoot = Join-Path $repoRoot '_incoming\EINK_HARNESS_CONTROL_CENTER_RUNTIME'
+$preEraseBackupEvidenceDir = Join-Path $repoRoot '_incoming\EINK_HARNESS_SPI_BACKUP\20260822_114022'
+$preEraseBackupSha256 = '8824C5F9D6F99A1192770225EA14D4C7B861537D193CF77C632D0849FDBC58C1'
+$script:AcceptancePrepareCandidate = $null
+if ($BurnSafetyAcceptance) {
+    if ($AcceptanceMode -or $Port -eq 5175 -or -not $NoBrowser -or
+        [string]::IsNullOrWhiteSpace($BurnSafetyProfilePath) -or
+        [string]::IsNullOrWhiteSpace($BurnSafetyPackedBin)) {
+        throw 'Burn safety acceptance requires production workspace, non-production port, -NoBrowser, fixture profile, and packed BIN.'
+    }
+    $fixtureProfile = [IO.Path]::GetFullPath($BurnSafetyProfilePath)
+    $runtimePrefix = [IO.Path]::GetFullPath($runtimeRoot).TrimEnd('\') + '\'
+    if (-not $fixtureProfile.StartsWith($runtimePrefix, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Burn safety fixture profile must stay inside the Control Center runtime root.'
+    }
+    $profilePath = $fixtureProfile
+}
+$runtimeLockPath = Join-Path $runtimeRoot ("server-$Port.json")
+$burnRuntimePath = Join-Path $runtimeRoot ("burn-$Port.json")
+$currentProcess = Get-Process -Id $PID
+$serverStartUtc = $currentProcess.StartTime.ToUniversalTime().ToString('o')
+$serverStartTicks = $currentProcess.StartTime.ToUniversalTime().Ticks
+$acceptanceTracePath = [Environment]::GetEnvironmentVariable(
+    'EINK_CONTROL_CENTER_ACCEPTANCE_TRACE',
+    'Process'
+)
+if (-not [string]::IsNullOrWhiteSpace($acceptanceTracePath)) {
+    $acceptanceTracePath = [IO.Path]::GetFullPath($acceptanceTracePath)
+    $runtimePrefix = [IO.Path]::GetFullPath($runtimeRoot).TrimEnd('\') + '\'
+    if (
+        $Port -eq 5175 -or
+        -not $acceptanceTracePath.StartsWith(
+            $runtimePrefix,
+            [StringComparison]::OrdinalIgnoreCase
+        )
+    ) {
+        $acceptanceTracePath = ''
+    }
+}
+
+function Write-AcceptanceLifecycleTrace {
+    param(
+        [Parameter(Mandatory=$true)][string]$Phase,
+        [string]$Detail = ''
+    )
+
+    if ([string]::IsNullOrWhiteSpace($acceptanceTracePath)) {
+        return
+    }
+    $line = '{0} PID={1} PORT={2} {3} {4}{5}' -f (
+        (Get-Date).ToUniversalTime().ToString('o'),
+        $PID,
+        $Port,
+        $Phase,
+        $Detail,
+        [Environment]::NewLine
+    )
+    [IO.File]::AppendAllText(
+        $acceptanceTracePath,
+        $line,
+        [Text.UTF8Encoding]::new($false)
+    )
+}
 
 $profile = [IO.File]::ReadAllText(
     $profilePath,
@@ -81,6 +158,10 @@ $script:LastAction = 'START'
 $script:LastResult = 'IDLE'
 $script:PrepareTrustFailureOverride = $null
 $script:BurnVerificationOverride = $null
+$script:BurnRecoveryRequired = $false
+$script:RecoveryChallengeHash = ''
+$script:RecoveryChallengeExpiresUtc = [DateTime]::MinValue
+$script:RecoveryChallengeArtifactSha = ''
 $script:LastLog = @(
     'Harness Control Center Multiproject v0.3 started.',
     'Waiting for action.'
@@ -115,6 +196,205 @@ function Invoke-NativeText {
         ExitCode = $exitCode
         Output = $output
     }
+}
+
+function Invoke-EinkSpiBurnScript {
+    param(
+        [Parameter(Mandatory=$true)]
+        [ValidateSet('Plan', 'Burn')]
+        [string]$Mode,
+
+        [Parameter(Mandatory=$true)]
+        [string]$PackedBin,
+
+        [string]$ExpectedPackedSha256 = ''
+    )
+
+    $arguments = @(
+        '-NoProfile',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        $burnScript,
+        '-PackedBin',
+        $PackedBin,
+        '-Mode',
+        $Mode,
+        '-ProfilePath',
+        $profilePath
+    )
+
+    if ($Mode -eq 'Burn') { throw 'Synchronous real burn execution is forbidden.' }
+
+    Invoke-NativeText `
+        -FilePath 'powershell.exe' `
+        -Arguments $arguments
+}
+
+function Test-BurnWorkerIdentity {
+    param($Record)
+    if (-not $Record -or [string]$Record.schema -ne 'eink-control-center-burn-worker-v1') {
+        return $false
+    }
+    try {
+        $process = Get-Process -Id ([int]$Record.pid) -ErrorAction Stop
+        return (
+            $process.StartTime.ToUniversalTime().Ticks -eq [int64]$Record.processStartTicks -and
+            [IO.Path]::GetFullPath($process.Path) -eq [IO.Path]::GetFullPath([string]$Record.executablePath)
+        )
+    }
+    catch { return $false }
+}
+
+function Get-BurnPhaseState {
+    param($Record)
+    if (-not $Record -or [string]::IsNullOrWhiteSpace([string]$Record.phaseStatePath)) {
+        return $null
+    }
+    Read-Utf8JsonFile -Path ([string]$Record.phaseStatePath)
+}
+
+function Start-EinkBurnWorker {
+    param(
+        [Parameter(Mandatory=$true)]$Candidate,
+        [Parameter(Mandatory=$true)]$RepoState,
+        [switch]$RecoveryWrite,
+        [string]$RecoveryChallenge = ''
+    )
+    if (-not (Test-Path -LiteralPath $runtimeRoot -PathType Container)) {
+        [void](New-Item -ItemType Directory -Path $runtimeRoot -Force)
+    }
+    $attemptId = [Guid]::NewGuid().ToString('N')
+    $phasePath = Join-Path $runtimeRoot ("burn-$attemptId.phase.json")
+    $stdoutPath = Join-Path $runtimeRoot ("burn-$attemptId.stdout.log")
+    $stderrPath = Join-Path $runtimeRoot ("burn-$attemptId.stderr.log")
+    foreach ($path in @($phasePath, $stdoutPath, $stderrPath)) {
+        Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+    }
+    $arguments = @(
+        '-NoProfile','-ExecutionPolicy','Bypass','-File',"`"$burnScript`"",
+        '-PackedBin',"`"$($Candidate.Path)`"",'-Mode','Burn',
+        '-ProfilePath',"`"$profilePath`"",
+        '-ExpectedPackedSha256',$Candidate.Sha256,
+        '-ConfirmToken',[string]$profile.spiBurn.confirmationToken,
+        '-PhaseStatePath',"`"$phasePath`"",
+        '-AllowDirtyTrackedTree'
+    )
+    if ($BurnSafetyAcceptance) {
+        $arguments += '-PreflightAcceptanceOnly'
+    }
+    if ($RecoveryWrite) {
+        if ([string]::IsNullOrWhiteSpace($RecoveryChallenge)) {
+            throw 'Consumed recovery Owner challenge is required.'
+        }
+        $arguments += @(
+            '-RecoveryWriteOnly',
+            '-RecoveryConfirmToken',$RecoveryChallenge,
+            '-PreEraseBackupEvidenceDir',"`"$preEraseBackupEvidenceDir`"",
+            '-ExpectedPreEraseBackupSha256',$preEraseBackupSha256
+        )
+    }
+    $process = Start-Process -FilePath 'powershell.exe' -ArgumentList $arguments `
+        -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath `
+        -WindowStyle Hidden -PassThru
+    $record = [ordered]@{
+        schema = 'eink-control-center-burn-worker-v1'
+        operation = if ($RecoveryWrite) { 'RECOVERY_WRITE' } else { 'NORMAL_BURN' }
+        attemptId = $attemptId
+        status = 'RUNNING'
+        handled = $false
+        pid = [int]$process.Id
+        processStartTicks = [int64]$process.StartTime.ToUniversalTime().Ticks
+        executablePath = [string]$process.Path
+        createdUtc = [DateTime]::UtcNow.ToString('o')
+        completedUtc = ''
+        reason = ''
+        phaseStatePath = $phasePath
+        stdoutPath = $stdoutPath
+        stderrPath = $stderrPath
+        artifactPath = [string]$Candidate.Path
+        artifactSha256 = [string]$Candidate.Sha256
+        workspaceFingerprint = [string]$Candidate.WorkspaceFingerprint
+        approvedFilesFingerprint = Get-ApprovedFilesFingerprint
+        branch = [string]$RepoState.Branch
+        head = [string]$RepoState.Head
+        taskId = [string]$einkRegistryProject.finalize.taskId
+    }
+    Write-Utf8JsonFile -Path $burnRuntimePath -Value $record
+    $record
+}
+
+function Sync-BurnRuntimeState {
+    $record = Read-Utf8JsonFile -Path $burnRuntimePath
+    if (-not $record) { return $null }
+    $phase = Get-BurnPhaseState -Record $record
+    $isRecoveryWrite = [string]$record.operation -eq 'RECOVERY_WRITE'
+    if ([string]$record.status -eq 'RUNNING') {
+        if (Test-BurnWorkerIdentity -Record $record) { return [pscustomobject]@{ Record=$record; Phase=$phase; Running=$true } }
+        $pidCollision = $false
+        try { [void](Get-Process -Id ([int]$record.pid) -ErrorAction Stop); $pidCollision = $true } catch { }
+        if ($pidCollision) {
+            $record.status = 'RECOVERY_REQUIRED'
+            $record.handled = $true
+            $record.completedUtc = [DateTime]::UtcNow.ToString('o')
+            $record.reason = 'BURN_WORKER_IDENTITY_MISMATCH'
+            $script:BurnRecoveryRequired = $true
+            Set-LastLog -Action 'SPI_BURN' -Result 'RECOVERY_REQUIRED' -Lines @('BLOCKED: BURN_WORKER_IDENTITY_MISMATCH')
+        }
+        elseif ($phase -and [string]$phase.phase -in @('SHA_VERIFY','RECOVERY_SHA_VERIFY') -and [string]$phase.status -eq 'PASS') {
+            $candidate = Get-LatestPrepareCandidate -RepoState (Get-RepoState)
+            $stdout = Get-Utf8TextTail -Path ([string]$record.stdoutPath) -MaxLines 80
+            $recoveryEvidenceValid = -not $isRecoveryWrite -or (
+                $stdout -match 'ACTION: SPI-RECOVERY-WRITE' -and
+                $stdout -match 'NORMAL_FRESH_BACKUP: SKIPPED' -and
+                $stdout -match 'ERASE: SKIPPED' -and
+                $stdout -match ('PRE_ERASE_BACKUP_SHA256: ' + [regex]::Escape($preEraseBackupSha256)) -and
+                $stdout -match 'RECOVERY_TARGET: CURRENT_ARTIFACT'
+            )
+            if ($candidate -and $candidate.Sha256 -eq [string]$record.artifactSha256 -and
+                $stdout -match 'NEXT_STATE: SPI_BURN_VERIFIED' -and $recoveryEvidenceValid) {
+                [void](Set-BurnVerificationState -Candidate $candidate)
+                $record.status = 'SPI_BURN_VERIFIED'
+                $record.handled = $true
+                $record.completedUtc = [DateTime]::UtcNow.ToString('o')
+                $script:BurnRecoveryRequired = $false
+                Set-LastLog -Action 'SPI_BURN' -Result 'SPI_BURN_VERIFIED' -Lines @($stdout)
+            }
+            else {
+                $record.status = 'RECOVERY_REQUIRED'
+                $record.handled = $true
+                $record.reason = 'BURN_SUCCESS_EVIDENCE_INVALID'
+                $script:BurnRecoveryRequired = $true
+                Set-LastLog -Action 'SPI_BURN' -Result 'RECOVERY_REQUIRED' -Lines @('BLOCKED: BURN_SUCCESS_EVIDENCE_INVALID')
+            }
+        }
+        elseif ($isRecoveryWrite) {
+            $record.status = 'RECOVERY_REQUIRED'
+            $record.handled = $true
+            $record.completedUtc = [DateTime]::UtcNow.ToString('o')
+            $record.reason = if ($phase -and -not [string]::IsNullOrWhiteSpace([string]$phase.reason)) { [string]$phase.reason } else { 'RECOVERY_WORKER_FAILED' }
+            $script:BurnRecoveryRequired = $true
+            Set-LastLog -Action 'SPI_RECOVERY_WRITE' -Result 'RECOVERY_REQUIRED' -Lines @("BLOCKED: $($record.reason)")
+        }
+        elseif ($phase -and -not [bool]$phase.destructiveStarted) {
+            $record.status = 'FAILED_SAFE'
+            $record.handled = $true
+            $record.completedUtc = [DateTime]::UtcNow.ToString('o')
+            $record.reason = if ([string]::IsNullOrWhiteSpace([string]$phase.reason)) { 'FAILED_SAFE' } else { [string]$phase.reason }
+            $stdout = Get-Utf8TextTail -Path ([string]$record.stdoutPath) -MaxLines 80
+            Set-LastLog -Action 'SPI_BURN' -Result $record.reason -Lines @($stdout, "SAFE_RETURN: READY_TO_BURN", "REASON: $($record.reason)")
+        }
+        else {
+            $record.status = 'RECOVERY_REQUIRED'
+            $record.handled = $true
+            $record.completedUtc = [DateTime]::UtcNow.ToString('o')
+            $record.reason = if ($phase) { [string]$phase.reason } else { 'BURN_WORKER_EXITED_WITHOUT_PHASE_EVIDENCE' }
+            $script:BurnRecoveryRequired = $true
+            Set-LastLog -Action 'SPI_BURN' -Result 'RECOVERY_REQUIRED' -Lines @("BLOCKED: $($record.reason)")
+        }
+        Write-Utf8JsonFile -Path $burnRuntimePath -Value $record
+    }
+    [pscustomobject]@{ Record=$record; Phase=$phase; Running=$false }
 }
 
 function Invoke-Git {
@@ -155,6 +435,45 @@ function Get-Sha256Hex {
     }
 }
 
+function Get-PreEraseBackupStatus {
+    $read1 = Join-Path $preEraseBackupEvidenceDir 'BOARD1_SPI_READ1.bin'
+    $read2 = Join-Path $preEraseBackupEvidenceDir 'BOARD1_SPI_READ2.bin'
+    $valid = $false
+    $reason = 'MISSING'
+    $read1Size = -1
+    $read2Size = -1
+    $read1Sha = ''
+    $read2Sha = ''
+    try {
+        if ((Test-Path -LiteralPath $read1 -PathType Leaf) -and
+            (Test-Path -LiteralPath $read2 -PathType Leaf)) {
+            $read1Size = [int64](Get-Item -LiteralPath $read1).Length
+            $read2Size = [int64](Get-Item -LiteralPath $read2).Length
+            $read1Sha = Get-Sha256Hex -Path $read1
+            $read2Sha = Get-Sha256Hex -Path $read2
+            $valid = $read1Size -eq 262144 -and $read2Size -eq 262144 -and
+                $read1Sha -eq $preEraseBackupSha256 -and
+                $read2Sha -eq $preEraseBackupSha256 -and
+                $read1Sha -eq $read2Sha
+            $reason = if ($valid) { 'IMMUTABLE_PRE_ERASE_BACKUP_VERIFIED' } else { 'SIZE_OR_SHA_MISMATCH' }
+        }
+    }
+    catch {
+        $reason = 'BACKUP_VALIDATION_EXCEPTION'
+    }
+    [pscustomobject]@{
+        valid = [bool]$valid
+        reason = $reason
+        evidenceDir = $preEraseBackupEvidenceDir
+        sha256 = $preEraseBackupSha256
+        read1Size = $read1Size
+        read2Size = $read2Size
+        read1Sha256 = $read1Sha
+        read2Sha256 = $read2Sha
+        restoreAvailable = [bool]$valid
+    }
+}
+
 function Get-TextSha256 {
     param(
         [Parameter(Mandatory=$true)]
@@ -174,6 +493,34 @@ function Get-TextSha256 {
     finally {
         $sha.Dispose()
     }
+}
+
+function New-RecoveryOwnerChallenge {
+    param([Parameter(Mandatory=$true)][string]$ArtifactSha256)
+    $challenge = [Guid]::NewGuid().ToString('N')
+    $script:RecoveryChallengeHash = Get-TextSha256 -Text $challenge
+    $script:RecoveryChallengeExpiresUtc = [DateTime]::UtcNow.AddMinutes(2)
+    $script:RecoveryChallengeArtifactSha = $ArtifactSha256.Trim().ToUpperInvariant()
+    [pscustomobject]@{
+        challenge = $challenge
+        expiresUtc = $script:RecoveryChallengeExpiresUtc.ToString('o')
+        artifactSha256 = $script:RecoveryChallengeArtifactSha
+    }
+}
+
+function Test-AndConsumeRecoveryOwnerChallenge {
+    param(
+        [Parameter(Mandatory=$true)][string]$Challenge,
+        [Parameter(Mandatory=$true)][string]$ArtifactSha256
+    )
+    $valid = -not [string]::IsNullOrWhiteSpace($Challenge) -and
+        [DateTime]::UtcNow -le $script:RecoveryChallengeExpiresUtc -and
+        (Get-TextSha256 -Text $Challenge) -eq $script:RecoveryChallengeHash -and
+        $ArtifactSha256.Trim().ToUpperInvariant() -eq $script:RecoveryChallengeArtifactSha
+    $script:RecoveryChallengeHash = ''
+    $script:RecoveryChallengeExpiresUtc = [DateTime]::MinValue
+    $script:RecoveryChallengeArtifactSha = ''
+    return [bool]$valid
 }
 
 function Read-Utf8JsonFile {
@@ -1177,6 +1524,96 @@ function Write-Utf8JsonFile {
     )
 }
 
+function Get-ServerLifecycleIdentity {
+    [ordered]@{
+        schema = 'eink-control-center-server-lock-v1'
+        pid = [int]$PID
+        processStartUtc = $serverStartUtc
+        processStartTicks = [int64]$serverStartTicks
+        executablePath = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+        scriptPath = [IO.Path]::GetFullPath($PSCommandPath)
+        repoRoot = [IO.Path]::GetFullPath($repoRoot)
+        port = [int]$Port
+        createdUtc = [DateTime]::UtcNow.ToString('o')
+    }
+}
+
+function Write-ServerLifecycleLock {
+    Write-Utf8JsonFile `
+        -Path $runtimeLockPath `
+        -Value (Get-ServerLifecycleIdentity)
+}
+
+function Remove-OwnServerLifecycleLock {
+    $lock = Read-Utf8JsonFile -Path $runtimeLockPath
+
+    if (
+        $lock -and
+        [int]$lock.pid -eq [int]$PID -and
+        [int64]$lock.processStartTicks -eq [int64]$serverStartTicks -and
+        [string]$lock.scriptPath -eq [IO.Path]::GetFullPath($PSCommandPath)
+    ) {
+        Remove-Item -LiteralPath $runtimeLockPath -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Test-ServerLifecycleLockProcess {
+    param($Lock)
+
+    if (
+        -not $Lock -or
+        [string]$Lock.schema -ne 'eink-control-center-server-lock-v1' -or
+        [int]$Lock.port -ne [int]$Port -or
+        [string]$Lock.scriptPath -ne [IO.Path]::GetFullPath($PSCommandPath)
+    ) {
+        return $false
+    }
+
+    try {
+        $process = Get-Process -Id ([int]$Lock.pid) -ErrorAction Stop
+        return (
+            $process.StartTime.ToUniversalTime().Ticks -eq
+                [int64]$Lock.processStartTicks -and
+            [IO.Path]::GetFullPath($process.Path) -eq
+                [IO.Path]::GetFullPath([string]$Lock.executablePath)
+        )
+    }
+    catch {
+        return $false
+    }
+}
+
+function Start-ControlCenterReplacement {
+    $restartStdout = Join-Path $runtimeRoot ("restart-$PID.stdout.log")
+    $restartStderr = Join-Path $runtimeRoot ("restart-$PID.stderr.log")
+    Remove-Item -LiteralPath $restartStdout -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $restartStderr -Force -ErrorAction SilentlyContinue
+
+    $arguments = @(
+        '-NoProfile',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        "`"$launcherPath`"",
+        '-Port',
+        [string]$Port,
+        '-NoBrowser',
+        '-RestartFromPid',
+        [string]$PID,
+        '-RestartFromStartTicks',
+        [string]$serverStartTicks,
+        '-RestartFromExecutablePath',
+        "`"$([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)`""
+    )
+
+    Start-Process `
+        -FilePath 'powershell.exe' `
+        -ArgumentList $arguments `
+        -RedirectStandardOutput $restartStdout `
+        -RedirectStandardError $restartStderr `
+        -WindowStyle Hidden | Out-Null
+}
+
 function Get-ApprovedFinalizeFiles {
     $files = @(
         $einkRegistryProject.finalize.approvedFiles |
@@ -1818,6 +2255,9 @@ function Set-PrepareTrustState {
         branch = ''
         head = ''
         workspaceFingerprint = ''
+        taskId = ''
+        approvedFiles = @()
+        approvedFilesFingerprint = ''
         manifestPath = ''
         lockPath = ''
         evidenceDir = ''
@@ -1952,6 +2392,7 @@ function Get-LatestPrepareCandidate {
         $RepoState
     )
 
+    if ($script:AcceptancePrepareCandidate) { return $script:AcceptancePrepareCandidate }
     $trust = Get-PrepareTrustState
 
     if (
@@ -1997,11 +2438,35 @@ function Get-LatestPrepareCandidate {
 
     $manifest = Read-Utf8JsonFile -Path $manifestPath
     $lock = Read-Utf8JsonFile -Path $lockPath
+    $currentApprovedFiles = @(Get-ApprovedFinalizeFiles)
+    $currentApprovedFilesFingerprint = Get-ApprovedFilesFingerprint
+    $trustedApprovedFiles = @(
+        $trust.approvedFiles |
+        ForEach-Object { ([string]$_).Replace('\', '/').Trim() } |
+        Sort-Object
+    )
+    $lockedApprovedFiles = @(
+        $lock.approvedFiles |
+        ForEach-Object { ([string]$_).Replace('\', '/').Trim() } |
+        Sort-Object
+    )
 
     if (
         -not $manifest -or
         -not $lock -or
-        [string]$manifest.nextState -ne 'OWNER_BURN_CONFIRMATION_REQUIRED'
+        [string]$manifest.nextState -ne 'OWNER_BURN_CONFIRMATION_REQUIRED' -or
+        [string]$trust.taskId -ne
+            [string]$einkRegistryProject.finalize.taskId -or
+        [string]$lock.taskId -ne
+            [string]$einkRegistryProject.finalize.taskId -or
+        ($trustedApprovedFiles -join "`n") -ne
+            ($currentApprovedFiles -join "`n") -or
+        ($lockedApprovedFiles -join "`n") -ne
+            ($currentApprovedFiles -join "`n") -or
+        ([string]$trust.approvedFilesFingerprint).ToUpperInvariant() -ne
+            $currentApprovedFilesFingerprint -or
+        ([string]$lock.approvedFilesFingerprint).ToUpperInvariant() -ne
+            $currentApprovedFilesFingerprint
     ) {
         return $null
     }
@@ -2055,10 +2520,20 @@ function Get-LatestPrepareCandidate {
         EvidenceDir = $evidenceDir
         WorkspaceFingerprint = $currentFingerprint
         AttemptId = [string]$trust.attemptId
+        TaskId = [string]$einkRegistryProject.finalize.taskId
+        BuildTimestamp = if (-not [string]::IsNullOrWhiteSpace([string]$manifest.createdUtc)) { [string]$manifest.createdUtc } else { [string]$trust.completedUtc }
     }
 }
 
+function Get-FriendlyTaskTitle {
+    param([Parameter(Mandatory=$true)][string]$TaskId)
+    $text = $TaskId -replace '^EINK-', '' -replace '-\d+$', '' -replace '-', ' '
+    $culture = [Globalization.CultureInfo]::GetCultureInfo('en-US')
+    $culture.TextInfo.ToTitleCase($text.ToLowerInvariant())
+}
+
 function Get-ControlStatus {
+    $burnRuntime = Sync-BurnRuntimeState
     $repo = Get-RepoState
     $trust = Get-PrepareTrustState
     $candidate = Get-LatestPrepareCandidate -RepoState $repo
@@ -2085,8 +2560,17 @@ function Get-ControlStatus {
         $null
     }
 
-    $state = if ($script:Busy) {
+    $burnRunning = [bool]($burnRuntime -and $burnRuntime.Running)
+    $recoveryRequired = [bool]($script:BurnRecoveryRequired -or ($burnRuntime -and [string]$burnRuntime.Record.status -eq 'RECOVERY_REQUIRED'))
+    $preEraseBackup = Get-PreEraseBackupStatus
+    $state = if ($recoveryRequired) {
+        'RECOVERY_REQUIRED'
+    }
+    elseif ($script:Busy -or $burnRunning) {
         'RUNNING'
+    }
+    elseif ($candidate -and $burnRuntime -and [string]$burnRuntime.Record.status -eq 'FAILED_SAFE') {
+        'READY_TO_BURN'
     }
     elseif (
         $ownerFinalizeCurrent -and
@@ -2128,11 +2612,20 @@ function Get-ControlStatus {
         branch = $repo.Branch
         head = $repo.Head
         state = $state
-        busy = [bool]$script:Busy
+        busy = [bool]($script:Busy -or $burnRunning)
         trackedDirtyCount = @($repo.TrackedStatus).Count
         stagedCount = @($repo.StagedFiles).Count
         untrackedCount = @($repo.Untracked).Count
-        readyToBurn = [bool]($candidate -and -not $script:Busy)
+        readyToBurn = [bool]($candidate -and -not $script:Busy -and -not $burnRunning -and -not $recoveryRequired)
+        recovery = [ordered]@{
+            required = $recoveryRequired
+            target = 'CURRENT_ARTIFACT'
+            targetLabel = 'Portrait Minute Fly'
+            writeEnabled = [bool]($recoveryRequired -and $candidate -and $preEraseBackup.valid -and -not $script:Busy -and -not $burnRunning)
+            normalBackupSkipped = $true
+            eraseSkipped = $true
+            preEraseBackup = $preEraseBackup
+        }
         physicalReviewEnabled = [bool](
             $burnVerification -and
             -not $script:Busy
@@ -2180,6 +2673,9 @@ function Get-ControlStatus {
         }
         artifact = if ($candidate) {
             [ordered]@{
+                title = Get-FriendlyTaskTitle -TaskId $candidate.TaskId
+                taskId = $candidate.TaskId
+                buildTimestamp = $candidate.BuildTimestamp
                 path = $candidate.Path
                 size = $candidate.Size
                 sha256 = $candidate.Sha256
@@ -2192,6 +2688,37 @@ function Get-ControlStatus {
         lastAction = $script:LastAction
         lastResult = $script:LastResult
         lastLog = ($script:LastLog -join "`n")
+        burnProgress = if ($burnRuntime) {
+            $isRecoveryProgress = [string]$burnRuntime.Record.operation -eq 'RECOVERY_WRITE'
+            $phaseNames = if ($isRecoveryProgress) {
+                @('RECOVERY_PREFLIGHT','RECOVERY_WRITE','RECOVERY_READBACK','RECOVERY_SHA_VERIFY')
+            }
+            else {
+                @('HARDWARE_PREFLIGHT','SPI_BACKUP','ERASE','WRITE','READBACK','SHA_VERIFY')
+            }
+            $phaseName = if ($burnRuntime.Phase) { [string]$burnRuntime.Phase.phase } elseif ($isRecoveryProgress) { 'RECOVERY_PREFLIGHT' } else { 'HARDWARE_PREFLIGHT' }
+            $phaseIndex = [Math]::Max(0, [Array]::IndexOf($phaseNames, $phaseName))
+            [ordered]@{
+                attemptId = [string]$burnRuntime.Record.attemptId
+                workerPid = [int]$burnRuntime.Record.pid
+                workerStatus = [string]$burnRuntime.Record.status
+                phase = $phaseName
+                phaseStatus = if ($burnRuntime.Phase) { [string]$burnRuntime.Phase.status } else { 'STARTING' }
+                reason = if ($burnRuntime.Phase) { [string]$burnRuntime.Phase.reason } else { '' }
+                destructiveStarted = if ($burnRuntime.Phase) { [bool]$burnRuntime.Phase.destructiveStarted } else { $false }
+                updatedUtc = if ($burnRuntime.Phase) { [string]$burnRuntime.Phase.updatedUtc } else { [string]$burnRuntime.Record.createdUtc }
+                percent = [int](($phaseIndex * 100) / $phaseNames.Count)
+                phases = $phaseNames
+            }
+        }
+        else { $null }
+        lifecycle = [ordered]@{
+            state = 'RUNNING'
+            pid = [int]$PID
+            processStartUtc = $serverStartUtc
+            processStartTicks = [int64]$serverStartTicks
+            lockPath = $runtimeLockPath
+        }
         sessionToken = $sessionToken
     }
 }
@@ -2258,6 +2785,13 @@ function Get-HubStatus {
         bind = "127.0.0.1:$Port"
         defaultProjectId = 'eink'
         projects = $projects
+        lifecycle = [ordered]@{
+            state = 'RUNNING'
+            pid = [int]$PID
+            processStartUtc = $serverStartUtc
+            processStartTicks = [int64]$serverStartTicks
+            lockPath = $runtimeLockPath
+        }
         sessionToken = $sessionToken
     }
 }
@@ -2275,7 +2809,8 @@ function Set-LastLog {
 }
 
 function Invoke-PrepareAction {
-    if ($script:Busy) {
+    $activeBurn = Sync-BurnRuntimeState
+    if ($script:Busy -or ($activeBurn -and $activeBurn.Running)) {
         return Get-ControlStatus
     }
 
@@ -2293,6 +2828,8 @@ function Invoke-PrepareAction {
             )
 
         $repoAtStart = Get-RepoState
+        $approvedFilesAtStart = @(Get-ApprovedFinalizeFiles)
+        $approvedFilesFingerprintAtStart = Get-ApprovedFilesFingerprint
 
         $trustStart = Set-PrepareTrustState `
             -Status 'RUNNING' `
@@ -2300,6 +2837,9 @@ function Invoke-PrepareAction {
             -Data @{
                 branch = [string]$repoAtStart.Branch
                 head = [string]$repoAtStart.Head
+                taskId = [string]$einkRegistryProject.finalize.taskId
+                approvedFiles = $approvedFilesAtStart
+                approvedFilesFingerprint = $approvedFilesFingerprintAtStart
                 reason = 'PREPARE_IN_PROGRESS'
             }
 
@@ -2351,8 +2891,16 @@ function Invoke-PrepareAction {
         }
 
         $afterFingerprint = Get-WorkspaceFingerprint
+        $approvedFilesAfter = @(Get-ApprovedFinalizeFiles)
+        $approvedFilesFingerprintAfter = Get-ApprovedFilesFingerprint
 
-        if ($beforeFingerprint -ne $afterFingerprint) {
+        if (
+            $beforeFingerprint -ne $afterFingerprint -or
+            ($approvedFilesAtStart -join "`n") -ne
+                ($approvedFilesAfter -join "`n") -or
+            $approvedFilesFingerprintAtStart -ne
+                $approvedFilesFingerprintAfter
+        ) {
             Set-PrepareAttemptFailure `
                 -AttemptId $attemptId `
                 -Reason 'SOURCE_CHANGED_DURING_PREPARE'
@@ -2460,6 +3008,9 @@ function Invoke-PrepareAction {
             branch = $repo.Branch
             head = $repo.Head
             workspaceFingerprint = $afterFingerprint
+            taskId = [string]$einkRegistryProject.finalize.taskId
+            approvedFiles = $approvedFilesAfter
+            approvedFilesFingerprint = $approvedFilesFingerprintAfter
             packedSha256 = $packedSha
             packedPath = $packedPath
             nextState = 'OWNER_BURN_CONFIRMATION_REQUIRED'
@@ -2482,6 +3033,9 @@ function Invoke-PrepareAction {
                 branch = [string]$repo.Branch
                 head = [string]$repo.Head
                 workspaceFingerprint = $afterFingerprint
+                taskId = [string]$einkRegistryProject.finalize.taskId
+                approvedFiles = $approvedFilesAfter
+                approvedFilesFingerprint = $approvedFilesFingerprintAfter
                 manifestPath = $manifestPath
                 lockPath = $lockPath
                 evidenceDir = (Split-Path -Parent $manifestPath)
@@ -2556,7 +3110,15 @@ function Invoke-BurnAction {
         $Body
     )
 
-    if ($script:Busy) {
+    $existingBurn = Sync-BurnRuntimeState
+    if ($script:Busy -or ($existingBurn -and $existingBurn.Running)) {
+        return Get-ControlStatus
+    }
+    if ($script:BurnRecoveryRequired -or ($existingBurn -and [string]$existingBurn.Record.status -eq 'RECOVERY_REQUIRED')) {
+        Set-LastLog -Action 'SPI_BURN' -Result 'BLOCKED' -Lines @(
+            'BLOCKED: RECOVERY_REQUIRED',
+            'Normal fresh-backup/erase burn is forbidden during recovery.'
+        )
         return Get-ControlStatus
     }
 
@@ -2612,11 +3174,6 @@ function Invoke-BurnAction {
         return Get-ControlStatus
     }
 
-    $script:Busy = $true
-
-    $stashRef = $null
-    $originalDirty = @($repoBefore.DirtyTrackedFiles | Sort-Object)
-
     try {
         Set-LastLog `
             -Action 'SPI_BURN' `
@@ -2624,81 +3181,14 @@ function Invoke-BurnAction {
             -Lines @(
                 'Owner destructive confirmation received.',
                 "Artifact SHA256: $($candidate.Sha256)",
-                'Preparing clean tracked transaction...',
-                'Untracked files will not be touched.'
+                'HARDWARE_PREFLIGHT will run before backup/erase/write.',
+                'No destructive command is allowed before preflight PASS.'
             )
-
-        if ($originalDirty.Count -gt 0) {
-            $label = 'eink-control-center-burn-' + (
-                Get-Date -Format 'yyyyMMdd_HHmmss'
-            )
-
-            $stashArgs = @(
-                'stash',
-                'push',
-                '-m',
-                $label,
-                '--'
-            ) + $originalDirty
-
-            $stashResult = Invoke-Git -Arguments $stashArgs
-
-            if ($stashResult.ExitCode -ne 0) {
-                throw 'Unable to preserve tracked source changes before burn.'
-            }
-
-            $stashRef = Get-ExactStashRef -Label $label
-
-            if (-not $stashRef) {
-                throw 'Unable to resolve temporary burn stash.'
-            }
-
-            $afterStash = Get-RepoState
-
-            if (
-                @($afterStash.TrackedStatus).Count -ne 0 -or
-                @($afterStash.StagedFiles).Count -ne 0
-            ) {
-                throw 'Tracked tree did not become clean before burn.'
-            }
-        }
-
-        $burnResult = Invoke-NativeText `
-            -FilePath 'powershell.exe' `
-            -Arguments @(
-                '-NoProfile',
-                '-ExecutionPolicy',
-                'Bypass',
-                '-File',
-                $burnScript,
-                '-PackedBin',
-                $candidate.Path,
-                '-Mode',
-                'Burn',
-                '-ExpectedPackedSha256',
-                $candidate.Sha256,
-                '-ConfirmToken',
-                [string]$profile.spiBurn.confirmationToken
-            )
-
-        $burnLines = @($burnResult.Output)
-
-        if (
-            $burnResult.ExitCode -ne 0 -or
-            -not ($burnLines -match '^EINK HARNESS: PASS$') -or
-            -not ($burnLines -match '^NEXT_STATE: SPI_BURN_VERIFIED$')
-        ) {
-            Set-LastLog `
-                -Action 'SPI_BURN' `
-                -Result 'BLOCKED' `
-                -Lines $burnLines
-        }
-        else {
-            Set-LastLog `
-                -Action 'SPI_BURN' `
-                -Result 'SPI_BURN_VERIFIED' `
-                -Lines $burnLines
-        }
+        $worker = Start-EinkBurnWorker -Candidate $candidate -RepoState $repoBefore
+        $script:LastLog += @(
+            "BURN_WORKER_PID: $($worker.pid)",
+            'PHASE: HARDWARE_PREFLIGHT'
+        )
     }
     catch {
         Set-LastLog `
@@ -2709,78 +3199,91 @@ function Invoke-BurnAction {
                 "EXCEPTION: $($_.Exception.Message)"
             )
     }
-    finally {
-        if ($stashRef) {
-            $restore = Invoke-Git -Arguments @(
-                'stash',
-                'apply',
-                $stashRef
-            )
+    Get-ControlStatus
+}
 
-            if ($restore.ExitCode -eq 0) {
-                $restored = @(
-                    (
-                        Get-RepoState
-                    ).DirtyTrackedFiles |
-                    Sort-Object
-                )
-
-                $difference = @(
-                    Compare-Object `
-                        -ReferenceObject $originalDirty `
-                        -DifferenceObject $restored
-                )
-
-                if ($difference.Count -eq 0) {
-                    $drop = Invoke-Git -Arguments @(
-                        'stash',
-                        'drop',
-                        $stashRef
-                    )
-
-                    if ($drop.ExitCode -eq 0) {
-                        $script:LastLog +=
-                            'SOURCE_RESTORE: PASS'
-                    }
-                    else {
-                        $script:LastLog +=
-                            "WARNING: STASH_DROP_FAILED: $stashRef"
-                    }
-                }
-                else {
-                    $script:LastResult = 'BLOCKED'
-                    $script:LastLog += @(
-                        'BLOCKED: SOURCE_RESTORE_SCOPE_MISMATCH',
-                        "STASH_PRESERVED: $stashRef"
-                    )
-                }
-            }
-            else {
-                $script:LastResult = 'BLOCKED'
-                $script:LastLog += @(
-                    'BLOCKED: SOURCE_RESTORE_FAILED',
-                    "STASH_PRESERVED: $stashRef"
-                )
-            }
-        }
-
-        $script:Busy = $false
+function Invoke-RecoveryArmAction {
+    $existingBurn = Sync-BurnRuntimeState
+    $recoveryRequired = [bool]($script:BurnRecoveryRequired -or ($existingBurn -and [string]$existingBurn.Record.status -eq 'RECOVERY_REQUIRED'))
+    $repo = Get-RepoState
+    $candidate = Get-LatestPrepareCandidate -RepoState $repo
+    $backupStatus = Get-PreEraseBackupStatus
+    if ($script:Busy -or ($existingBurn -and $existingBurn.Running) -or
+        -not $recoveryRequired -or -not $candidate -or -not $backupStatus.valid) {
+        return [ordered]@{ armed=$false; reason='RECOVERY_NOT_ELIGIBLE' }
     }
-
-    if ($script:LastResult -eq 'SPI_BURN_VERIFIED') {
-        try {
-            [void](Set-BurnVerificationState -Candidate $candidate)
-            $script:LastLog += 'BURN_VERIFICATION_STATE: DURABLE'
-        }
-        catch {
-            $script:LastResult = 'BLOCKED'
-            $script:LastLog += @(
-                'BLOCKED: BURN_VERIFICATION_STATE_NOT_DURABLE',
-                "EXCEPTION: $($_.Exception.Message)"
-            )
-        }
+    $challenge = New-RecoveryOwnerChallenge -ArtifactSha256 $candidate.Sha256
+    [ordered]@{
+        armed = $true
+        ownerChallenge = $challenge.challenge
+        expiresUtc = $challenge.expiresUtc
+        artifactSha256 = $challenge.artifactSha256
+        target = 'CURRENT_ARTIFACT'
     }
+}
 
+function Invoke-RecoveryWriteAction {
+    param(
+        [Parameter(Mandatory=$true)]
+        $Body
+    )
+    $existingBurn = Sync-BurnRuntimeState
+    if ($script:Busy -or ($existingBurn -and $existingBurn.Running)) {
+        return Get-ControlStatus
+    }
+    $recoveryRequired = [bool]($script:BurnRecoveryRequired -or ($existingBurn -and [string]$existingBurn.Record.status -eq 'RECOVERY_REQUIRED'))
+    if (-not $recoveryRequired) {
+        Set-LastLog -Action 'SPI_RECOVERY_WRITE' -Result 'BLOCKED' -Lines @('BLOCKED: RECOVERY_STATE_REQUIRED')
+        return Get-ControlStatus
+    }
+    $repoBefore = Get-RepoState
+    $candidate = Get-LatestPrepareCandidate -RepoState $repoBefore
+    if (-not $candidate) {
+        Set-LastLog -Action 'SPI_RECOVERY_WRITE' -Result 'BLOCKED' -Lines @('BLOCKED: FRESH_PREPARE_LOCK_REQUIRED')
+        return Get-ControlStatus
+    }
+    $backupStatus = Get-PreEraseBackupStatus
+    if (-not $backupStatus.valid) {
+        Set-LastLog -Action 'SPI_RECOVERY_WRITE' -Result 'BLOCKED' -Lines @(
+            'BLOCKED: IMMUTABLE_PRE_ERASE_BACKUP_INVALID',
+            "REASON: $($backupStatus.reason)"
+        )
+        return Get-ControlStatus
+    }
+    $ownerChallenge = [string]$Body.ownerChallenge
+    if (-not (Test-AndConsumeRecoveryOwnerChallenge -Challenge $ownerChallenge -ArtifactSha256 $candidate.Sha256)) {
+        Set-LastLog -Action 'SPI_RECOVERY_WRITE' -Result 'BLOCKED' -Lines @('BLOCKED: RECOVERY_OWNER_CONFIRMATION_REQUIRED')
+        return Get-ControlStatus
+    }
+    $requestedSha = ([string]$Body.sha256).Trim().ToUpperInvariant()
+    if ($requestedSha -ne $candidate.Sha256) {
+        Set-LastLog -Action 'SPI_RECOVERY_WRITE' -Result 'BLOCKED' -Lines @('BLOCKED: RECOVERY_ARTIFACT_SHA_MISMATCH')
+        return Get-ControlStatus
+    }
+    if (@($repoBefore.StagedFiles).Count -gt 0) {
+        Set-LastLog -Action 'SPI_RECOVERY_WRITE' -Result 'BLOCKED' -Lines @('BLOCKED: STAGED_CHANGES_EXIST')
+        return Get-ControlStatus
+    }
+    try {
+        Set-LastLog -Action 'SPI_RECOVERY_WRITE' -Result 'RUNNING' -Lines @(
+            'Owner confirmed controlled recovery WRITE.',
+            'Recovery target: Portrait Minute Fly.',
+            "Artifact SHA256: $($candidate.Sha256)",
+            "Immutable rollback SHA256: $preEraseBackupSha256",
+            'Normal fresh backup: SKIPPED.',
+            'Erase: SKIPPED.',
+            'Recovery path: hardware preflight -> WRITE -> full READBACK -> SHA verify.'
+        )
+        $worker = Start-EinkBurnWorker -Candidate $candidate -RepoState $repoBefore -RecoveryWrite -RecoveryChallenge $ownerChallenge
+        $script:LastLog += @(
+            "RECOVERY_WORKER_PID: $($worker.pid)",
+            'PHASE: RECOVERY_PREFLIGHT'
+        )
+    }
+    catch {
+        $script:BurnRecoveryRequired = $true
+        Set-LastLog -Action 'SPI_RECOVERY_WRITE' -Result 'RECOVERY_REQUIRED' -Lines @("EXCEPTION: $($_.Exception.Message)")
+    }
     Get-ControlStatus
 }
 
@@ -2790,17 +3293,53 @@ function Read-HttpRequest {
         [Net.Sockets.TcpClient]$Client
     )
 
+    $Client.ReceiveTimeout = 5000
+    $Client.SendTimeout = 5000
     $stream = $Client.GetStream()
+    $stream.ReadTimeout = 5000
+    $stream.WriteTimeout = 5000
+    $headerBuffer = New-Object 'Collections.Generic.List[byte]'
+    $delimiter = [byte[]](13, 10, 13, 10)
+    $matched = 0
 
-    $reader = New-Object IO.StreamReader(
-        $stream,
-        [Text.Encoding]::UTF8,
-        $false,
-        4096,
-        $true
+    while ($matched -lt $delimiter.Length) {
+        $value = $stream.ReadByte()
+
+        if ($value -lt 0) {
+            return $null
+        }
+
+        $byte = [byte]$value
+        $headerBuffer.Add($byte)
+
+        if ($headerBuffer.Count -gt 65536) {
+            throw 'HTTP request headers exceed the safe limit.'
+        }
+
+        if ($byte -eq $delimiter[$matched]) {
+            $matched++
+        }
+        elseif ($byte -eq $delimiter[0]) {
+            $matched = 1
+        }
+        else {
+            $matched = 0
+        }
+    }
+
+    $headerLength = $headerBuffer.Count - $delimiter.Length
+    $headerText = [Text.Encoding]::ASCII.GetString(
+        $headerBuffer.ToArray(),
+        0,
+        $headerLength
     )
-
-    $requestLine = $reader.ReadLine()
+    $headerLines = @($headerText -split "`r`n")
+    $requestLine = if ($headerLines.Count -gt 0) {
+        $headerLines[0]
+    }
+    else {
+        ''
+    }
 
     if ([string]::IsNullOrWhiteSpace($requestLine)) {
         return $null
@@ -2817,12 +3356,8 @@ function Read-HttpRequest {
 
     $headers = @{}
 
-    while ($true) {
-        $line = $reader.ReadLine()
-
-        if ($null -eq $line -or $line.Length -eq 0) {
-            break
-        }
+    foreach ($line in @($headerLines | Select-Object -Skip 1)) {
+        if ([string]::IsNullOrWhiteSpace($line)) { continue }
 
         $separator = $line.IndexOf(':')
 
@@ -2847,12 +3382,16 @@ function Read-HttpRequest {
         )
     }
 
+    if ($contentLength -lt 0 -or $contentLength -gt 80MB) {
+        throw 'HTTP request body exceeds the safe limit.'
+    }
+
     if ($contentLength -gt 0) {
-        $buffer = New-Object char[] $contentLength
+        $buffer = New-Object byte[] $contentLength
         $total = 0
 
         while ($total -lt $contentLength) {
-            $read = $reader.Read(
+            $read = $stream.Read(
                 $buffer,
                 $total,
                 $contentLength - $total
@@ -2865,11 +3404,12 @@ function Read-HttpRequest {
             $total += $read
         }
 
-        $body = New-Object string(
-            $buffer,
-            0,
-            $total
-        )
+        if ($total -ne $contentLength) {
+            throw 'HTTP request body ended before Content-Length bytes were received.'
+        }
+
+        $utf8Strict = New-Object Text.UTF8Encoding($false, $true)
+        $body = $utf8Strict.GetString($buffer)
     }
 
     [PSCustomObject]@{
@@ -3020,26 +3560,155 @@ if (
     throw 'EINK registry workspace does not match the running repository.'
 }
 
+$activeFinalizeTask = Read-Utf8JsonFile -Path $activeFinalizeTaskPath
+if ($activeFinalizeTask) {
+    $einkRegistryProject.finalize = $activeFinalizeTask
+}
+
 if (
-    [string]$einkRegistryProject.finalize.taskId -ne
-        'EINK-HARNESS-CONTROL-CENTER-V0.3-FINALIZE' -or
+    [string]::IsNullOrWhiteSpace(
+        [string]$einkRegistryProject.finalize.taskId
+    ) -or
+    [string]$einkRegistryProject.finalize.baseBranch -ne 'main' -or
     @(Get-ApprovedFinalizeFiles).Count -eq 0
 ) {
-    throw 'EINK v0.3 finalize profile is invalid.'
+    throw 'EINK active finalize profile is invalid.'
 }
 
 Initialize-PrepareTrustState
 Initialize-AcceptanceBurnFixture
 
+if ($BurnSafetyAcceptance) {
+    $packed = [IO.Path]::GetFullPath($BurnSafetyPackedBin)
+    if (-not (Test-Path -LiteralPath $packed -PathType Leaf)) {
+        throw 'Burn safety acceptance packed BIN is missing.'
+    }
+    $repoForFixture = Get-RepoState
+    $script:AcceptancePrepareCandidate = [pscustomobject]@{
+        Path = $packed
+        Size = [int64](Get-Item -LiteralPath $packed).Length
+        Sha256 = Get-Sha256Hex -Path $packed
+        Manifest = 'BURN_SAFETY_ACCEPTANCE'
+        EvidenceDir = $runtimeRoot
+        WorkspaceFingerprint = Get-WorkspaceFingerprint
+        AttemptId = 'BURN_SAFETY_ACCEPTANCE'
+        TaskId = [string]$einkRegistryProject.finalize.taskId
+        BuildTimestamp = [DateTime]::UtcNow.ToString('o')
+    }
+    [void](Invoke-BurnAction -Body @{
+        confirm = 'BURN'
+        sha256 = $script:AcceptancePrepareCandidate.Sha256
+    })
+    $deadline = [DateTime]::UtcNow.AddSeconds(45)
+    do {
+        Start-Sleep -Milliseconds 100
+        $runtime = Sync-BurnRuntimeState
+    } while ($runtime -and $runtime.Running -and [DateTime]::UtcNow -lt $deadline)
+    if ($runtime -and $runtime.Running) {
+        throw 'Burn safety acceptance worker exceeded its bounded deadline.'
+    }
+    $status = Get-ControlStatus
+    if ($status.state -ne 'READY_TO_BURN' -or
+        -not $status.readyToBurn -or
+        $status.burnProgress.reason -ne 'BOARD_NOT_CONNECTED' -or
+        $status.burnProgress.destructiveStarted) {
+        throw 'Burn safety acceptance did not return safely to READY_TO_BURN.'
+    }
+    Write-Output ('BURN_SAFETY_ACCEPTANCE_JSON:' + ($status | ConvertTo-Json -Depth 12 -Compress))
+    exit 0
+}
+
+if (-not $BurnSafetyAcceptance -and
+    (-not [string]::IsNullOrWhiteSpace($BurnSafetyProfilePath) -or
+     -not [string]::IsNullOrWhiteSpace($BurnSafetyPackedBin))) {
+    throw 'Burn safety fixture parameters require -BurnSafetyAcceptance.'
+}
+
+if (
+    $FeedbackTransportAcceptance -and
+    (
+        $AcceptanceMode -or
+        $Port -eq 5175 -or
+        -not $NoBrowser
+    )
+) {
+    throw 'Feedback transport acceptance requires production workspace, a non-production port, and -NoBrowser.'
+}
+
+if ($BurnPlanAcceptance) {
+    if (
+        $AcceptanceMode -or
+        -not $NoBrowser -or
+        [string]::IsNullOrWhiteSpace($BurnPlanPackedBin)
+    ) {
+        throw 'Burn PLAN acceptance requires production workspace, -NoBrowser, and an explicit packed BIN.'
+    }
+
+    $planResult = Invoke-EinkSpiBurnScript `
+        -Mode 'Plan' `
+        -PackedBin $BurnPlanPackedBin
+
+    $planResult.Output | ForEach-Object { Write-Output $_ }
+
+    if (
+        $planResult.ExitCode -ne 0 -or
+        -not ($planResult.Output -match '^EINK HARNESS: PASS$') -or
+        -not ($planResult.Output -match '^ACTION: SPI-BURN-PLAN$') -or
+        -not ($planResult.Output -match '^NEXT_STATE: OWNER_BURN_CONFIRMATION_REQUIRED$')
+    ) {
+        exit 1
+    }
+
+    exit 0
+}
+
+if (
+    -not [string]::IsNullOrWhiteSpace($BurnPlanPackedBin)
+) {
+    throw 'Burn PLAN artifact parameter requires -BurnPlanAcceptance.'
+}
+
 $url = "http://127.0.0.1:$Port/"
+
+$existingRuntimeLock = Read-Utf8JsonFile -Path $runtimeLockPath
+if (
+    $existingRuntimeLock -and
+    [int]$existingRuntimeLock.pid -ne [int]$PID -and
+    (Test-ServerLifecycleLockProcess -Lock $existingRuntimeLock)
+) {
+    throw 'A tracked Harness Control Center process already owns this port.'
+}
 
 $listener = New-Object Net.Sockets.TcpListener(
     [Net.IPAddress]::Loopback,
     $Port
 )
+$listener.Server.SetSocketOption(
+    [Net.Sockets.SocketOptionLevel]::Socket,
+    [Net.Sockets.SocketOptionName]::ReuseAddress,
+    $true
+)
+$script:ListenerClosed = $false
+
+function Stop-ControlCenterListener {
+    param([string]$Reason = 'SHUTDOWN')
+
+    if ($script:ListenerClosed) {
+        return
+    }
+    Write-AcceptanceLifecycleTrace `
+        -Phase 'LISTENER_STOP_BEGIN' `
+        -Detail "REASON=$Reason"
+    $listener.Stop()
+    $script:ListenerClosed = $true
+    Write-AcceptanceLifecycleTrace `
+        -Phase 'LISTENER_STOP_PASS' `
+        -Detail "REASON=$Reason"
+}
 
 try {
     $listener.Start()
+    Write-ServerLifecycleLock
 }
 catch {
     Write-Output 'HARNESS CONTROL CENTER: BLOCKED'
@@ -3059,10 +3728,14 @@ if (-not $NoBrowser) {
 
 try {
     while (-not $script:StopRequested) {
+        Write-AcceptanceLifecycleTrace -Phase 'ACCEPT_WAIT_BEGIN'
         $client = $listener.AcceptTcpClient()
+        Write-AcceptanceLifecycleTrace -Phase 'ACCEPT_WAIT_PASS'
 
         try {
+            Write-AcceptanceLifecycleTrace -Phase 'HTTP_READ_BEGIN'
             $request = Read-HttpRequest -Client $client
+            Write-AcceptanceLifecycleTrace -Phase 'HTTP_READ_PASS' -Detail "$($request.Method) $($request.Path)"
 
             if (-not $request) {
                 Write-Json `
@@ -3117,12 +3790,14 @@ try {
                 $request.Method -eq 'GET' -and
                 $request.Path -eq '/api/status'
             ) {
+                Write-AcceptanceLifecycleTrace -Phase 'STATUS_ROUTE_BEGIN'
                 Write-Json `
                     -Client $client `
                     -StatusCode 200 `
                     -Value (
                         Get-HubStatus
                     )
+                Write-AcceptanceLifecycleTrace -Phase 'STATUS_ROUTE_PASS'
 
                 continue
             }
@@ -3276,7 +3951,17 @@ try {
                     Write-Json `
                         -Client $client `
                         -StatusCode 200 `
-                        -Value (Invoke-BurnAction -Body $body)
+                        -Value $(
+                            if ([string]$body.mode -eq 'RECOVERY_ARM') {
+                                Invoke-RecoveryArmAction
+                            }
+                            elseif ([string]$body.mode -eq 'RECOVERY_WRITE') {
+                                Invoke-RecoveryWriteAction -Body $body
+                            }
+                            else {
+                                Invoke-BurnAction -Body $body
+                            }
+                        )
 
                     continue
                 }
@@ -3306,6 +3991,28 @@ try {
                         continue
                     }
 
+                    if ($FeedbackTransportAcceptance) {
+                        $feedback = [string]$body.feedback
+                        $evidence = @($body.evidence)
+                        $accepted = (
+                            -not [string]::IsNullOrWhiteSpace($feedback) -or
+                            $evidence.Count -gt 0
+                        )
+
+                        Write-Json `
+                            -Client $client `
+                            -StatusCode 200 `
+                            -Value ([ordered]@{
+                                action = $actionId
+                                receivedFeedback = $feedback
+                                evidenceCount = $evidence.Count
+                                accepted = $accepted
+                            })
+
+                        $script:StopRequested = $true
+                        continue
+                    }
+
                     $value = if ($actionId -eq 'physical-pass') {
                         Invoke-PhysicalPassAction -Body $body
                     }
@@ -3329,6 +4036,74 @@ try {
                     }
 
                 continue
+            }
+
+            if (
+                $request.Method -eq 'POST' -and
+                $request.Path -eq '/api/lifecycle/start'
+            ) {
+                if (-not (Test-WriteAuthorization -Request $request)) {
+                    Write-Json -Client $client -StatusCode 403 -Value @{
+                        error = 'WRITE_AUTH_REQUIRED'
+                    }
+                    continue
+                }
+
+                Write-Json -Client $client -StatusCode 200 -Value @{
+                    result = 'ALREADY_RUNNING'
+                    pid = [int]$PID
+                    processStartUtc = $serverStartUtc
+                    processStartTicks = [int64]$serverStartTicks
+                }
+                continue
+            }
+
+            if (
+                $request.Method -eq 'POST' -and
+                $request.Path -eq '/api/lifecycle/restart'
+            ) {
+                if (-not (Test-WriteAuthorization -Request $request)) {
+                    Write-Json -Client $client -StatusCode 403 -Value @{
+                        error = 'WRITE_AUTH_REQUIRED'
+                    }
+                    continue
+                }
+
+                Stop-ControlCenterListener `
+                    -Reason 'RESTART_BEFORE_REPLACEMENT'
+                Start-ControlCenterReplacement
+                Write-AcceptanceLifecycleTrace -Phase 'RESTART_REPLACEMENT_LAUNCHED'
+                Write-Json -Client $client -StatusCode 200 -Value @{
+                    result = 'RESTARTING'
+                    pid = [int]$PID
+                    processStartUtc = $serverStartUtc
+                    processStartTicks = [int64]$serverStartTicks
+                }
+                $script:StopRequested = $true
+                Write-AcceptanceLifecycleTrace -Phase 'RESTART_STOP_REQUESTED'
+                break
+            }
+
+            if (
+                $request.Method -eq 'POST' -and
+                $request.Path -in @('/api/lifecycle/stop', '/api/shutdown')
+            ) {
+                if (-not (Test-WriteAuthorization -Request $request)) {
+                    Write-Json -Client $client -StatusCode 403 -Value @{
+                        error = 'WRITE_AUTH_REQUIRED'
+                    }
+                    continue
+                }
+
+                Write-Json -Client $client -StatusCode 200 -Value @{
+                    result = 'STOPPING'
+                    pid = [int]$PID
+                    processStartUtc = $serverStartUtc
+                    processStartTicks = [int64]$serverStartTicks
+                }
+                $script:StopRequested = $true
+                Write-AcceptanceLifecycleTrace -Phase 'STOP_REQUESTED'
+                break
             }
 
             if (
@@ -3402,32 +4177,6 @@ try {
                 continue
             }
 
-            if (
-                $request.Method -eq 'POST' -and
-                $request.Path -eq '/api/shutdown'
-            ) {
-                if (-not (Test-WriteAuthorization -Request $request)) {
-                    Write-Json `
-                        -Client $client `
-                        -StatusCode 403 `
-                        -Value @{
-                            error = 'WRITE_AUTH_REQUIRED'
-                        }
-
-                    continue
-                }
-
-                Write-Json `
-                    -Client $client `
-                    -StatusCode 200 `
-                    -Value @{
-                        result = 'STOPPING'
-                    }
-
-                $script:StopRequested = $true
-                continue
-            }
-
             Write-Json `
                 -Client $client `
                 -StatusCode 404 `
@@ -3449,12 +4198,20 @@ try {
             }
         }
         finally {
+            Write-AcceptanceLifecycleTrace -Phase 'CLIENT_CLOSE_BEGIN'
             $client.Close()
+            Write-AcceptanceLifecycleTrace -Phase 'CLIENT_CLOSE_PASS'
         }
     }
 }
 finally {
-    $listener.Stop()
+    try {
+        Stop-ControlCenterListener -Reason 'FINALLY'
+    }
+    finally {
+        Remove-OwnServerLifecycleLock
+        Write-AcceptanceLifecycleTrace -Phase 'LOCK_REMOVE_PASS'
+    }
 }
 
 Write-Output 'HARNESS CONTROL CENTER: STOPPED'

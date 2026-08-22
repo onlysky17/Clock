@@ -292,6 +292,58 @@
       border-radius: 6px;
     }
 
+    .ready-burn-banner {
+      border: 2px solid #f0c34e;
+      background: linear-gradient(90deg, rgba(240,195,78,.2), rgba(240,195,78,.05));
+      color: #ffe394;
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: .08em;
+      padding: 16px;
+      border-radius: 10px;
+      text-align: center;
+      margin-bottom: 14px;
+    }
+    .recovery-panel {
+      margin-top: 14px;
+      padding: 16px;
+      border: 1px solid #7f3d43;
+      border-radius: 12px;
+      background: #29191c;
+    }
+    .recovery-title { color: #ffb6bd; font-size: 20px; font-weight: 800; }
+    .recovery-meta { margin-top: 8px; color: #d6c4c7; line-height: 1.55; }
+    .recovery-meta code { overflow-wrap: anywhere; }
+    .artifact-title { font-size: 22px; font-weight: 750; color: #f4f7fb; }
+    .artifact-meta { color: #9eabc0; margin-top: 5px; }
+    .sha-block {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: center;
+      margin: 14px 0;
+    }
+    .sha-block code {
+      display: block;
+      overflow-wrap: anywhere;
+      font-size: clamp(15px, 2vw, 21px);
+      line-height: 1.45;
+      padding: 14px;
+      border: 1px solid #445065;
+      border-radius: 8px;
+      background: #080b11;
+      color: #8ee7b0;
+    }
+    .artifact-path-details { color: #9eabc0; margin-top: 10px; }
+    .artifact-path-details code { display:block; overflow-wrap:anywhere; margin-top:8px; }
+    .burn-progress { margin-top: 14px; }
+    .phase-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:6px; margin-top:10px; }
+    .phase-step { padding:8px 5px; border-radius:7px; border:1px solid #353e50; text-align:center; font-size:11px; color:#8d98aa; }
+    .phase-step.active { border-color:#62a8ff; color:#b9d8ff; background:rgba(70,137,230,.15); }
+    .phase-step.pass { border-color:#48b877; color:#8ee7b0; }
+    .phase-step.fail { border-color:#e55d68; color:#ff9aa2; }
+    .phase-detail { margin-top:10px; color:#c9d1dd; }
+
     .chip {
       padding: 7px 11px;
       border-radius: 999px;
@@ -613,22 +665,39 @@
 
     <section class="panel">
       <div class="label" style="margin-bottom:14px">Locked Artifact</div>
+      <div id="readyBurnBanner" class="ready-burn-banner hidden">READY TO BURN</div>
+      <div id="artifactTitle" class="artifact-title">Chưa có artifact hợp lệ</div>
+      <div id="artifactMeta" class="artifact-meta">-</div>
+      <div class="sha-block">
+        <code id="artifactSha">-</code>
+        <button id="copyArtifactShaButton" disabled>COPY SHA</button>
+      </div>
+      <div class="artifact-line"><span>Size</span><code id="artifactSize">-</code></div>
+      <details class="artifact-path-details">
+        <summary>Full artifact path</summary>
+        <code id="artifactPath">-</code>
+      </details>
 
-      <div class="artifact">
-        <div class="artifact-line">
-          <span>Firmware</span>
-          <code id="artifactPath">Chưa có artifact hợp lệ</code>
-        </div>
+      <div id="burnProgress" class="burn-progress hidden">
+        <div class="label">Burn phase / progress</div>
+        <div id="burnPhaseGrid" class="phase-grid"></div>
+        <div id="burnPhaseDetail" class="phase-detail">-</div>
+      </div>
 
-        <div class="artifact-line">
-          <span>Size</span>
-          <code id="artifactSize">-</code>
+      <div id="recoveryPanel" class="recovery-panel hidden">
+        <div class="recovery-title">RECOVERY REQUIRED — BOARD ERASED</div>
+        <div class="recovery-meta">
+          Recovery target: <strong id="recoveryTarget">Portrait Minute Fly</strong><br>
+          Target SHA: <code id="recoveryTargetSha">-</code><br>
+          Immutable pre-erase backup SHA: <code id="recoveryBackupSha">-</code><br>
+          Normal fresh backup: <strong>SKIPPED</strong> · Erase: <strong>SKIPPED</strong><br>
+          Recovery performs hardware preflight → WRITE → full READBACK → SHA verify.
         </div>
-
-        <div class="artifact-line">
-          <span>SHA256</span>
-          <code id="artifactSha">-</code>
+        <div class="actions" style="margin-top:14px">
+          <button id="recoveryWriteButton" class="burn" disabled>RECOVER PORTRAIT MINUTE FLY</button>
+          <button id="restoreBackupButton">RESTORE PRE-ERASE BACKUP</button>
         </div>
+        <div id="recoveryHint" class="pending-files">Fresh prepare/re-lock is required before recovery WRITE.</div>
       </div>
 
       <div class="warning">
@@ -641,8 +710,10 @@
       <div class="actions">
         <button id="prepareButton" class="prepare">PREPARE TEST</button>
         <button id="burnButton" class="burn" disabled>NẠP FIRMWARE</button>
+        <button id="startHarnessButton">START HARNESS</button>
+        <button id="restartHarnessButton">RESTART HARNESS</button>
         <button id="refreshButton">REFRESH</button>
-        <button id="stopButton" class="stop">DỪNG SERVER</button>
+        <button id="stopButton" class="stop">DỪNG HARNESS</button>
       </div>
 
       <div class="legend">
@@ -806,7 +877,7 @@
       if (state === "RUNNING") return "running";
       if (["READY_TO_BURN", "WAITING_OWNER_GATE"].includes(state)) return "ready";
       if (["SPI_BURN_VERIFIED", "PASS", "OPEN_PR"].includes(state)) return "pass";
-      if (["BLOCKED", "PHYSICAL_FAIL", "PLUGIN_UNAVAILABLE", "ADAPTER_UNAVAILABLE"].includes(state)) return "blocked";
+      if (["BLOCKED", "RECOVERY_REQUIRED", "PHYSICAL_FAIL", "PLUGIN_UNAVAILABLE", "ADAPTER_UNAVAILABLE"].includes(state)) return "blocked";
       return "";
     }
 
@@ -896,14 +967,50 @@
       badge.className = `badge ${badgeClass(data.state)}`;
 
       if (data.artifact) {
+        $("artifactTitle").textContent = data.artifact.title || "EINK Firmware";
+        $("artifactMeta").textContent = `${data.artifact.taskId || "-"} · Build ${data.artifact.buildTimestamp || "-"}`;
         $("artifactPath").textContent = data.artifact.path;
         $("artifactSize").textContent = `${data.artifact.size} bytes`;
         $("artifactSha").textContent = data.artifact.sha256;
+        $("copyArtifactShaButton").disabled = false;
       } else {
-        $("artifactPath").textContent = "Chưa có artifact hợp lệ";
+        $("artifactTitle").textContent = "Chưa có artifact hợp lệ";
+        $("artifactMeta").textContent = "-";
+        $("artifactPath").textContent = "-";
         $("artifactSize").textContent = "-";
         $("artifactSha").textContent = "-";
+        $("copyArtifactShaButton").disabled = true;
       }
+
+      $("readyBurnBanner").classList.toggle("hidden", data.state !== "READY_TO_BURN");
+      const progress = data.burnProgress;
+      $("burnProgress").classList.toggle("hidden", !progress);
+      if (progress) {
+        const grid = $("burnPhaseGrid");
+        grid.replaceChildren();
+        const currentIndex = progress.phases.indexOf(progress.phase);
+        progress.phases.forEach((phase, index) => {
+          const node = document.createElement("div");
+          node.className = "phase-step";
+          if (index < currentIndex || (index === currentIndex && progress.phaseStatus === "PASS")) node.classList.add("pass");
+          if (index === currentIndex && progress.phaseStatus === "RUNNING") node.classList.add("active");
+          if (index === currentIndex && progress.phaseStatus === "FAIL") node.classList.add("fail");
+          node.textContent = phase.replace("HARDWARE_", "HW ").replace("SPI_", "");
+          grid.appendChild(node);
+        });
+        $("burnPhaseDetail").textContent = `${progress.phase} · ${progress.phaseStatus}${progress.reason ? ` · ${progress.reason}` : ""}`;
+      }
+
+      const recovery = data.recovery || {};
+      const recoveryBackup = recovery.preEraseBackup || {};
+      $("recoveryPanel").classList.toggle("hidden", !recovery.required);
+      $("recoveryTarget").textContent = recovery.targetLabel || "Portrait Minute Fly";
+      $("recoveryTargetSha").textContent = data.artifact?.sha256 || "Fresh prepare required";
+      $("recoveryBackupSha").textContent = recoveryBackup.sha256 || "-";
+      $("recoveryWriteButton").disabled = !recovery.writeEnabled || !!data.busy;
+      $("recoveryHint").textContent = recovery.writeEnabled
+        ? "Awaiting one-time Owner confirmation. Recovery will not run backup or erase."
+        : "Fresh prepare/re-lock and verified immutable backup are required before recovery WRITE.";
 
       $("prepareButton").disabled = !!data.busy;
       $("burnButton").disabled = !data.readyToBurn || !!data.busy;
@@ -1138,6 +1245,18 @@
       await refresh();
     }
 
+    async function waitForHarnessRestart() {
+      for (let attempt = 0; attempt < 60; attempt += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 250));
+        try {
+          await loadHub();
+          return true;
+        } catch (_) {
+        }
+      }
+      return false;
+    }
+
     async function post(path, body = {}) {
       const response = await fetch(path, {
         method: "POST",
@@ -1290,7 +1409,7 @@
       $("stateBadge").textContent = "RUNNING";
       $("stateBadge").className = "badge running";
       $("log").textContent =
-        "Owner confirmed burn.\nFresh backup -> erase -> write -> readback -> SHA verify";
+        "Owner confirmed burn.\nHardware preflight -> fresh backup -> erase -> write -> readback -> SHA verify";
 
       try {
         render(await post("/api/projects/eink/actions/burn", {
@@ -1302,6 +1421,58 @@
       }
 
       await refresh();
+    });
+
+    $("recoveryWriteButton").addEventListener("click", async () => {
+      if (!current?.recovery?.writeEnabled || !current?.artifact) return;
+      const sha = current.artifact.sha256;
+      try {
+        const arm = await post("/api/projects/eink/actions/burn", {
+          mode: "RECOVERY_ARM"
+        });
+        if (!arm?.armed || !arm?.ownerChallenge || arm.artifactSha256 !== sha) {
+          throw new Error(arm?.reason || "RECOVERY_ARM_FAILED");
+        }
+        const ok = window.confirm(
+          "XÁC NHẬN RECOVERY WRITE?\n\n" +
+          "Target: Portrait Minute Fly\n" +
+          `SHA256: ${sha}\n\n` +
+          "Board đã erase. Recovery sẽ KHÔNG backup lại và KHÔNG erase lại.\n" +
+          "Harness sẽ WRITE 262144 bytes, full READBACK và SHA verify."
+        );
+        if (!ok) return;
+        $("recoveryWriteButton").disabled = true;
+        $("prepareButton").disabled = true;
+        $("log").textContent = "Owner confirmed one-time recovery WRITE.\nPreflight -> WRITE -> READBACK -> SHA verify";
+        render(await post("/api/projects/eink/actions/burn", {
+          mode: "RECOVERY_WRITE",
+          ownerChallenge: arm.ownerChallenge,
+          sha256: sha
+        }));
+      } catch (error) {
+        $("log").textContent = `Recovery start failed: ${error.message}`;
+      }
+      await refresh();
+    });
+
+    $("restoreBackupButton").addEventListener("click", () => {
+      const backup = current?.recovery?.preEraseBackup;
+      window.alert(
+        "RESTORE PRE-ERASE BACKUP remains available but is NOT selected for this recovery.\n\n" +
+        `SHA256: ${backup?.sha256 || "-"}\n` +
+        `Evidence: ${backup?.evidenceDir || "-"}`
+      );
+    });
+
+    $("copyArtifactShaButton").addEventListener("click", async () => {
+      if (!current?.artifact?.sha256) return;
+      try {
+        await navigator.clipboard.writeText(current.artifact.sha256);
+        $("copyArtifactShaButton").textContent = "COPIED";
+        window.setTimeout(() => { $("copyArtifactShaButton").textContent = "COPY SHA"; }, 1200);
+      } catch (error) {
+        $("log").textContent = `Copy SHA failed: ${error.message}`;
+      }
     });
 
     $("einkPhysicalFailButton").addEventListener("click", async () => {
@@ -1484,12 +1655,36 @@
     $("refreshButton").addEventListener("click", refresh);
     $("electronicRefreshButton").addEventListener("click", refresh);
 
+    $("startHarnessButton").addEventListener("click", async () => {
+      try {
+        await post("/api/lifecycle/start");
+        await refresh();
+      } catch (error) {
+        $("log").textContent = `Harness chưa chạy. Hãy mở lại launcher: ${error.message}`;
+      }
+    });
+
+    $("restartHarnessButton").addEventListener("click", async () => {
+      if (!window.confirm("Khởi động lại đúng Harness process hiện tại?")) return;
+      try {
+        await post("/api/lifecycle/restart");
+        $("stateBadge").textContent = "RESTARTING";
+        $("stateBadge").className = "badge running";
+        $("log").textContent = "Harness đang restart nền theo PID/process identity lock...";
+        if (!await waitForHarnessRestart()) {
+          throw new Error("Harness không trở lại trong thời gian chờ.");
+        }
+      } catch (error) {
+        $("log").textContent = `Restart Harness failed: ${error.message}`;
+      }
+    });
+
     $("stopButton").addEventListener("click", async () => {
       const ok = window.confirm("Dừng Harness Control Center?");
       if (!ok) return;
 
       try {
-        await post("/api/shutdown");
+        await post("/api/lifecycle/stop");
       } catch (_) {
       }
 
@@ -1503,7 +1698,7 @@
     });
 
     polling = window.setInterval(() => {
-      if (!current || current.adapter !== "eink" || !current.busy) refresh();
+      refresh();
     }, 2500);
   </script>
 </body>
