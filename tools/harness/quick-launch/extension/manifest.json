@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "EINK Harness",
+  "version": "0.1.0",
+  "description": "Quick launch and lifecycle controls for the local EINK Harness.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtiEZ8RHzPEA4cPPyWfg2weSkvc4uEoLhSBxUHkChqC9x1Vy4WVJup1Bo63DMLyDzS0K3qxReIbHSvtLvBs2EXZQkJa0lxKkty4Ssuxh0cfMkz/T/FVDbqQN4cVzav9Iq/VNswH0mDLiIpoga4JidMrvqbu2tOKMPesEYGVd7Wo4FPpt/EjMlegv9aWPkMVvNmkhT9DmYSYEzQCddaJBIKc6e9HTw0fSNmnHzbIHzC7bycm+uE9/tHoelAdCo0JiiFY57E126nuRCMIfgVdzX0zpIX92KDGXWmWpTU34suRKqVEv6+Shyf6Uw/ysn07TVYZNeZ0qVTtD/cvGglsum7QIDAQAB",
+  "permissions": ["nativeMessaging", "tabs"],
+  "host_permissions": ["http://127.0.0.1:5175/*"],
+  "background": { "service_worker": "background.js" },
+  "action": {
+    "default_title": "EINK Harness",
+    "default_popup": "popup.html",
+    "default_icon": "icon.png"
+  },
+  "icons": {
+    "16": "icon.png",
+    "32": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  }
+}

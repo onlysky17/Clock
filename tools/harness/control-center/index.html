@@ -726,7 +726,10 @@
     </section>
 
     <section class="panel">
-      <div class="label" style="margin-bottom:14px">Live Log</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px">
+        <div class="label">Live Log</div>
+        <button id="copyLogButton" type="button">COPY LOG</button>
+      </div>
       <pre id="log">Loading...</pre>
     </section>
     </div>
@@ -1472,6 +1475,21 @@
         window.setTimeout(() => { $("copyArtifactShaButton").textContent = "COPY SHA"; }, 1200);
       } catch (error) {
         $("log").textContent = `Copy SHA failed: ${error.message}`;
+      }
+    });
+
+    $("copyLogButton").addEventListener("click", async () => {
+      const raw = $("log").textContent || "";
+      const clean = raw.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "");
+
+      try {
+        await navigator.clipboard.writeText(clean);
+        $("copyLogButton").textContent = "COPIED";
+        window.setTimeout(() => {
+          $("copyLogButton").textContent = "COPY LOG";
+        }, 1200);
+      } catch (error) {
+        $("log").textContent = `Copy log failed: ${error.message}`;
       }
     });
 
