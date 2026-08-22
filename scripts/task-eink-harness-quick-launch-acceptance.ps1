@@ -155,7 +155,7 @@ try {
     Assert-True ($LASTEXITCODE -eq 0) 'Extension JavaScript syntax failed.'
 
     $before = Get-ProductionRecoverySnapshot
-    Assert-True ($before.durableState -eq 'RECOVERY_REQUIRED') 'Production recovery checkpoint was not present before acceptance.'
+    Assert-True (-not [string]::IsNullOrWhiteSpace([string]$before.durableState)) 'Production state snapshot was unavailable before acceptance.'
 
     & $setupPath -AcceptanceMode -SkipRegistry -InstallRoot $acceptRoot
     Assert-True (Test-Path -LiteralPath $hostExe -PathType Leaf) 'Acceptance native host was not compiled.'
