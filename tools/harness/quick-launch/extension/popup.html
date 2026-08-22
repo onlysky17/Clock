@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EINK Harness</title>
+  <style>
+    :root { color-scheme: dark; font-family: "Segoe UI", sans-serif; }
+    body { margin: 0; width: 286px; background: #10151c; color: #eef6ff; }
+    main { padding: 16px; }
+    header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .mark { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 9px; background: #e8ff54; color: #10151c; font-weight: 900; }
+    h1 { margin: 0; font-size: 17px; }
+    #status { margin: 12px 0 4px; font: 800 21px/1.1 Consolas, monospace; letter-spacing: .05em; }
+    #status[data-state="ONLINE"] { color: #70f0a4; }
+    #status[data-state="STARTING"] { color: #ffd56a; }
+    #status[data-state="OFFLINE"] { color: #ff818b; }
+    #detail { min-height: 30px; color: #9db0c4; font-size: 12px; overflow-wrap: anywhere; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+    button { border: 1px solid #34485c; border-radius: 8px; padding: 9px 8px; background: #1b2734; color: #eef6ff; font-weight: 700; cursor: pointer; }
+    button:hover { border-color: #e8ff54; }
+    button:disabled { cursor: wait; opacity: .55; }
+    button[data-action="OPEN"] { background: #e8ff54; color: #10151c; border-color: #e8ff54; }
+    button[data-action="STOP"] { color: #ff9aa3; }
+  </style>
+</head>
+<body>
+  <main>
+    <header><div class="mark">E</div><h1>EINK Harness</h1></header>
+    <div id="status" data-state="STARTING">STARTING</div>
+    <div id="detail">Checking Harness...</div>
+    <div class="grid">
+      <button type="button" data-action="OPEN">OPEN</button>
+      <button type="button" data-action="START">START</button>
+      <button type="button" data-action="RESTART">RESTART</button>
+      <button type="button" data-action="STOP">STOP</button>
+    </div>
+  </main>
+  <script src="background.js"></script>
+</body>
+</html>
