@@ -222,6 +222,8 @@ static uint8_t hink_epd_busy_seen;
 static uint8_t hink_epd_busy_start_polls;
 static uint8_t hink_epd_first_refresh_pending = 1U;
 
+#include "hink_image_display_proof_frame.inc"
+
 #define HINK_EPD_BUSY_START_POLL_LIMIT 50U
 #define HINK_EPD_PRIME_RECOVERY_TICKS 100UL
 
@@ -1854,6 +1856,33 @@ void QR_draw()
 	arch_set_sleep_mode(ARCH_SLEEP_OFF);
 	epd_wait_hnd = app_easy_timer(40, epd_wait_timer);
 #endif
+}
+
+void hink_image_display_proof_draw(void)
+{
+    timer_hnd hnd;
+
+    memcpy(fb_bw, hink_image_display_proof_frame, EPD_FRAME_BYTES);
+
+    epd_hw_open();
+    epd_update_mode(UPDATE_FULL);
+    epd_init();
+    epd_screen_update();
+    epd_update();
+
+    arch_set_sleep_mode(ARCH_SLEEP_OFF);
+    hink_epd_busy_seen = 0U;
+    hink_epd_busy_start_polls = 0U;
+    hnd = app_easy_timer(40, epd_wait_timer);
+    epd_wait_hnd = hnd;
+
+    if (hnd == EASY_TIMER_INVALID_TIMER)
+    {
+        epd_cmd1(0x10, 0x01);
+        epd_power(0);
+        epd_hw_close();
+        arch_set_sleep_mode(ARCH_EXT_SLEEP_ON);
+    }
 }
 
 void LB_draw()
