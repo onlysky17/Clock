@@ -337,9 +337,43 @@
     .artifact-path-details { color: #9eabc0; margin-top: 10px; }
     .artifact-path-details code { display:block; overflow-wrap:anywhere; margin-top:8px; }
     .burn-progress { margin-top: 14px; }
+    .burn-progress-summary {
+      margin-top: 10px;
+      padding: 12px;
+      border: 1px solid #353e50;
+      border-radius: 10px;
+      background: #0b1018;
+    }
+    .burn-progress-heading { display:flex; align-items:baseline; gap:8px; }
+    .burn-progress-percent {
+      color: #b9d8ff;
+      font-size: 24px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+    }
+    .burn-progress-separator { color:#657187; font-size:18px; font-weight:700; }
+    .burn-progress-phase { color: #f4f7fb; font-size: 18px; font-weight: 800; }
+    .burn-progress-reason { margin-top:7px; color:#ff9aa2; font-size:12px; font-weight:700; }
+    .burn-progress-track {
+      height: 12px;
+      margin-top: 10px;
+      overflow: hidden;
+      border: 1px solid #353e50;
+      border-radius: 999px;
+      background: #171d28;
+    }
+    .burn-progress-fill { height: 100%; width: 0; background: #62a8ff; }
+    .burn-progress-summary.pass { border-color:#48b877; }
+    .burn-progress-summary.pass .burn-progress-percent,
+    .burn-progress-summary.pass .burn-progress-phase { color:#8ee7b0; }
+    .burn-progress-summary.pass .burn-progress-fill { background:#48b877; }
+    .burn-progress-summary.fail { border-color:#e55d68; background:#1c1115; }
+    .burn-progress-summary.fail .burn-progress-percent,
+    .burn-progress-summary.fail .burn-progress-phase { color:#ff9aa2; }
+    .burn-progress-summary.fail .burn-progress-fill { background:#e55d68; }
     .phase-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:6px; margin-top:10px; }
     .phase-step { padding:8px 5px; border-radius:7px; border:1px solid #353e50; text-align:center; font-size:11px; color:#8d98aa; }
-    .phase-step.active { border-color:#62a8ff; color:#b9d8ff; background:rgba(70,137,230,.15); }
+    .phase-step.active { border-color:#62a8ff; color:#e4f0ff; background:#17345c; font-weight:800; }
     .phase-step.pass { border-color:#48b877; color:#8ee7b0; }
     .phase-step.fail { border-color:#e55d68; color:#ff9aa2; }
     .phase-detail { margin-top:10px; color:#c9d1dd; }
@@ -1105,10 +1139,20 @@
         <code id="artifactPath">-</code>
       </details>
 
-      <div id="burnProgress" class="burn-progress hidden">
+      <div id="burnProgress" class="burn-progress">
         <div class="label">Burn phase / progress</div>
+        <div id="burnProgressSummary" class="burn-progress-summary">
+          <div class="burn-progress-heading">
+            <span id="burnProgressPercent" class="burn-progress-percent">0%</span>
+            <span class="burn-progress-separator" aria-hidden="true">·</span>
+            <span id="burnProgressPhase" class="burn-progress-phase">IDLE</span>
+          </div>
+          <div id="burnProgressTrack" class="burn-progress-track" role="progressbar" aria-label="Burn progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <div id="burnProgressFill" class="burn-progress-fill"></div>
+          </div>
+          <div id="burnProgressReason" class="burn-progress-reason hidden"></div>
+        </div>
         <div id="burnPhaseGrid" class="phase-grid"></div>
-        <div id="burnPhaseDetail" class="phase-detail">-</div>
       </div>
 
       <div id="recoveryPanel" class="recovery-panel hidden">
@@ -1309,6 +1353,63 @@
       if (["SPI_BURN_VERIFIED", "PASS", "OPEN_PR"].includes(state)) return "pass";
       if (["BLOCKED", "RECOVERY_REQUIRED", "PHYSICAL_FAIL", "PLUGIN_UNAVAILABLE", "ADAPTER_UNAVAILABLE"].includes(state)) return "blocked";
       return "";
+    }
+
+    // BURN_PROGRESS_LOGIC_START
+    const BURN_PHASE_PERCENT = Object.freeze({
+      HARDWARE_PREFLIGHT: 10,
+      SPI_BACKUP: 25,
+      ERASE: 40,
+      WRITE: 65,
+      READBACK: 85,
+      SHA_VERIFY: 100,
+      RECOVERY_PREFLIGHT: 10,
+      RECOVERY_WRITE: 65,
+      RECOVERY_READBACK: 85,
+      RECOVERY_SHA_VERIFY: 100
+    });
+
+    function resolveBurnProgressView(data) {
+      const progress = data?.burnProgress || null;
+      const state = data?.state || "IDLE";
+      const phases = progress?.phases || [
+        "HARDWARE_PREFLIGHT",
+        "SPI_BACKUP",
+        "ERASE",
+        "WRITE",
+        "READBACK",
+        "SHA_VERIFY"
+      ];
+      const phase = progress?.phase || phases[0];
+      const currentIndex = Math.max(0, phases.indexOf(phase));
+      const percentage = BURN_PHASE_PERCENT[phase] ?? 0;
+      const workerRunning = progress?.workerStatus === "RUNNING";
+
+      if (state === "SPI_BURN_VERIFIED") {
+        return { phases, percentage: 100, phase: "SHA_VERIFY", status: "PASS", currentIndex: phases.length - 1, mode: "complete", reason: "" };
+      }
+
+      if (progress && ["FAIL", "BLOCKED"].includes(progress.phaseStatus)) {
+        return { phases, percentage, phase, status: progress.phaseStatus, currentIndex, mode: "failed", reason: progress.reason || state };
+      }
+
+      if (state === "RUNNING" && workerRunning) {
+        return { phases, percentage, phase, status: progress.phaseStatus || "STARTING", currentIndex, mode: "active", reason: progress.reason || "" };
+      }
+
+      if (["BLOCKED", "RECOVERY_REQUIRED"].includes(state) && progress) {
+        return { phases, percentage, phase, status: progress.phaseStatus || state, currentIndex, mode: "failed", reason: progress.reason || state };
+      }
+
+      const idleStatus = data?.busy && data?.lastAction === "PREPARE_TEST"
+        ? "PREPARE TEST"
+        : state;
+      return { phases, percentage: 0, phase: "IDLE", status: idleStatus, currentIndex: -1, mode: "idle", reason: "" };
+    }
+    // BURN_PROGRESS_LOGIC_END
+
+    function burnPhaseLabel(phase) {
+      return phase.replace("HARDWARE_", "HW ").replace("SPI_", "").replace("RECOVERY_", "RECOVERY ");
     }
 
     function setVisible(viewId) {
@@ -1753,23 +1854,46 @@
       }
 
       $("readyBurnBanner").classList.toggle("hidden", data.state !== "READY_TO_BURN");
-      const progress = data.burnProgress;
-      $("burnProgress").classList.toggle("hidden", !progress);
-      if (progress) {
-        const grid = $("burnPhaseGrid");
-        grid.replaceChildren();
-        const currentIndex = progress.phases.indexOf(progress.phase);
-        progress.phases.forEach((phase, index) => {
-          const node = document.createElement("div");
-          node.className = "phase-step";
-          if (index < currentIndex || (index === currentIndex && progress.phaseStatus === "PASS")) node.classList.add("pass");
-          if (index === currentIndex && progress.phaseStatus === "RUNNING") node.classList.add("active");
-          if (index === currentIndex && progress.phaseStatus === "FAIL") node.classList.add("fail");
-          node.textContent = phase.replace("HARDWARE_", "HW ").replace("SPI_", "");
-          grid.appendChild(node);
-        });
-        $("burnPhaseDetail").textContent = `${progress.phase} · ${progress.phaseStatus}${progress.reason ? ` · ${progress.reason}` : ""}`;
-      }
+      const progressView = resolveBurnProgressView(data);
+      const summary = $("burnProgressSummary");
+      summary.className = `burn-progress-summary${progressView.mode === "complete" ? " pass" : ""}${progressView.mode === "failed" ? " fail" : ""}`;
+      $("burnProgressPercent").textContent = `${progressView.percentage}%`;
+      $("burnProgressPhase").textContent = progressView.mode === "complete"
+        ? "PASS"
+        : burnPhaseLabel(progressView.phase);
+      $("burnProgressFill").style.width = `${progressView.percentage}%`;
+      $("burnProgressTrack").setAttribute("aria-valuenow", String(progressView.percentage));
+      const progressReason = $("burnProgressReason");
+      const reasonText = progressView.mode === "failed"
+        ? `${progressView.status}${progressView.reason ? ` · ${progressView.reason}` : ""}`
+        : "";
+      progressReason.textContent = reasonText;
+      progressReason.classList.toggle("hidden", !reasonText);
+
+      const grid = $("burnPhaseGrid");
+      grid.replaceChildren();
+      progressView.phases.forEach((phase, index) => {
+        const node = document.createElement("div");
+        node.className = "phase-step";
+        let symbol = "○";
+        if (progressView.mode === "complete" || (progressView.mode !== "idle" && index < progressView.currentIndex)) {
+          node.classList.add("pass");
+          symbol = "✓";
+        } else if (progressView.mode === "failed" && index === progressView.currentIndex) {
+          node.classList.add("fail");
+          symbol = "✕";
+        } else if (progressView.mode === "active" && index === progressView.currentIndex) {
+          if (progressView.status === "PASS") {
+            node.classList.add("pass");
+            symbol = "✓";
+          } else {
+            node.classList.add("active");
+            symbol = "●";
+          }
+        }
+        node.textContent = `${symbol} ${burnPhaseLabel(phase)}`;
+        grid.appendChild(node);
+      });
 
       const recovery = data.recovery || {};
       const recoveryBackup = recovery.preEraseBackup || {};
