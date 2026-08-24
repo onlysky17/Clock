@@ -547,6 +547,281 @@
       overflow-wrap: anywhere;
     }
 
+    /* EINK Contract Visualizer v0.5.1 */
+    .contract-visualizer {
+      display: grid;
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .contract-hero {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      padding: 14px;
+      border: 1px solid #33465b;
+      border-radius: 12px;
+      background:
+        linear-gradient(
+          135deg,
+          rgba(31, 111, 235, .13),
+          rgba(163, 113, 247, .07)
+        ),
+        rgba(13, 17, 23, .72);
+    }
+
+    .contract-hero-title {
+      width: 100%;
+      margin-bottom: 2px;
+      color: #8b949e;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .09em;
+      text-transform: uppercase;
+    }
+
+    .contract-pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 29px;
+      padding: 6px 10px;
+      border: 1px solid #30363d;
+      border-radius: 999px;
+      font: 800 11px/1 Consolas, ui-monospace, monospace;
+      letter-spacing: .04em;
+      background: #161b22;
+      color: #c9d1d9;
+    }
+
+    .contract-pill.class-firmware {
+      border-color: #388bfd;
+      background: rgba(31, 111, 235, .17);
+      color: #79c0ff;
+    }
+
+    .contract-pill.class-harness {
+      border-color: #8957e5;
+      background: rgba(137, 87, 229, .16);
+      color: #d2a8ff;
+    }
+
+    .contract-pill.class-docs {
+      border-color: #2ea043;
+      background: rgba(46, 160, 67, .14);
+      color: #7ee787;
+    }
+
+    .contract-pill.class-hardware {
+      border-color: #f85149;
+      background: rgba(248, 81, 73, .14);
+      color: #ff7b72;
+    }
+
+    .contract-pill.class-general {
+      border-color: #6e7681;
+      color: #b1bac4;
+    }
+
+    .contract-pill.risk-high {
+      border-color: #f85149;
+      background: rgba(248, 81, 73, .16);
+      color: #ff7b72;
+    }
+
+    .contract-pill.risk-medium {
+      border-color: #d29922;
+      background: rgba(210, 153, 34, .14);
+      color: #e3b341;
+    }
+
+    .contract-pill.risk-low {
+      border-color: #2ea043;
+      background: rgba(46, 160, 67, .13);
+      color: #7ee787;
+    }
+
+    .contract-pill.risk-review {
+      border-color: #a371f7;
+      background: rgba(163, 113, 247, .12);
+      color: #d2a8ff;
+    }
+
+    .contract-pill.plan {
+      border-color: #58a6ff;
+      background: rgba(88, 166, 255, .10);
+      color: #a5d6ff;
+    }
+
+    .contract-pill.visual {
+      border-color: #a371f7;
+      background: rgba(163, 113, 247, .13);
+      color: #d2a8ff;
+    }
+
+    .contract-pill.hardware {
+      border-color: #f85149;
+      background: rgba(248, 81, 73, .14);
+      color: #ff7b72;
+    }
+
+    .contract-grid {
+      display: grid;
+      grid-template-columns:
+        repeat(auto-fit, minmax(235px, 1fr));
+      gap: 10px;
+    }
+
+    .contract-box {
+      min-width: 0;
+      padding: 12px;
+      border: 1px solid #30363d;
+      border-radius: 11px;
+      background: rgba(13, 17, 23, .62);
+    }
+
+    .contract-box-title {
+      margin-bottom: 9px;
+      color: #8b949e;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .contract-chip-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .contract-chip {
+      display: inline-flex;
+      align-items: center;
+      max-width: 100%;
+      padding: 5px 8px;
+      border: 1px solid #30363d;
+      border-radius: 7px;
+      font: 700 10px/1.3 Consolas, ui-monospace, monospace;
+      overflow-wrap: anywhere;
+      background: #0d1117;
+      color: #c9d1d9;
+    }
+
+    .contract-chip.capability {
+      border-color: #1f6feb;
+      background: rgba(31, 111, 235, .10);
+      color: #79c0ff;
+    }
+
+    .contract-chip.gate {
+      border-color: #d29922;
+      background: rgba(210, 153, 34, .10);
+      color: #e3b341;
+    }
+
+    .contract-chip.forbidden {
+      border-color: #da3633;
+      background: rgba(218, 54, 51, .10);
+      color: #ff7b72;
+    }
+
+    .contract-chip.scope {
+      border-color: #388bfd;
+      background: rgba(56, 139, 253, .07);
+      color: #a5d6ff;
+    }
+
+    .contract-empty {
+      color: #6e7681;
+      font-size: 11px;
+      font-style: italic;
+    }
+
+    .contract-safety {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      padding: 10px 12px;
+      border: 1px solid #30363d;
+      border-radius: 10px;
+      background: rgba(13, 17, 23, .58);
+    }
+
+    .contract-safety-badge {
+      padding: 6px 9px;
+      border-radius: 7px;
+      border: 1px solid #30363d;
+      font: 800 10px/1.2 Consolas, ui-monospace, monospace;
+    }
+
+    .contract-safety-badge.safe {
+      border-color: #238636;
+      background: rgba(35, 134, 54, .12);
+      color: #7ee787;
+    }
+
+    .contract-safety-badge.warning {
+      margin-top: 0;
+      border-left-width: 1px;
+      border-color: #d29922;
+      background: rgba(210, 153, 34, .10);
+      color: #e3b341;
+    }
+
+    .contract-safety-badge.blocked {
+      border-color: #da3633;
+      background: rgba(218, 54, 51, .10);
+      color: #ff7b72;
+    }
+
+    .contract-raw {
+      margin-top: 0;
+      border: 1px solid #30363d;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #090d12;
+    }
+
+    .contract-raw summary {
+      padding: 10px 12px;
+      cursor: pointer;
+      color: #8b949e;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .04em;
+    }
+
+    .contract-json {
+      max-height: 430px;
+      padding: 14px;
+      border-top: 1px solid #30363d;
+      background: #080b10;
+      color: #c9d1d9;
+    }
+
+    .json-key {
+      color: #79c0ff;
+      font-weight: 700;
+    }
+
+    .json-string {
+      color: #a5d6ff;
+    }
+
+    .json-number {
+      color: #ffa657;
+    }
+
+    .json-boolean {
+      color: #d2a8ff;
+      font-weight: 800;
+    }
+
+    .json-null {
+      color: #8b949e;
+      font-style: italic;
+    }
     .hidden { display: none !important; }
 
     @media (max-width: 800px) {
@@ -611,7 +886,7 @@
     <header>
       <div>
         <h1>Harness Control Center</h1>
-        <div class="sub">Multiproject v0.5 · EINK Brain Task Compiler · local-only · 127.0.0.1 · action allow-list</div>
+        <div class="sub">Multiproject v0.5 · EINK Brain Task Compiler · Contract Visualizer v0.5.1 · local-only · 127.0.0.1</div>
       </div>
       <div id="stateBadge" class="badge">IDLE</div>
     </header>
@@ -643,7 +918,7 @@
     </section>
 
     <section class="panel">
-      <div class="label" style="margin-bottom:14px">EINK Brain v0.5 · Persistent Task Memory + Task Compiler</div>
+      <div class="label" style="margin-bottom:14px">EINK Brain v0.5 · Task Compiler · Contract Visualizer v0.5.1</div>
       <div class="warning">
         Nhập yêu cầu bằng ngôn ngữ tự nhiên. Brain v0.5 tạo/lưu/resume và compile Task Contract;
         execution vẫn khóa: chưa được phép sửa code, build, burn hoặc thay đổi Git.
@@ -681,10 +956,117 @@
 
         <div id="einkBrainCurrentRequest" class="pending-files">Chưa có Brain task.</div>
 
-        <details class="artifact-path-details">
-          <summary>Compiled Task Contract</summary>
-          <pre id="einkBrainContractJson" style="margin-top:10px;max-height:360px">Not compiled yet.</pre>
-        </details>
+        <div
+          id="einkBrainContractEmpty"
+          class="contract-empty"
+        >
+          Compile task để xem Task Contract trực quan.
+        </div>
+
+        <div
+          id="einkBrainContractVisualizer"
+          class="contract-visualizer hidden"
+        >
+          <div class="contract-hero">
+            <div class="contract-hero-title">
+              Task Contract · Visual Summary
+            </div>
+
+            <span
+              id="einkContractClassPill"
+              class="contract-pill class-general"
+            >-</span>
+
+            <span
+              id="einkContractRiskPill"
+              class="contract-pill risk-review"
+            >-</span>
+
+            <span
+              id="einkContractStatePill"
+              class="contract-pill plan"
+            >PLAN_ONLY</span>
+
+            <span
+              id="einkContractVisualPill"
+              class="contract-pill visual hidden"
+            >VISUAL GATE</span>
+
+            <span
+              id="einkContractHardwarePill"
+              class="contract-pill hardware hidden"
+            >HARDWARE INTENT</span>
+          </div>
+
+          <div class="contract-grid">
+            <section class="contract-box">
+              <div class="contract-box-title">
+                Required Capabilities
+              </div>
+              <div
+                id="einkContractCapabilities"
+                class="contract-chip-list"
+              ></div>
+            </section>
+
+            <section class="contract-box">
+              <div class="contract-box-title">
+                Owner Gates
+              </div>
+              <div
+                id="einkContractOwnerGates"
+                class="contract-chip-list"
+              ></div>
+            </section>
+
+            <section class="contract-box">
+              <div class="contract-box-title">
+                Forbidden Actions
+              </div>
+              <div
+                id="einkContractForbidden"
+                class="contract-chip-list"
+              ></div>
+            </section>
+
+            <section class="contract-box">
+              <div class="contract-box-title">
+                Candidate File Scopes
+              </div>
+              <div
+                id="einkContractScopes"
+                class="contract-chip-list"
+              ></div>
+            </section>
+          </div>
+
+          <div class="contract-safety">
+            <span
+              id="einkContractExecutionSafety"
+              class="contract-safety-badge safe"
+            >EXECUTION LOCKED</span>
+
+            <span
+              id="einkContractExactFilesSafety"
+              class="contract-safety-badge warning"
+            >EXACT FILES REQUIRED</span>
+
+            <span
+              id="einkContractMergeSafety"
+              class="contract-safety-badge safe"
+            >AUTO MERGE DISABLED</span>
+          </div>
+
+          <details class="contract-raw">
+            <summary>
+              Raw JSON · syntax highlighted
+            </summary>
+            <pre
+              id="einkBrainContractJson"
+              class="contract-json"
+            >Not compiled yet.</pre>
+          </details>
+        </div>
       </div>
     </section>
     <section class="panel">
@@ -998,6 +1380,232 @@
       });
     }
 
+    function contractClassName(value) {
+      switch (String(value || "").toUpperCase()) {
+        case "FIRMWARE":
+          return "class-firmware";
+        case "HARNESS":
+          return "class-harness";
+        case "DOCS":
+          return "class-docs";
+        case "HARDWARE":
+          return "class-hardware";
+        default:
+          return "class-general";
+      }
+    }
+
+    function contractRiskName(value) {
+      switch (String(value || "").toUpperCase()) {
+        case "HIGH":
+          return "risk-high";
+        case "MEDIUM":
+          return "risk-medium";
+        case "LOW":
+          return "risk-low";
+        default:
+          return "risk-review";
+      }
+    }
+
+    function renderContractChipList(
+      elementId,
+      values,
+      kind
+    ) {
+      const host = $(elementId);
+
+      if (!host) return;
+
+      host.replaceChildren();
+
+      const items = Array.isArray(values)
+        ? values.filter(Boolean)
+        : [];
+
+      if (!items.length) {
+        const empty = document.createElement("span");
+        empty.className = "contract-empty";
+        empty.textContent = "None";
+        host.appendChild(empty);
+        return;
+      }
+
+      for (const value of items) {
+        const chip = document.createElement("span");
+        chip.className = `contract-chip ${kind}`;
+        chip.textContent = String(value);
+        host.appendChild(chip);
+      }
+    }
+
+    function escapeJsonHtml(text) {
+      return String(text)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    }
+
+    function syntaxHighlightJson(value) {
+      const json = escapeJsonHtml(
+        JSON.stringify(value, null, 2)
+      );
+
+      return json.replace(
+        /("(?:\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*"\s*:)|("(?:\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*")|\b(true|false)\b|\b(null)\b|(-?\d+(?:\.\d+)?(?:[eE][+\-]?\d+)?)/g,
+        (match) => {
+          let className = "json-number";
+
+          if (/:\s*$/.test(match)) {
+            className = "json-key";
+          } else if (/^"/.test(match)) {
+            className = "json-string";
+          } else if (/^(true|false)$/.test(match)) {
+            className = "json-boolean";
+          } else if (match === "null") {
+            className = "json-null";
+          }
+
+          return `<span class="${className}">${match}</span>`;
+        }
+      );
+    }
+
+    function renderContractVisualizer(contract) {
+      const visualizer = $("einkBrainContractVisualizer");
+      const empty = $("einkBrainContractEmpty");
+      const raw = $("einkBrainContractJson");
+
+      if (!visualizer || !empty || !raw) {
+        return;
+      }
+
+      const hasContract =
+        !!contract &&
+        typeof contract === "object" &&
+        !!contract.schema;
+
+      visualizer.classList.toggle(
+        "hidden",
+        !hasContract
+      );
+
+      empty.classList.toggle(
+        "hidden",
+        hasContract
+      );
+
+      if (!hasContract) {
+        raw.textContent = "Not compiled yet.";
+        return;
+      }
+
+      const taskClass =
+        String(contract.taskClass || "GENERAL")
+          .toUpperCase();
+
+      const risk =
+        String(contract.riskLevel || "REVIEW")
+          .toUpperCase();
+
+      const executionState =
+        String(contract.executionState || "PLAN_ONLY")
+          .toUpperCase();
+
+      const classPill = $("einkContractClassPill");
+      classPill.textContent = taskClass;
+      classPill.className =
+        `contract-pill ${contractClassName(taskClass)}`;
+
+      const riskPill = $("einkContractRiskPill");
+      riskPill.textContent = risk;
+      riskPill.className =
+        `contract-pill ${contractRiskName(risk)}`;
+
+      const statePill = $("einkContractStatePill");
+      statePill.textContent = executionState;
+      statePill.className = "contract-pill plan";
+
+      $("einkContractVisualPill").classList.toggle(
+        "hidden",
+        !contract.visualIntent
+      );
+
+      $("einkContractHardwarePill").classList.toggle(
+        "hidden",
+        !contract.hardwareIntent
+      );
+
+      renderContractChipList(
+        "einkContractCapabilities",
+        contract.requiredCapabilities,
+        "capability"
+      );
+
+      renderContractChipList(
+        "einkContractOwnerGates",
+        contract.ownerGates,
+        "gate"
+      );
+
+      renderContractChipList(
+        "einkContractForbidden",
+        contract.forbiddenActions,
+        "forbidden"
+      );
+
+      renderContractChipList(
+        "einkContractScopes",
+        contract.candidateFileScopes,
+        "scope"
+      );
+
+      const executionSafety =
+        $("einkContractExecutionSafety");
+
+      executionSafety.textContent =
+        contract.executionEnabled
+          ? "EXECUTION ENABLED"
+          : "EXECUTION LOCKED";
+
+      executionSafety.className =
+        contract.executionEnabled
+          ? "contract-safety-badge blocked"
+          : "contract-safety-badge safe";
+
+      const exactSafety =
+        $("einkContractExactFilesSafety");
+
+      exactSafety.textContent =
+        contract.exactFilesRequiredBeforeExecution
+          ? "EXACT FILES REQUIRED"
+          : "EXACT FILE GATE OFF";
+
+      exactSafety.className =
+        contract.exactFilesRequiredBeforeExecution
+          ? "contract-safety-badge warning"
+          : "contract-safety-badge blocked";
+
+      const mergeSafety =
+        $("einkContractMergeSafety");
+
+      mergeSafety.textContent =
+        contract.autoMerge
+          ? "AUTO MERGE ENABLED"
+          : "AUTO MERGE DISABLED";
+
+      mergeSafety.className =
+        contract.autoMerge
+          ? "contract-safety-badge blocked"
+          : "contract-safety-badge safe";
+
+      /*
+       * Raw JSON uses innerHTML only after &, < and > have been
+       * escaped by syntaxHighlightJson(). User text cannot inject
+       * markup into the visualizer.
+       */
+      raw.innerHTML = syntaxHighlightJson(contract);
+    }
     function renderEinkBrainState(data) {
       const brain = data?.brain || {};
       const task = brain.currentTask || {};
@@ -1051,10 +1659,9 @@
       $("einkBrainContractSha").textContent =
         contract.contractSha256 || "-";
 
-      $("einkBrainContractJson").textContent =
-        task.contract
-          ? JSON.stringify(task.contract, null, 2)
-          : "Not compiled yet.";
+      renderContractVisualizer(
+        task.contract || null
+      );
 
       compileButton.disabled =
         !!data?.busy || !task.taskId;
