@@ -34,6 +34,12 @@
           "ownerGate": false
         },
         {
+          "id": "brain-compile",
+          "method": "POST",
+          "destructive": false,
+          "ownerGate": false
+        },
+        {
           "id": "prepare",
           "method": "POST",
           "destructive": false,

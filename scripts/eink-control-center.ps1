@@ -91,7 +91,7 @@ function Get-ControlCenterStatus {
 
         if (
             [string]$status.hubId -eq 'harness-control-center' -and
-            [string]$status.version -eq '0.4' -and
+            [string]$status.version -eq '0.5' -and
             @($status.projects.id) -contains 'eink'
         ) {
             return $status
