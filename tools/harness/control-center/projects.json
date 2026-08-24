@@ -22,6 +22,18 @@
       },
       "actions": [
         {
+          "id": "brain-create",
+          "method": "POST",
+          "destructive": false,
+          "ownerGate": false
+        },
+        {
+          "id": "brain-resume",
+          "method": "POST",
+          "destructive": false,
+          "ownerGate": false
+        },
+        {
           "id": "prepare",
           "method": "POST",
           "destructive": false,
