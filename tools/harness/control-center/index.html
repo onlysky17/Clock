@@ -611,7 +611,7 @@
     <header>
       <div>
         <h1>Harness Control Center</h1>
-        <div class="sub">Multiproject v0.4 · EINK Brain · local-only · 127.0.0.1 · action allow-list</div>
+        <div class="sub">Multiproject v0.5 · EINK Brain Task Compiler · local-only · 127.0.0.1 · action allow-list</div>
       </div>
       <div id="stateBadge" class="badge">IDLE</div>
     </header>
@@ -643,10 +643,10 @@
     </section>
 
     <section class="panel">
-      <div class="label" style="margin-bottom:14px">EINK Brain v0.4 · Persistent Task Memory</div>
+      <div class="label" style="margin-bottom:14px">EINK Brain v0.5 · Persistent Task Memory + Task Compiler</div>
       <div class="warning">
-        Nhập yêu cầu bằng ngôn ngữ tự nhiên. Brain v0.4 chỉ tạo/lưu/resume task;
-        chưa được phép sửa code, build, burn hoặc thay đổi Git.
+        Nhập yêu cầu bằng ngôn ngữ tự nhiên. Brain v0.5 tạo/lưu/resume và compile Task Contract;
+        execution vẫn khóa: chưa được phép sửa code, build, burn hoặc thay đổi Git.
       </div>
 
       <div class="form-stack" style="margin-top:14px">
@@ -663,6 +663,7 @@
           </select>
 
           <button id="einkBrainResumeButton" disabled>RESUME TASK</button>
+          <button id="einkBrainCompileButton" disabled>COMPILE TASK</button>
         </div>
 
         <div class="artifact">
@@ -670,10 +671,20 @@
           <div class="artifact-line"><span>Status</span><code id="einkBrainCurrentStatus">-</code></div>
           <div class="artifact-line"><span>Resume Count</span><code id="einkBrainResumeCount">0</code></div>
           <div class="artifact-line"><span>History Events</span><code id="einkBrainHistoryCount">0</code></div>
+          <div class="artifact-line"><span>Task Class</span><code id="einkBrainContractClass">-</code></div>
+          <div class="artifact-line"><span>Risk</span><code id="einkBrainContractRisk">-</code></div>
+          <div class="artifact-line"><span>Compiler</span><code id="einkBrainCompilerPolicy">-</code></div>
+          <div class="artifact-line"><span>Exact Files</span><code id="einkBrainExactFiles">REQUIRED</code></div>
+          <div class="artifact-line"><span>Contract SHA</span><code id="einkBrainContractSha">-</code></div>
           <div class="artifact-line"><span>Store</span><code id="einkBrainStore">-</code></div>
         </div>
 
         <div id="einkBrainCurrentRequest" class="pending-files">Chưa có Brain task.</div>
+
+        <details class="artifact-path-details">
+          <summary>Compiled Task Contract</summary>
+          <pre id="einkBrainContractJson" style="margin-top:10px;max-height:360px">Not compiled yet.</pre>
+        </details>
       </div>
     </section>
     <section class="panel">
@@ -990,6 +1001,7 @@
     function renderEinkBrainState(data) {
       const brain = data?.brain || {};
       const task = brain.currentTask || {};
+      const contract = task.contract || {};
 
       const currentId = $("einkBrainCurrentId");
       const currentStatus = $("einkBrainCurrentStatus");
@@ -999,6 +1011,7 @@
       const currentRequest = $("einkBrainCurrentRequest");
       const historySelect = $("einkBrainHistorySelect");
       const resumeButton = $("einkBrainResumeButton");
+      const compileButton = $("einkBrainCompileButton");
 
       if (
         !currentId ||
@@ -1008,7 +1021,8 @@
         !store ||
         !currentRequest ||
         !historySelect ||
-        !resumeButton
+        !resumeButton ||
+        !compileButton
       ) {
         return;
       }
@@ -1019,6 +1033,31 @@
       historyCount.textContent = String(brain.historyCount ?? 0);
       store.textContent = brain.storeRoot || "-";
       currentRequest.textContent = task.request || "Chưa có Brain task.";
+
+      $("einkBrainContractClass").textContent =
+        contract.taskClass || "-";
+
+      $("einkBrainContractRisk").textContent =
+        contract.riskLevel || "-";
+
+      $("einkBrainCompilerPolicy").textContent =
+        contract.compilerPolicy || "-";
+
+      $("einkBrainExactFiles").textContent =
+        contract.exactFilesRequiredBeforeExecution
+          ? "REQUIRED"
+          : "-";
+
+      $("einkBrainContractSha").textContent =
+        contract.contractSha256 || "-";
+
+      $("einkBrainContractJson").textContent =
+        task.contract
+          ? JSON.stringify(task.contract, null, 2)
+          : "Not compiled yet.";
+
+      compileButton.disabled =
+        !!data?.busy || !task.taskId;
 
       const previous = historySelect.value;
 
@@ -1544,6 +1583,23 @@
         render(result);
       } catch (error) {
         $("log").textContent = `Brain RESUME failed: ${error.message}`;
+      }
+
+      await refresh();
+    });
+    $("einkBrainCompileButton").addEventListener("click", async () => {
+      if (!current?.brain?.currentTask?.taskId) return;
+
+      $("einkBrainCreateButton").disabled = true;
+      $("einkBrainResumeButton").disabled = true;
+      $("einkBrainCompileButton").disabled = true;
+
+      try {
+        const result = await einkAction("brain-compile", {});
+        render(result);
+      } catch (error) {
+        $("log").textContent =
+          `Brain COMPILE failed: ${error.message}`;
       }
 
       await refresh();

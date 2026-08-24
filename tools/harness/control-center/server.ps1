@@ -193,7 +193,7 @@ $script:RecoveryChallengeHash = ''
 $script:RecoveryChallengeExpiresUtc = [DateTime]::MinValue
 $script:RecoveryChallengeArtifactSha = ''
 $script:LastLog = @(
-    'Harness Control Center Multiproject v0.4 started.',
+    'Harness Control Center Multiproject v0.5 started.',
     'Waiting for action.'
 )
 
@@ -2660,10 +2660,12 @@ function Get-EinkBrainStatus {
     $recentTasks = @(Get-EinkBrainHistory | Select-Object -First 20)
 
     [ordered]@{
-        version = '0.4'
+        version = '0.5'
         persistent = $true
         executionEnabled = $false
-        mutationPolicy = 'MEMORY_ONLY'
+        mutationPolicy = 'MEMORY_AND_CONTRACT_ONLY'
+        compilerEnabled = $true
+        compilerPolicy = 'DETERMINISTIC_HEURISTIC_V1'
         storeRoot = $brainRoot
         currentTask = $currentTask
         recentTasks = $recentTasks
@@ -2729,6 +2731,385 @@ function Invoke-EinkBrainCreateAction {
     Get-ControlStatus
 }
 
+function ConvertTo-EinkCompilerFoldedText {
+    param([string]$Value)
+
+    if ([string]::IsNullOrWhiteSpace($Value)) {
+        return ''
+    }
+
+    $normalized = $Value.Normalize(
+        [Text.NormalizationForm]::FormD
+    )
+
+    $characters = foreach ($character in $normalized.ToCharArray()) {
+        $category = [Globalization.CharUnicodeInfo]::GetUnicodeCategory(
+            $character
+        )
+
+        if (
+            $category -ne
+            [Globalization.UnicodeCategory]::NonSpacingMark
+        ) {
+            $character
+        }
+    }
+
+    $folded = (
+        -join $characters
+    ).Normalize(
+        [Text.NormalizationForm]::FormC
+    ).ToLowerInvariant()
+
+    # Vietnamese d-stroke does not decompose under Unicode FormD.
+    # Map lowercase đ explicitly after ToLowerInvariant().
+    $folded = $folded.Replace(
+        [string][char]0x0111,
+        'd'
+    )
+
+    $folded
+}
+
+function Get-EinkTaskContract {
+    param(
+        [Parameter(Mandatory=$true)]
+        $Task
+    )
+
+    $request = ([string]$Task.request).Trim()
+
+    if ([string]::IsNullOrWhiteSpace($request)) {
+        throw 'Task Compiler requires a non-empty task request.'
+    }
+
+    $folded = ConvertTo-EinkCompilerFoldedText -Value $request
+
+    $isHarness = $folded -match (
+        '\b(harness|control center|brain|launcher|quick launch|' +
+        'tool|script|automation|tu dong)\b'
+    )
+
+    $isDocs = $folded -match (
+        '\b(doc|docs|readme|tai lieu|huong dan)\b'
+    )
+
+    $isFirmware = $folded -match (
+        '\b(firmware|clock|eink|dong ho|kim|lich|hien thi|' +
+        'portrait|weekly|analog|display)\b'
+    )
+
+    $hasHardwareIntent = $folded -match (
+        '\b(burn|flash|spi|erase|write|nap|board|hardware)\b'
+    )
+
+    $hasVisualIntent = $folded -match (
+        '\b(ui|visual|giao dien|man hinh|display|layout|' +
+        'font|mau|color|cau noi|noi dung hien thi|chu|text)\b'
+    )
+
+    $taskClass = if ($isHarness) {
+        'HARNESS'
+    }
+    elseif ($isDocs) {
+        'DOCS'
+    }
+    elseif ($isFirmware) {
+        'FIRMWARE'
+    }
+    elseif ($hasHardwareIntent) {
+        'HARDWARE'
+    }
+    else {
+        'GENERAL'
+    }
+
+    $riskLevel = if ($hasHardwareIntent) {
+        'HIGH'
+    }
+    elseif ($taskClass -in @('HARNESS','FIRMWARE')) {
+        'MEDIUM'
+    }
+    elseif ($taskClass -eq 'DOCS') {
+        'LOW'
+    }
+    else {
+        'REVIEW'
+    }
+
+    $capabilities = @(
+        'workspace.verify',
+        'repo.inspect',
+        'history.append'
+    )
+
+    $candidateScopes = @()
+    $acceptance = @(
+        'Verify canonical workspace, branch, HEAD, and worktree before mutation.',
+        'Resolve exact approved files before execution.',
+        'Run git diff --check before publication.',
+        'Record validation evidence before commit or push.'
+    )
+
+    switch ($taskClass) {
+        'HARNESS' {
+            $capabilities += @(
+                'repo.edit',
+                'validation.smoke',
+                'git.reviewed-stage',
+                'git.commit-push-pr'
+            )
+
+            $candidateScopes = @(
+                'tools/harness/**',
+                'scripts/eink-*.ps1',
+                'scripts/task-eink-harness-*.ps1',
+                'docs/agent/**'
+            )
+
+            $acceptance += @(
+                'Harness regression smoke must pass.',
+                'Existing hardware safety gates must remain intact.',
+                'Firmware source must remain untouched unless separately approved.'
+            )
+        }
+
+        'FIRMWARE' {
+            $capabilities += @(
+                'repo.edit',
+                'firmware.build',
+                'firmware.pack',
+                'artifact.sha256',
+                'git.reviewed-stage',
+                'git.commit-push-pr'
+            )
+
+            $candidateScopes = @(
+                'firmware/active/HINK213_CLOCK_22_BASE/**',
+                'scripts/task-eink-*.ps1',
+                'docs/firmware/**'
+            )
+
+            $acceptance += @(
+                'Keil firmware build must complete with zero errors.',
+                'Packed artifact SHA256 must be recorded.',
+                'No physical PASS may be inferred from build or readback alone.'
+            )
+        }
+
+        'DOCS' {
+            $capabilities += @(
+                'repo.edit',
+                'git.diff-check',
+                'git.reviewed-stage',
+                'git.commit-push-pr'
+            )
+
+            $candidateScopes = @(
+                'docs/**'
+            )
+
+            $acceptance += @(
+                'Documentation change must not trigger firmware build or burn.'
+            )
+        }
+
+        'HARDWARE' {
+            $capabilities += @(
+                'hardware.preflight',
+                'spi.backup',
+                'spi.write',
+                'readback.sha256'
+            )
+
+            $candidateScopes = @(
+                'scripts/eink-spi-*.ps1',
+                'tools/harness/control-center/**',
+                'docs/firmware/**'
+            )
+
+            $acceptance += @(
+                'Positive hardware preflight evidence is required.',
+                'Fresh verified SPI backup is required before erase/write.',
+                'Full readback SHA256 must match the locked artifact.'
+            )
+        }
+
+        default {
+            $acceptance += @(
+                'Task classification review is required before any execution.'
+            )
+        }
+    }
+
+    if ($hasHardwareIntent -and $taskClass -ne 'HARDWARE') {
+        $capabilities += @(
+            'hardware.preflight',
+            'spi.backup',
+            'spi.write',
+            'readback.sha256'
+        )
+
+        $acceptance += @(
+            'Any SPI write remains blocked until explicit Owner burn confirmation.',
+            'Physical result requires explicit Owner review.'
+        )
+    }
+
+    $ownerGates = @(
+        'OWNER_MERGE'
+    )
+
+    if ($hasVisualIntent) {
+        $ownerGates += 'OWNER_UI_VISUAL_PASS'
+    }
+
+    if (
+        $taskClass -in @('FIRMWARE','HARDWARE') -or
+        $hasHardwareIntent
+    ) {
+        $ownerGates += @(
+            'OWNER_BURN_CONFIRMATION',
+            'OWNER_PHYSICAL_PASS'
+        )
+    }
+
+    $forbiddenActions = @(
+        'git.add-all',
+        'git.auto-merge',
+        'artifact.commit-bin',
+        'hardware.burn-without-owner',
+        'scope.unapproved-file-mutation'
+    )
+
+    $requiresClassificationReview = $taskClass -eq 'GENERAL'
+
+    if ($requiresClassificationReview) {
+        $forbiddenActions += 'execution.before-classification-review'
+    }
+
+    $repo = Get-RepoState
+
+    $contract = [ordered]@{
+        schema = 'eink-task-contract-v1'
+        compilerVersion = '0.5.0'
+        compilerPolicy = 'DETERMINISTIC_HEURISTIC_V1'
+        taskId = [string]$Task.taskId
+        sourceRequest = $request
+        projectId = 'eink'
+        taskClass = $taskClass
+        riskLevel = $riskLevel
+        hardwareIntent = [bool]$hasHardwareIntent
+        visualIntent = [bool]$hasVisualIntent
+        requiresClassificationReview = [bool]$requiresClassificationReview
+        requiredCapabilities = @(
+            $capabilities |
+            Select-Object -Unique
+        )
+        candidateFileScopes = @(
+            $candidateScopes |
+            Select-Object -Unique
+        )
+        allowedFiles = @()
+        exactFilesRequiredBeforeExecution = $true
+        forbiddenActions = @(
+            $forbiddenActions |
+            Select-Object -Unique
+        )
+        ownerGates = @(
+            $ownerGates |
+            Select-Object -Unique
+        )
+        acceptanceCriteria = @(
+            $acceptance |
+            Select-Object -Unique
+        )
+        executionEnabled = $false
+        executionState = 'PLAN_ONLY'
+        autoMerge = $false
+        compiledUtc = [DateTime]::UtcNow.ToString('o')
+        compiledFromBranch = [string]$repo.Branch
+        compiledFromHead = [string]$repo.Head
+    }
+
+    $canonical = $contract |
+        ConvertTo-Json -Depth 12 -Compress
+
+    $sha = [Security.Cryptography.SHA256]::Create()
+
+    try {
+        $hash = [BitConverter]::ToString(
+            $sha.ComputeHash(
+                [Text.Encoding]::UTF8.GetBytes($canonical)
+            )
+        ).Replace('-','')
+    }
+    finally {
+        $sha.Dispose()
+    }
+
+    $contract['contractSha256'] = $hash
+
+    [pscustomobject]$contract
+}
+
+function Invoke-EinkBrainCompileAction {
+    $task = Read-EinkBrainCurrentTask
+
+    if (-not $task) {
+        throw 'Brain Task Compiler requires a current task.'
+    }
+
+    $contract = Get-EinkTaskContract -Task $task
+    $now = [DateTime]::UtcNow.ToString('o')
+
+    $record = [ordered]@{
+        schema = 'eink-brain-task-v1'
+        taskId = [string]$task.taskId
+        request = [string]$task.request
+        event = 'COMPILE'
+        status = 'COMPILED'
+        createdUtc = [string]$task.createdUtc
+        updatedUtc = $now
+        resumeCount = [int]$task.resumeCount
+        branchAtCreate = [string]$task.branchAtCreate
+        headAtCreate = [string]$task.headAtCreate
+        contract = $contract
+    }
+
+    if (
+        $task.PSObject.Properties.Name -contains 'resumedOnBranch'
+    ) {
+        $record['resumedOnBranch'] = [string]$task.resumedOnBranch
+    }
+
+    if (
+        $task.PSObject.Properties.Name -contains 'resumedOnHead'
+    ) {
+        $record['resumedOnHead'] = [string]$task.resumedOnHead
+    }
+
+    Write-Utf8JsonFile `
+        -Path $brainCurrentTaskPath `
+        -Value $record
+
+    Append-EinkBrainHistory -Record $record
+
+    Set-LastLog `
+        -Action 'BRAIN_COMPILE' `
+        -Result 'PASS' `
+        -Lines @(
+            'EINK BRAIN TASK CONTRACT COMPILED.',
+            "TASK_ID: $($record.taskId)",
+            "TASK_CLASS: $($contract.taskClass)",
+            "RISK: $($contract.riskLevel)",
+            "CONTRACT_SHA256: $($contract.contractSha256)",
+            'EXECUTION: DISABLED / PLAN_ONLY',
+            'NO BUILD / BURN / GIT MUTATION PERFORMED.'
+        )
+
+    Get-ControlStatus
+}
 function Invoke-EinkBrainResumeAction {
     param(
         [Parameter(Mandatory=$true)]
@@ -2752,6 +3133,12 @@ function Invoke-EinkBrainResumeAction {
     }
 
     $source = $selected[0]
+
+    $sourceContract = $null
+    if ($source.PSObject.Properties.Name -contains 'contract') {
+        $sourceContract = $source.contract
+    }
+
     $repo = Get-RepoState
     $now = [DateTime]::UtcNow.ToString('o')
 
@@ -2760,7 +3147,7 @@ function Invoke-EinkBrainResumeAction {
         taskId = [string]$source.taskId
         request = [string]$source.request
         event = 'RESUME'
-        status = 'READY'
+        status = if ($sourceContract) { 'COMPILED' } else { 'READY' }
         createdUtc = [string]$source.createdUtc
         updatedUtc = $now
         resumeCount = ([int]$source.resumeCount + 1)
@@ -2768,6 +3155,7 @@ function Invoke-EinkBrainResumeAction {
         headAtCreate = [string]$source.headAtCreate
         resumedOnBranch = [string]$repo.Branch
         resumedOnHead = [string]$repo.Head
+        contract = $sourceContract
     }
 
     Write-Utf8JsonFile `
@@ -2866,7 +3254,7 @@ function Get-ControlStatus {
     [ordered]@{
         projectId = 'eink'
         projectName = 'EINK / Clock'
-        version = '0.4'
+        version = '0.5'
         url = "http://127.0.0.1:$Port/"
         branch = $repo.Branch
         head = $repo.Head
@@ -3041,7 +3429,7 @@ function Get-HubStatus {
     [ordered]@{
         hubId = 'harness-control-center'
         name = 'Harness Control Center'
-        version = '0.4'
+        version = '0.5'
         bind = "127.0.0.1:$Port"
         defaultProjectId = 'eink'
         projects = $projects
@@ -4186,7 +4574,7 @@ try {
 
                 if (
                     [string]$project.adapter -eq 'eink' -and
-                    $actionId -in @('brain-create', 'brain-resume')
+                    $actionId -in @('brain-create', 'brain-resume', 'brain-compile')
                 ) {
                     try {
                         $body = if (
@@ -4212,8 +4600,11 @@ try {
                     $value = if ($actionId -eq 'brain-create') {
                         Invoke-EinkBrainCreateAction -Body $body
                     }
-                    else {
+                    elseif ($actionId -eq 'brain-resume') {
                         Invoke-EinkBrainResumeAction -Body $body
+                    }
+                    else {
+                        Invoke-EinkBrainCompileAction
                     }
 
                     Write-Json `
