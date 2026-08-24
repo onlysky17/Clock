@@ -36,6 +36,9 @@
 
 #include "epd.h"                     // EPDç”µå­çº¸å±å¹•é©±åŠ¨
 
+/* One-shot, full-frame calibration artifact for device-proof firmware only. */
+#define HINK_IMAGE_DISPLAY_PROOF_MODE 1U
+
 /*
  * ç±»åž‹å®šä¹‰
  ****************************************************************************************
@@ -367,6 +370,15 @@ void user_app_on_db_init_complete( void )
 	clock_print();
 	clock_push();
 
+#if HINK_IMAGE_DISPLAY_PROOF_MODE
+	/*
+	 * Render the canonical 122x250 packed calibration frame exactly once.
+	 * The normal clock path remains compiled below and is unchanged when this
+	 * proof-only switch is disabled.
+	 */
+	hink_image_display_proof_draw();
+	user_app_adv_start();
+#else
 	// ç»˜åˆ¶æ—¶é’Ÿï¼ˆå¸¦è“ç‰™å›¾æ ‡+å…¨é‡æ›´æ–°ï¼‰å¹¶å¯åŠ¨å¹¿æ’­
 	//clock_draw(DRAW_BT|UPDATE_FULL);
 	QR_draw();
@@ -374,6 +386,7 @@ void user_app_on_db_init_complete( void )
 
 	// å¯åŠ¨æ—¶é’Ÿå®šæ—¶å™¨ï¼Œå¯¹é½åˆ°æ•´åˆ†é’Ÿ
 	app_clock_timer_restart();
+#endif
 }
 
 
