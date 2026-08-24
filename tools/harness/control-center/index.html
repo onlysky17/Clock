@@ -611,7 +611,7 @@
     <header>
       <div>
         <h1>Harness Control Center</h1>
-        <div class="sub">Multiproject v0.3 · EINK-first · local-only · 127.0.0.1 · action allow-list</div>
+        <div class="sub">Multiproject v0.4 · EINK Brain · local-only · 127.0.0.1 · action allow-list</div>
       </div>
       <div id="stateBadge" class="badge">IDLE</div>
     </header>
@@ -642,6 +642,40 @@
       </div>
     </section>
 
+    <section class="panel">
+      <div class="label" style="margin-bottom:14px">EINK Brain v0.4 · Persistent Task Memory</div>
+      <div class="warning">
+        Nhập yêu cầu bằng ngôn ngữ tự nhiên. Brain v0.4 chỉ tạo/lưu/resume task;
+        chưa được phép sửa code, build, burn hoặc thay đổi Git.
+      </div>
+
+      <div class="form-stack" style="margin-top:14px">
+        <textarea id="einkBrainRequest" placeholder="Ví dụ: sửa giao diện đồng hồ để ngày âm lịch dễ đọc hơn, giữ nguyên layout Portrait hiện tại..."></textarea>
+
+        <div class="actions">
+          <button id="einkBrainCreateButton" class="prepare">CREATE TASK</button>
+
+          <select
+            id="einkBrainHistorySelect"
+            style="min-width:320px;max-width:100%;background:#0d1117;color:#e6edf3;border:1px solid #30363d;border-radius:8px;padding:9px"
+          >
+            <option value="">Chưa có task history</option>
+          </select>
+
+          <button id="einkBrainResumeButton" disabled>RESUME TASK</button>
+        </div>
+
+        <div class="artifact">
+          <div class="artifact-line"><span>Current Task</span><code id="einkBrainCurrentId">-</code></div>
+          <div class="artifact-line"><span>Status</span><code id="einkBrainCurrentStatus">-</code></div>
+          <div class="artifact-line"><span>Resume Count</span><code id="einkBrainResumeCount">0</code></div>
+          <div class="artifact-line"><span>History Events</span><code id="einkBrainHistoryCount">0</code></div>
+          <div class="artifact-line"><span>Store</span><code id="einkBrainStore">-</code></div>
+        </div>
+
+        <div id="einkBrainCurrentRequest" class="pending-files">Chưa có Brain task.</div>
+      </div>
+    </section>
     <section class="panel">
       <div class="label" style="margin-bottom:14px">Owner Physical Gate</div>
       <div class="warning">
@@ -953,6 +987,93 @@
       });
     }
 
+    function renderEinkBrainState(data) {
+      const brain = data?.brain || {};
+      const task = brain.currentTask || {};
+
+      const currentId = $("einkBrainCurrentId");
+      const currentStatus = $("einkBrainCurrentStatus");
+      const resumeCount = $("einkBrainResumeCount");
+      const historyCount = $("einkBrainHistoryCount");
+      const store = $("einkBrainStore");
+      const currentRequest = $("einkBrainCurrentRequest");
+      const historySelect = $("einkBrainHistorySelect");
+      const resumeButton = $("einkBrainResumeButton");
+
+      if (
+        !currentId ||
+        !currentStatus ||
+        !resumeCount ||
+        !historyCount ||
+        !store ||
+        !currentRequest ||
+        !historySelect ||
+        !resumeButton
+      ) {
+        return;
+      }
+
+      currentId.textContent = task.taskId || "-";
+      currentStatus.textContent = task.status || "-";
+      resumeCount.textContent = String(task.resumeCount ?? 0);
+      historyCount.textContent = String(brain.historyCount ?? 0);
+      store.textContent = brain.storeRoot || "-";
+      currentRequest.textContent = task.request || "Chưa có Brain task.";
+
+      const previous = historySelect.value;
+
+      historySelect.replaceChildren();
+
+      const recent = Array.isArray(brain.recentTasks)
+        ? brain.recentTasks
+        : [];
+
+      if (recent.length === 0) {
+        const option = document.createElement("option");
+        option.value = "";
+        option.textContent = "Chưa có task history";
+        historySelect.appendChild(option);
+      } else {
+        for (const item of recent) {
+          const option = document.createElement("option");
+          option.value = item.taskId || "";
+
+          const request = String(item.request || "")
+            .replace(/\s+/g, " ")
+            .trim();
+
+          const preview =
+            request.length > 60
+              ? `${request.slice(0, 60)}…`
+              : request;
+
+          option.textContent =
+            `${item.taskId || "-"} · ${item.event || "CREATE"} · ${preview}`;
+
+          historySelect.appendChild(option);
+        }
+
+        if (
+          previous &&
+          [...historySelect.options].some(
+            (option) => option.value === previous
+          )
+        ) {
+          historySelect.value = previous;
+        } else if (task.taskId) {
+          const currentOption = [...historySelect.options].find(
+            (option) => option.value === task.taskId
+          );
+
+          if (currentOption) {
+            historySelect.value = task.taskId;
+          }
+        }
+      }
+
+      resumeButton.disabled =
+        !!data?.busy || !historySelect.value;
+    }
     function render(data) {
       current = data;
       token = data.sessionToken || token;
@@ -1035,6 +1156,10 @@
         : "Chưa có Owner physical decision.";
 
       $("log").textContent = data.lastLog || "No log yet.";
+
+      // Authoritative Brain view is always rendered from the latest
+      // /api/projects/eink/status payload.
+      renderEinkBrainState(data);
     }
 
     function renderElectronic(data) {
@@ -1279,6 +1404,10 @@
       return data;
     }
 
+    async function einkAction(actionId, body = {}) {
+      return post(`/api/projects/eink/actions/${encodeURIComponent(actionId)}`, body);
+    }
+
     async function electronicAction(actionId, body = {}) {
       return post(`/api/projects/electronic/actions/${encodeURIComponent(actionId)}`, body);
     }
@@ -1375,6 +1504,50 @@
       });
     }
 
+    $("einkBrainHistorySelect").addEventListener("change", () => {
+      $("einkBrainResumeButton").disabled =
+        !$("einkBrainHistorySelect").value || !!current?.busy;
+    });
+
+    $("einkBrainCreateButton").addEventListener("click", async () => {
+      const request = $("einkBrainRequest").value.trim();
+
+      if (!request) {
+        $("log").textContent = "Brain task request is empty.";
+        return;
+      }
+
+      $("einkBrainCreateButton").disabled = true;
+      $("einkBrainResumeButton").disabled = true;
+
+      try {
+        const result = await einkAction("brain-create", { request });
+        $("einkBrainRequest").value = "";
+        render(result);
+      } catch (error) {
+        $("log").textContent = `Brain CREATE failed: ${error.message}`;
+      }
+
+      await refresh();
+    });
+
+    $("einkBrainResumeButton").addEventListener("click", async () => {
+      const taskId = $("einkBrainHistorySelect").value;
+
+      if (!taskId) return;
+
+      $("einkBrainCreateButton").disabled = true;
+      $("einkBrainResumeButton").disabled = true;
+
+      try {
+        const result = await einkAction("brain-resume", { taskId });
+        render(result);
+      } catch (error) {
+        $("log").textContent = `Brain RESUME failed: ${error.message}`;
+      }
+
+      await refresh();
+    });
     $("prepareButton").addEventListener("click", async () => {
       $("prepareButton").disabled = true;
       $("burnButton").disabled = true;

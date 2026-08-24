@@ -21,7 +21,9 @@ param(
 
     [string]$BurnSafetyPackedBin = '',
 
-    [switch]$FeedbackTransportAcceptance
+    [switch]$FeedbackTransportAcceptance,
+
+    [string]$BrainAcceptanceRoot = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -66,6 +68,34 @@ $ownerFinalizeRoot = Join-Path $repoRoot '_incoming\EINK_HARNESS_CONTROL_CENTER_
 $burnVerificationStatePath = Join-Path $ownerFinalizeRoot 'burn-verification-state.json'
 $ownerFinalizeStatePath = Join-Path $ownerFinalizeRoot 'owner-finalize-state.json'
 $activeFinalizeTaskPath = Join-Path $ownerFinalizeRoot 'active-task.json'
+
+$brainDefaultRoot = Join-Path $repoRoot '_incoming\EINK_HARNESS_BRAIN'
+$brainRoot = if (-not [string]::IsNullOrWhiteSpace($BrainAcceptanceRoot)) {
+    if ($Port -eq 5175 -or -not $NoBrowser) {
+        throw 'Brain acceptance storage override requires non-production port and -NoBrowser.'
+    }
+
+    $candidateBrainRoot = [IO.Path]::GetFullPath($BrainAcceptanceRoot)
+    $incomingPrefix = [IO.Path]::GetFullPath(
+        (Join-Path $repoRoot '_incoming')
+    ).TrimEnd('\') + '\'
+
+    if (-not $candidateBrainRoot.StartsWith(
+        $incomingPrefix,
+        [StringComparison]::OrdinalIgnoreCase
+    )) {
+        throw 'Brain acceptance storage must stay inside repository _incoming.'
+    }
+
+    $candidateBrainRoot
+}
+else {
+    $brainDefaultRoot
+}
+
+$brainCurrentTaskPath = Join-Path $brainRoot 'current-task.json'
+$brainHistoryPath = Join-Path $brainRoot 'history.jsonl'
+
 $runtimeRoot = Join-Path $repoRoot '_incoming\EINK_HARNESS_CONTROL_CENTER_RUNTIME'
 $preEraseBackupEvidenceDir = Join-Path $repoRoot '_incoming\EINK_HARNESS_SPI_BACKUP\20260822_114022'
 $preEraseBackupSha256 = '8824C5F9D6F99A1192770225EA14D4C7B861537D193CF77C632D0849FDBC58C1'
@@ -163,7 +193,7 @@ $script:RecoveryChallengeHash = ''
 $script:RecoveryChallengeExpiresUtc = [DateTime]::MinValue
 $script:RecoveryChallengeArtifactSha = ''
 $script:LastLog = @(
-    'Harness Control Center Multiproject v0.3 started.',
+    'Harness Control Center Multiproject v0.4 started.',
     'Waiting for action.'
 )
 
@@ -2532,7 +2562,236 @@ function Get-FriendlyTaskTitle {
     $culture.TextInfo.ToTitleCase($text.ToLowerInvariant())
 }
 
+function Initialize-EinkBrainStore {
+    [void](New-Item -ItemType Directory -Path $brainRoot -Force)
+}
+
+function Read-EinkBrainCurrentTask {
+    if (-not (Test-Path -LiteralPath $brainCurrentTaskPath -PathType Leaf)) {
+        return $null
+    }
+
+    Read-Utf8JsonFile -Path $brainCurrentTaskPath
+}
+
+function Append-EinkBrainHistory {
+    param(
+        [Parameter(Mandatory=$true)]
+        $Record
+    )
+
+    Initialize-EinkBrainStore
+
+    $line = (
+        $Record |
+        ConvertTo-Json -Depth 8 -Compress
+    ) + [Environment]::NewLine
+
+    [IO.File]::AppendAllText(
+        $brainHistoryPath,
+        $line,
+        [Text.UTF8Encoding]::new($false)
+    )
+}
+
+function Get-EinkBrainHistory {
+    if (-not (Test-Path -LiteralPath $brainHistoryPath -PathType Leaf)) {
+        return @()
+    }
+
+    $records = @()
+
+    foreach ($line in @(
+        [IO.File]::ReadAllLines(
+            $brainHistoryPath,
+            [Text.Encoding]::UTF8
+        )
+    )) {
+        if ([string]::IsNullOrWhiteSpace($line)) {
+            continue
+        }
+
+        try {
+            $records += ($line | ConvertFrom-Json)
+        }
+        catch {
+            throw 'EINK Brain history contains invalid JSONL.'
+        }
+    }
+
+    $seen = @{}
+    $recent = @()
+
+    for ($i = $records.Count - 1; $i -ge 0; $i--) {
+        $record = $records[$i]
+        $taskId = [string]$record.taskId
+
+        if ([string]::IsNullOrWhiteSpace($taskId)) {
+            continue
+        }
+
+        if (-not $seen.ContainsKey($taskId)) {
+            $seen[$taskId] = $true
+            $recent += $record
+        }
+    }
+
+    $recent
+}
+
+function Get-EinkBrainHistoryCount {
+    if (-not (Test-Path -LiteralPath $brainHistoryPath -PathType Leaf)) {
+        return 0
+    }
+
+    @(
+        [IO.File]::ReadAllLines(
+            $brainHistoryPath,
+            [Text.Encoding]::UTF8
+        ) |
+        Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    ).Count
+}
+
+function Get-EinkBrainStatus {
+    Initialize-EinkBrainStore
+
+    $currentTask = Read-EinkBrainCurrentTask
+    $recentTasks = @(Get-EinkBrainHistory | Select-Object -First 20)
+
+    [ordered]@{
+        version = '0.4'
+        persistent = $true
+        executionEnabled = $false
+        mutationPolicy = 'MEMORY_ONLY'
+        storeRoot = $brainRoot
+        currentTask = $currentTask
+        recentTasks = $recentTasks
+        historyCount = Get-EinkBrainHistoryCount
+    }
+}
+
+function Invoke-EinkBrainCreateAction {
+    param(
+        [Parameter(Mandatory=$true)]
+        $Body
+    )
+
+    $request = ([string]$Body.request).Trim()
+
+    if ([string]::IsNullOrWhiteSpace($request)) {
+        throw 'Brain task request is empty.'
+    }
+
+    if ($request.Length -gt 12000) {
+        throw 'Brain task request exceeds 12000 characters.'
+    }
+
+    Initialize-EinkBrainStore
+
+    $repo = Get-RepoState
+    $now = [DateTime]::UtcNow.ToString('o')
+    $taskId = 'EINK-BRAIN-' +
+        (Get-Date -Format 'yyyyMMdd-HHmmss') +
+        '-' +
+        ([Guid]::NewGuid().ToString('N').Substring(0,6)).ToUpperInvariant()
+
+    $record = [ordered]@{
+        schema = 'eink-brain-task-v1'
+        taskId = $taskId
+        request = $request
+        event = 'CREATE'
+        status = 'READY'
+        createdUtc = $now
+        updatedUtc = $now
+        resumeCount = 0
+        branchAtCreate = [string]$repo.Branch
+        headAtCreate = [string]$repo.Head
+    }
+
+    Write-Utf8JsonFile `
+        -Path $brainCurrentTaskPath `
+        -Value $record
+
+    Append-EinkBrainHistory -Record $record
+
+    Set-LastLog `
+        -Action 'BRAIN_CREATE' `
+        -Result 'PASS' `
+        -Lines @(
+            'EINK BRAIN TASK CREATED.',
+            "TASK_ID: $taskId",
+            'STATE: READY',
+            'EXECUTION: DISABLED',
+            'NO BUILD / BURN / GIT MUTATION PERFORMED.'
+        )
+
+    Get-ControlStatus
+}
+
+function Invoke-EinkBrainResumeAction {
+    param(
+        [Parameter(Mandatory=$true)]
+        $Body
+    )
+
+    $taskId = ([string]$Body.taskId).Trim()
+
+    if ([string]::IsNullOrWhiteSpace($taskId)) {
+        throw 'Brain resume taskId is empty.'
+    }
+
+    $selected = @(
+        Get-EinkBrainHistory |
+        Where-Object { [string]$_.taskId -eq $taskId } |
+        Select-Object -First 1
+    )
+
+    if ($selected.Count -ne 1) {
+        throw 'Brain task was not found in persistent history.'
+    }
+
+    $source = $selected[0]
+    $repo = Get-RepoState
+    $now = [DateTime]::UtcNow.ToString('o')
+
+    $record = [ordered]@{
+        schema = 'eink-brain-task-v1'
+        taskId = [string]$source.taskId
+        request = [string]$source.request
+        event = 'RESUME'
+        status = 'READY'
+        createdUtc = [string]$source.createdUtc
+        updatedUtc = $now
+        resumeCount = ([int]$source.resumeCount + 1)
+        branchAtCreate = [string]$source.branchAtCreate
+        headAtCreate = [string]$source.headAtCreate
+        resumedOnBranch = [string]$repo.Branch
+        resumedOnHead = [string]$repo.Head
+    }
+
+    Write-Utf8JsonFile `
+        -Path $brainCurrentTaskPath `
+        -Value $record
+
+    Append-EinkBrainHistory -Record $record
+
+    Set-LastLog `
+        -Action 'BRAIN_RESUME' `
+        -Result 'PASS' `
+        -Lines @(
+            'EINK BRAIN TASK RESUMED.',
+            "TASK_ID: $taskId",
+            "RESUME_COUNT: $($record.resumeCount)",
+            'STATE: READY',
+            'EXECUTION: DISABLED',
+            'NO BUILD / BURN / GIT MUTATION PERFORMED.'
+        )
+
+    Get-ControlStatus
+}
 function Get-ControlStatus {
+
     $burnRuntime = Sync-BurnRuntimeState
     $repo = Get-RepoState
     $trust = Get-PrepareTrustState
@@ -2607,7 +2866,7 @@ function Get-ControlStatus {
     [ordered]@{
         projectId = 'eink'
         projectName = 'EINK / Clock'
-        version = '0.3'
+        version = '0.4'
         url = "http://127.0.0.1:$Port/"
         branch = $repo.Branch
         head = $repo.Head
@@ -2616,6 +2875,7 @@ function Get-ControlStatus {
         trackedDirtyCount = @($repo.TrackedStatus).Count
         stagedCount = @($repo.StagedFiles).Count
         untrackedCount = @($repo.Untracked).Count
+        brain = (Get-EinkBrainStatus)
         readyToBurn = [bool]($candidate -and -not $script:Busy -and -not $burnRunning -and -not $recoveryRequired)
         recovery = [ordered]@{
             required = $recoveryRequired
@@ -2781,7 +3041,7 @@ function Get-HubStatus {
     [ordered]@{
         hubId = 'harness-control-center'
         name = 'Harness Control Center'
-        version = '0.3'
+        version = '0.4'
         bind = "127.0.0.1:$Port"
         defaultProjectId = 'eink'
         projects = $projects
@@ -3576,6 +3836,7 @@ if (
 }
 
 Initialize-PrepareTrustState
+Initialize-EinkBrainStore
 Initialize-AcceptanceBurnFixture
 
 if ($BurnSafetyAcceptance) {
@@ -3923,6 +4184,45 @@ try {
                     continue
                 }
 
+                if (
+                    [string]$project.adapter -eq 'eink' -and
+                    $actionId -in @('brain-create', 'brain-resume')
+                ) {
+                    try {
+                        $body = if (
+                            [string]::IsNullOrWhiteSpace($request.Body)
+                        ) {
+                            @{}
+                        }
+                        else {
+                            $request.Body | ConvertFrom-Json
+                        }
+                    }
+                    catch {
+                        Write-Json `
+                            -Client $client `
+                            -StatusCode 400 `
+                            -Value @{
+                                error = 'INVALID_JSON'
+                            }
+
+                        continue
+                    }
+
+                    $value = if ($actionId -eq 'brain-create') {
+                        Invoke-EinkBrainCreateAction -Body $body
+                    }
+                    else {
+                        Invoke-EinkBrainResumeAction -Body $body
+                    }
+
+                    Write-Json `
+                        -Client $client `
+                        -StatusCode 200 `
+                        -Value $value
+
+                    continue
+                }
                 if (
                     [string]$project.adapter -eq 'eink' -and
                     $actionId -eq 'burn'

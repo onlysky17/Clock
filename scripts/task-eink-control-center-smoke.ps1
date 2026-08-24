@@ -247,7 +247,7 @@ try {
 
     if (
         [string]$status.hubId -ne 'harness-control-center' -or
-        [string]$status.version -ne '0.3' -or
+        [string]$status.version -ne '0.4' -or
         @($status.projects.id) -notcontains 'eink' -or
         @($status.projects.id) -notcontains 'electronic'
     ) {
@@ -378,7 +378,7 @@ try {
         throw 'Shutdown API failed.'
     }
 
-    Write-Output 'HARNESS CONTROL CENTER V0.3 SMOKE: PASS'
+    Write-Output 'HARNESS CONTROL CENTER V0.4 SMOKE: PASS'
     Write-Output 'LOOPBACK_BIND: PASS'
     Write-Output 'STATUS_API: PASS'
     Write-Output 'MULTIPROJECT_REGISTRY: PASS'
