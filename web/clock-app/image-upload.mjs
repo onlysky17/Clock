@@ -213,7 +213,7 @@ export function formatHexDump(packed) {
   return lines.join('\n');
 }
 
-function monoToImageData(pixels) {
+export function monoToImageData(pixels) {
   const image = new ImageData(FRAME_WIDTH, FRAME_HEIGHT);
   for (let pixel = 0, offset = 0; pixel < pixels.length; pixel += 1, offset += 4) {
     image.data[offset] = pixels[pixel];
@@ -224,7 +224,7 @@ function monoToImageData(pixels) {
   return image;
 }
 
-function createOrientedCanvas(image, rotation) {
+export function createOrientedCanvas(image, rotation) {
   const dimensions = orientedDimensions(image.width, image.height, rotation);
   const canvas = document.createElement('canvas');
   canvas.width = dimensions.width;
@@ -638,4 +638,4 @@ function bootstrap() {
   updateBleControls();
 }
 
-if (typeof document !== 'undefined') bootstrap();
+if (typeof document !== 'undefined' && document.getElementById('imageFile')) bootstrap();
