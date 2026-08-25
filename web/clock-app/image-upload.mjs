@@ -117,10 +117,8 @@ export function chooseAutoRotation(sourceWidth, sourceHeight) {
 }
 
 export function chooseAutoFrameMode(sourceWidth, sourceHeight) {
-  const sourceRatio = sourceWidth / sourceHeight;
-  const targetRatio = FRAME_WIDTH / FRAME_HEIGHT;
-  const retainedFraction = Math.min(sourceRatio / targetRatio, targetRatio / sourceRatio);
-  return retainedFraction >= 0.72 ? 'fill' : 'fit';
+  const fitAreaUtilization = fitUtilization(sourceWidth, sourceHeight);
+  return fitAreaUtilization >= 0.72 ? 'fit' : 'fill';
 }
 
 export function resolveProcessingPlan(sourceWidth, sourceHeight, frameMode = 'auto', rotationMode = 'auto') {
