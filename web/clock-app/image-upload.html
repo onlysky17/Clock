@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EINK Image Upload v1.1 — Auto Scale + Orientation</title>
+  <link rel="stylesheet" href="./image-upload.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <div>
+        <span class="eyebrow">EINK CLOCK · BLACK / WHITE</span>
+        <h1>Image Upload <em>v1.1</em></h1>
+        <p>Tự xoay, scale, chuyển ảnh thành frame 1-bit và gửi đúng 4,000 byte tới màn hình EINK qua Web Bluetooth.</p>
+      </div>
+      <div class="frame-contract" aria-label="Frame contract">
+        <strong>4,000</strong>
+        <span>bytes / frame</span>
+      </div>
+    </header>
+
+    <section class="workspace">
+      <aside class="controls card">
+        <div class="section-heading">
+          <span>01</span>
+          <div><h2>Nguồn ảnh</h2><p>JPG hoặc PNG</p></div>
+        </div>
+
+        <label class="drop-zone" id="dropZone" for="imageFile">
+          <input id="imageFile" type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png">
+          <span class="upload-icon" aria-hidden="true">↑</span>
+          <strong>Chọn hoặc thả ảnh vào đây</strong>
+          <small id="fileMeta">Tối đa theo giới hạn trình duyệt</small>
+        </label>
+
+        <fieldset>
+          <legend>Chế độ khung</legend>
+          <div class="segmented three">
+            <label><input type="radio" name="frameMode" value="auto" checked><span>Auto</span></label>
+            <label><input type="radio" name="frameMode" value="fit"><span>Fit</span></label>
+            <label><input type="radio" name="frameMode" value="fill"><span>Fill / Crop</span></label>
+          </div>
+          <p class="hint">Auto chọn Fit hoặc Fill theo mức crop. Fit giữ toàn ảnh; Fill lấp đầy màn hình và crop giữa. Không chế độ nào kéo méo ảnh.</p>
+        </fieldset>
+
+        <fieldset>
+          <legend>Xoay ảnh</legend>
+          <div class="segmented rotation-options">
+            <label><input type="radio" name="rotationMode" value="auto" checked><span>Auto</span></label>
+            <label><input type="radio" name="rotationMode" value="0"><span>0°</span></label>
+            <label><input type="radio" name="rotationMode" value="90"><span>90°</span></label>
+            <label><input type="radio" name="rotationMode" value="180"><span>180°</span></label>
+            <label><input type="radio" name="rotationMode" value="270"><span>270°</span></label>
+          </div>
+          <p class="hint">Auto so sánh ảnh gốc với bản xoay 90° và chọn hướng tận dụng màn hình dọc tốt hơn.</p>
+          <div class="transform-summary" aria-live="polite">
+            <span><small>FRAME</small><b id="frameModeState">AUTO</b></span>
+            <span><small>ROTATION</small><b id="rotationState">AUTO</b></span>
+          </div>
+          <p id="autoNotice" class="auto-notice">Upload ảnh để Auto xác định hướng.</p>
+        </fieldset>
+
+        <fieldset>
+          <legend>Ngưỡng trắng / đen</legend>
+          <div class="range-row">
+            <input id="threshold" type="range" min="0" max="255" value="128">
+            <output id="thresholdValue" for="threshold">128</output>
+          </div>
+          <p class="hint">Giá trị tối hơn ngưỡng sẽ thành điểm đen. Ngưỡng cũng áp dụng cho Floyd–Steinberg.</p>
+        </fieldset>
+
+        <fieldset>
+          <legend>Frame xuất cuối</legend>
+          <div class="segmented">
+            <label><input type="radio" name="outputMode" value="threshold" checked><span>Threshold</span></label>
+            <label><input type="radio" name="outputMode" value="dither"><span>Dithered</span></label>
+          </div>
+        </fieldset>
+
+        <div class="actions">
+          <button id="downloadBin" class="primary" type="button" disabled>TẢI FRAME .BIN</button>
+          <button id="copyHex" type="button" disabled>COPY HEX</button>
+        </div>
+        <p id="status" class="status" data-state="idle" role="status">Đang chờ ảnh JPG / PNG.</p>
+      </aside>
+
+      <section class="preview-area">
+        <div class="preview-heading">
+          <div>
+            <span class="eyebrow">EXACT-PIXEL PREVIEW</span>
+            <h2>So sánh ba bước xử lý</h2>
+          </div>
+          <div class="dimensions"><b>122</b><span>×</span><b>250</b><small>PX</small></div>
+        </div>
+
+        <div class="preview-grid">
+          <article class="preview-card">
+            <div class="preview-label"><span>Original</span><small>cùng frame đã xoay + scale</small></div>
+            <div class="panel-bezel"><canvas id="originalCanvas" width="122" height="250" aria-label="Original fitted preview"></canvas></div>
+          </article>
+          <article class="preview-card" id="thresholdCard">
+            <div class="preview-label"><span>Threshold</span><small>1-bit trực tiếp</small></div>
+            <div class="panel-bezel"><canvas id="thresholdCanvas" width="122" height="250" aria-label="Threshold monochrome preview"></canvas></div>
+          </article>
+          <article class="preview-card" id="ditherCard">
+            <div class="preview-label"><span>Floyd–Steinberg</span><small>khuếch tán sai số</small></div>
+            <div class="panel-bezel"><canvas id="ditherCanvas" width="122" height="250" aria-label="Floyd-Steinberg monochrome preview"></canvas></div>
+          </article>
+        </div>
+      </section>
+    </section>
+
+    <section class="card ble-card" aria-labelledby="bleTitle">
+      <div class="ble-heading">
+        <div class="section-heading">
+          <span>BLE</span>
+          <div><h2 id="bleTitle">Gửi ảnh tới EINK</h2><p>Image Transfer v1 · RAM-only · một lần FULL refresh</p></div>
+        </div>
+        <strong id="bleState" class="ble-state" data-state="disconnected">DISCONNECTED</strong>
+      </div>
+      <div class="ble-actions">
+        <button id="connectBle" type="button">CONNECT BLE</button>
+        <button id="sendBle" class="primary" type="button" disabled>SEND TO EINK</button>
+      </div>
+      <div class="ble-progress-row">
+        <progress id="bleProgress" max="4000" value="0"></progress>
+        <b id="bleProgressText">0 / 4,000 bytes</b>
+      </div>
+      <dl class="ble-metrics">
+        <div><dt>Thiết bị</dt><dd id="bleDevice">Chưa kết nối</dd></div>
+        <div><dt>Chunks ACK</dt><dd id="bleChunks">0 / 286</dd></div>
+        <div><dt>CRC16</dt><dd id="bleCrc">----</dd></div>
+        <div><dt>Refresh</dt><dd id="bleRefresh">Chưa chạy</dd></div>
+      </dl>
+      <p id="bleMessage" class="ble-message" role="status">Kết nối bằng Chrome/Edge trên điện thoại Android có Web Bluetooth.</p>
+    </section>
+
+    <section class="output-grid">
+      <article class="card metrics-card">
+        <div class="section-heading">
+          <span>02</span>
+          <div><h2>1-bit frame</h2><p id="outputLabel">Threshold output</p></div>
+        </div>
+        <dl class="metrics">
+          <div><dt>Kích thước</dt><dd>122 × 250</dd></div>
+          <div><dt>Stride</dt><dd>16 bytes</dd></div>
+          <div><dt>Tổng frame</dt><dd id="byteCount">4,000 bytes</dd></div>
+          <div><dt>Điểm đen</dt><dd id="blackCount">—</dd></div>
+        </dl>
+      </article>
+
+      <article class="card packing-card">
+        <div class="section-heading">
+          <span>03</span>
+          <div><h2>Quy ước đóng gói</h2><p>DA14585-ready buffer</p></div>
+        </div>
+        <p>Mỗi hàng ảnh <code>y = 0…249</code> chiếm 16 byte liên tiếp. Trong mỗi byte, <code>bit 7</code> là pixel bên trái trước; <code>1 = trắng</code>, <code>0 = đen</code>. Pixel <code>x = 0…121</code>; 6 bit đệm cuối hàng luôn là trắng.</p>
+        <code class="formula">offset = y × 16 + (x >> 3)<br>mask = 1 &lt;&lt; (7 - (x &amp; 7))</code>
+      </article>
+    </section>
+
+    <section class="card inspect-card">
+      <div class="inspect-heading">
+        <div class="section-heading">
+          <span>04</span>
+          <div><h2>Inspect packed bitmap</h2><p>250 hàng · 16 byte mỗi hàng</p></div>
+        </div>
+        <span id="paddingState" class="check">PADDING: —</span>
+      </div>
+      <pre id="hexDump" tabindex="0">Upload ảnh để tạo frame 1-bit.</pre>
+    </section>
+  </main>
+  <script type="module" src="./image-upload.mjs"></script>
+</body>
+</html>
