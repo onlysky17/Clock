@@ -8,6 +8,8 @@ export const BLE_NOTIFY_UUID = '15005991-b131-3396-014c-664c9867b917';
 export const IMAGE_TRANSFER_VERSION = 1;
 export const IMAGE_CHUNK_BYTES = 14;
 export const IMAGE_TOTAL_CHUNKS = Math.ceil(FRAME_BYTES / IMAGE_CHUNK_BYTES);
+export const MANUAL_CROP_MIN_ZOOM = 1;
+export const MANUAL_CROP_MAX_ZOOM = 4;
 
 export function crc16Ccitt(data, seed = 0xFFFF) {
   let crc = seed;
@@ -91,6 +93,55 @@ export function computeImagePlacement(sourceWidth, sourceHeight, mode = 'cover')
   return { sx: 0, sy: 0, sw: sourceWidth, sh: sourceHeight, dx: (FRAME_WIDTH - width) / 2, dy: (FRAME_HEIGHT - height) / 2, dw: width, dh: height };
 }
 
+function clampFinite(value, minimum, maximum, fallback) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? Math.max(minimum, Math.min(maximum, numeric)) : fallback;
+}
+
+export function normalizeManualCropState(state = {}) {
+  return {
+    zoom: clampFinite(state.zoom, MANUAL_CROP_MIN_ZOOM, MANUAL_CROP_MAX_ZOOM, MANUAL_CROP_MIN_ZOOM),
+    panX: clampFinite(state.panX, -1, 1, 0),
+    panY: clampFinite(state.panY, -1, 1, 0)
+  };
+}
+
+export function computeManualCropPlacement(sourceWidth, sourceHeight, state = {}) {
+  if (!(sourceWidth > 0) || !(sourceHeight > 0)) throw new Error('INVALID_IMAGE_DIMENSIONS');
+  const normalized = normalizeManualCropState(state);
+  const minimumCover = computeImagePlacement(sourceWidth, sourceHeight, 'cover');
+  const sw = minimumCover.sw / normalized.zoom;
+  const sh = minimumCover.sh / normalized.zoom;
+  const maxSx = Math.max(0, sourceWidth - sw);
+  const maxSy = Math.max(0, sourceHeight - sh);
+  return {
+    sx: maxSx * (normalized.panX + 1) / 2,
+    sy: maxSy * (normalized.panY + 1) / 2,
+    sw,
+    sh,
+    dx: 0,
+    dy: 0,
+    dw: FRAME_WIDTH,
+    dh: FRAME_HEIGHT,
+    maxSx,
+    maxSy,
+    ...normalized
+  };
+}
+
+export function panManualCropByViewportDelta(state, deltaX, deltaY, viewportWidth, viewportHeight, sourceWidth, sourceHeight) {
+  if (!(viewportWidth > 0) || !(viewportHeight > 0)) throw new Error('INVALID_CROP_VIEWPORT');
+  const normalized = normalizeManualCropState(state);
+  const placement = computeManualCropPlacement(sourceWidth, sourceHeight, normalized);
+  const sourceDeltaX = -clampFinite(deltaX, -viewportWidth, viewportWidth, 0) * placement.sw / viewportWidth;
+  const sourceDeltaY = -clampFinite(deltaY, -viewportHeight, viewportHeight, 0) * placement.sh / viewportHeight;
+  return normalizeManualCropState({
+    zoom: normalized.zoom,
+    panX: placement.maxSx > 0 ? normalized.panX + sourceDeltaX * 2 / placement.maxSx : 0,
+    panY: placement.maxSy > 0 ? normalized.panY + sourceDeltaY * 2 / placement.maxSy : 0
+  });
+}
+
 export function normalizeRotation(rotation) {
   const value = Number(rotation);
   if (![0, 90, 180, 270].includes(value)) throw new Error('INVALID_ROTATION');
@@ -122,14 +173,14 @@ export function chooseAutoFrameMode(sourceWidth, sourceHeight) {
 }
 
 export function resolveProcessingPlan(sourceWidth, sourceHeight, frameMode = 'auto', rotationMode = 'auto') {
-  if (!['auto', 'fit', 'fill'].includes(frameMode)) throw new Error('INVALID_FRAME_MODE');
+  if (!['auto', 'fit', 'fill', 'manual'].includes(frameMode)) throw new Error('INVALID_FRAME_MODE');
   const rotation = rotationMode === 'auto' ? chooseAutoRotation(sourceWidth, sourceHeight) : normalizeRotation(rotationMode);
   const dimensions = orientedDimensions(sourceWidth, sourceHeight, rotation);
   const resolvedFrameMode = frameMode === 'auto' ? chooseAutoFrameMode(dimensions.width, dimensions.height) : frameMode;
   return {
     frameMode,
     resolvedFrameMode,
-    scaleMode: resolvedFrameMode === 'fill' ? 'cover' : 'contain',
+    scaleMode: resolvedFrameMode === 'manual' ? 'manual' : (resolvedFrameMode === 'fill' ? 'cover' : 'contain'),
     rotationMode,
     rotation,
     autoRotated: rotationMode === 'auto' && rotation !== 0,

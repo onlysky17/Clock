@@ -3,14 +3,19 @@ import {
   FRAME_HEIGHT,
   FRAME_WIDTH,
   IMAGE_TOTAL_CHUNKS,
+  MANUAL_CROP_MAX_ZOOM,
+  MANUAL_CROP_MIN_ZOOM,
   computeImagePlacement,
+  computeManualCropPlacement,
   createImageTransferPlan,
   createOrientedCanvas,
   floydSteinbergPixels,
   formatHexDump,
   hasWhitePadding,
   monoToImageData,
+  normalizeManualCropState,
   packMonochromeFrame,
+  panManualCropByViewportDelta,
   parseImageManifest,
   resolveProcessingPlan,
   rgbaToLuminance,
@@ -66,6 +71,16 @@ function installStyles() {
     .imageRange{display:grid;grid-template-columns:minmax(0,1fr) 48px;gap:9px;align-items:center}
     .imageRange output{font-weight:900;text-align:center}
     .imageTransformState{padding:9px 11px;border-radius:10px;background:#0b1421;color:var(--muted);font-size:.84rem}
+    .imageManualCrop[hidden]{display:none!important}
+    .imageManualCrop{display:grid;grid-template-columns:minmax(138px,.75fr) minmax(150px,1fr);gap:12px;align-items:center;padding:12px;border:1px solid #304b65;border-radius:13px;background:#07111d}
+    .imageManualViewport{position:relative;display:grid;place-items:center;width:min(100%,146px);aspect-ratio:122/250;justify-self:center;overflow:hidden;border:2px solid #52d8ff;border-radius:8px;background:#fff;box-shadow:0 10px 24px rgba(0,0,0,.28);cursor:grab;touch-action:none;user-select:none}
+    .imageManualViewport[data-dragging="true"]{cursor:grabbing;border-color:#8ce9ff}
+    .imageManualViewport canvas{display:block;width:100%;height:100%;background:#fff;image-rendering:auto;pointer-events:none}
+    .imageManualTools{display:grid;gap:10px;min-width:0}
+    .imageManualTools label{display:flex;justify-content:space-between;gap:8px;color:var(--muted);font-size:.84rem;font-weight:800}
+    .imageManualTools input[type="range"]{width:100%;min-height:44px;touch-action:pan-x}
+    .imageManualTools button{width:100%;min-width:0}
+    .imageManualHint{font-size:.78rem!important;line-height:1.45}
     .imagePreviewGrid{display:grid;grid-template-columns:repeat(3,minmax(132px,1fr));gap:10px;align-items:stretch;margin-top:12px;padding:2px}
     .imagePreviewCard{display:flex;flex-direction:column;min-width:0;height:100%;padding:11px;border:1px solid var(--line);border-radius:13px;background:#0b1421;text-align:center}
     .imagePreviewCard[data-selectable="true"]{cursor:pointer}
@@ -103,8 +118,10 @@ function installStyles() {
       .imageFlow{grid-template-columns:minmax(0,1fr);gap:12px}
       .imageControls,.imagePreviewArea,.imageSendCard{width:100%;min-width:0}
       .imageStep,.imageSegmented{min-width:0;max-width:100%}
-      .imageFrameOptions,.imageRotationOptions{grid-template-columns:repeat(3,minmax(0,1fr))}
+      .imageFrameOptions{grid-template-columns:repeat(2,minmax(0,1fr))}
+      .imageRotationOptions{grid-template-columns:repeat(3,minmax(0,1fr))}
       .imageOutputOptions{grid-template-columns:repeat(2,minmax(0,1fr))}
+      .imageManualCrop{grid-template-columns:minmax(0,1fr)}
       .imagePreviewGrid{grid-template-columns:minmax(0,1fr);overflow:visible}
       .imagePreviewCard{width:100%;min-width:0}
       .imageSendCard{grid-template-columns:minmax(0,1fr)}
@@ -136,8 +153,20 @@ export function mountImageUploadTab(root, session) {
             <label><input type="radio" name="mainImageFrameMode" value="auto" checked><span>Auto</span></label>
             <label><input type="radio" name="mainImageFrameMode" value="fit"><span>Fit</span></label>
             <label><input type="radio" name="mainImageFrameMode" value="fill"><span>Fill / Crop</span></label>
+            <label><input type="radio" name="mainImageFrameMode" value="manual"><span>Crop tay</span></label>
           </div>
           <p>Auto ưu tiên lấp đầy khi Fit để lại nhiều khoảng trắng. Ảnh luôn giữ đúng tỉ lệ.</p>
+          <div id="mainImageManualCrop" class="imageManualCrop" hidden>
+            <div id="mainImageManualViewport" class="imageManualViewport" data-dragging="false" aria-label="Khung Crop tay 122 × 250; kéo ảnh để chọn vùng" role="application">
+              <canvas id="mainImageCropCanvas" width="122" height="250"></canvas>
+            </div>
+            <div class="imageManualTools">
+              <label for="mainImageCropZoom"><span>Zoom</span><output id="mainImageCropZoomValue">100%</output></label>
+              <input id="mainImageCropZoom" type="range" min="100" max="400" step="1" value="100" aria-label="Zoom Crop tay">
+              <button id="mainImageCropReset" type="button">Đặt lại crop</button>
+              <p class="imageManualHint">Kéo ảnh trong khung để chọn vùng. Crop được giữ khi đổi mode; ảnh mới hoặc đổi xoay sẽ đặt lại ở giữa.</p>
+            </div>
+          </div>
         </div>
         <div class="imageStep">
           <h2>3. Xoay</h2>
@@ -202,9 +231,11 @@ export function mountImageUploadTab(root, session) {
   const originalCanvas = byId('mainImageOriginal');
   const thresholdCanvas = byId('mainImageThresholdCanvas');
   const ditherCanvas = byId('mainImageDitherCanvas');
+  const cropCanvas = byId('mainImageCropCanvas');
   const originalContext = originalCanvas.getContext('2d', { willReadFrequently: true });
   const thresholdContext = thresholdCanvas.getContext('2d');
   const ditherContext = ditherCanvas.getContext('2d');
+  const cropContext = cropCanvas.getContext('2d');
   const cards = [byId('mainImageThresholdCard'), byId('mainImageDitherCard')];
   let sourceImage = null;
   let sourceName = 'eink-image';
@@ -216,6 +247,8 @@ export function mountImageUploadTab(root, session) {
   let nextTransferId = 1;
   let imageSessionToken = 0;
   let connected = false;
+  let manualCrop = normalizeManualCropState();
+  let cropPointer = null;
 
   const selectedValue = name => root.querySelector(`input[name="${name}"]:checked`).value;
   const setUserStatus = (text, state = 'idle') => {
@@ -268,6 +301,23 @@ export function mountImageUploadTab(root, session) {
     updateOutput();
   }
 
+  function syncManualCropControls() {
+    byId('mainImageCropZoom').value = String(Math.round(manualCrop.zoom * 100));
+    byId('mainImageCropZoomValue').textContent = `${Math.round(manualCrop.zoom * 100)}%`;
+  }
+
+  function updateManualCropVisibility() {
+    const active = selectedValue('mainImageFrameMode') === 'manual';
+    byId('mainImageManualCrop').hidden = !active;
+    return active;
+  }
+
+  function resetManualCrop(redraw = true) {
+    manualCrop = normalizeManualCropState();
+    syncManualCropControls();
+    if (redraw && sourceImage) drawSource();
+  }
+
   function drawSource() {
     if (!sourceImage) return;
     currentPlan = resolveProcessingPlan(
@@ -277,15 +327,22 @@ export function mountImageUploadTab(root, session) {
       selectedValue('mainImageRotation')
     );
     const oriented = createOrientedCanvas(sourceImage, currentPlan.rotation);
-    const placement = computeImagePlacement(oriented.width, oriented.height, currentPlan.scaleMode);
+    const placement = currentPlan.frameMode === 'manual'
+      ? computeManualCropPlacement(oriented.width, oriented.height, manualCrop)
+      : computeImagePlacement(oriented.width, oriented.height, currentPlan.scaleMode);
     originalContext.fillStyle = '#fff';
     originalContext.fillRect(0, 0, FRAME_WIDTH, FRAME_HEIGHT);
     originalContext.imageSmoothingEnabled = true;
     originalContext.imageSmoothingQuality = 'high';
     originalContext.drawImage(oriented, placement.sx, placement.sy, placement.sw, placement.sh, placement.dx, placement.dy, placement.dw, placement.dh);
-    const frameLabel = currentPlan.frameMode === 'auto' ? `Auto → ${currentPlan.resolvedFrameMode === 'fill' ? 'Fill / Crop' : 'Fit'}` : (currentPlan.resolvedFrameMode === 'fill' ? 'Fill / Crop' : 'Fit');
+    cropContext.clearRect(0, 0, FRAME_WIDTH, FRAME_HEIGHT);
+    cropContext.drawImage(originalCanvas, 0, 0);
+    const frameLabel = currentPlan.frameMode === 'manual'
+      ? `Crop tay · zoom ${Math.round(manualCrop.zoom * 100)}%`
+      : (currentPlan.frameMode === 'auto' ? `Auto → ${currentPlan.resolvedFrameMode === 'fill' ? 'Fill / Crop' : 'Fit'}` : (currentPlan.resolvedFrameMode === 'fill' ? 'Fill / Crop' : 'Fit'));
     const rotationLabel = currentPlan.rotationMode === 'auto' ? `Auto → ${currentPlan.rotation}°` : `${currentPlan.rotation}°`;
-    byId('mainImageTransform').textContent = `${frameLabel} · ${rotationLabel} · giữ đúng tỉ lệ`;
+    const panLabel = currentPlan.frameMode === 'manual' ? ` · pan ${manualCrop.panX.toFixed(2)}, ${manualCrop.panY.toFixed(2)}` : '';
+    byId('mainImageTransform').textContent = `${frameLabel}${panLabel} · ${rotationLabel} · giữ đúng tỉ lệ`;
     processFrame();
   }
 
@@ -391,12 +448,65 @@ export function mountImageUploadTab(root, session) {
       sourceImage = bitmap;
       sourceName = file.name.replace(/\.[^.]+$/, '') || 'eink-image';
       byId('mainImageFileMeta').textContent = file.name;
+      resetManualCrop(false);
       drawSource();
     } catch (error) {
       setUserStatus(`Không đọc được ảnh: ${error.message}`, 'error');
     }
   });
-  root.querySelectorAll('input[name="mainImageFrameMode"],input[name="mainImageRotation"]').forEach(input => input.addEventListener('change', drawSource));
+  root.querySelectorAll('input[name="mainImageFrameMode"]').forEach(input => input.addEventListener('change', () => {
+    updateManualCropVisibility();
+    drawSource();
+  }));
+  root.querySelectorAll('input[name="mainImageRotation"]').forEach(input => input.addEventListener('change', () => {
+    resetManualCrop(false);
+    drawSource();
+  }));
+  byId('mainImageCropZoom').addEventListener('input', event => {
+    manualCrop = normalizeManualCropState({ ...manualCrop, zoom: Number(event.currentTarget.value) / 100 });
+    syncManualCropControls();
+    if (sourceImage) drawSource();
+  });
+  byId('mainImageCropReset').addEventListener('click', () => resetManualCrop());
+  const cropViewport = byId('mainImageManualViewport');
+  cropViewport.addEventListener('pointerdown', event => {
+    if (!sourceImage || selectedValue('mainImageFrameMode') !== 'manual' || cropPointer) return;
+    event.preventDefault();
+    cropPointer = { id: event.pointerId, x: event.clientX, y: event.clientY };
+    cropViewport.dataset.dragging = 'true';
+    cropViewport.setPointerCapture?.(event.pointerId);
+  });
+  cropViewport.addEventListener('pointermove', event => {
+    if (!cropPointer || cropPointer.id !== event.pointerId || !sourceImage || !currentPlan) return;
+    event.preventDefault();
+    const bounds = cropViewport.getBoundingClientRect();
+    manualCrop = panManualCropByViewportDelta(
+      manualCrop,
+      event.clientX - cropPointer.x,
+      event.clientY - cropPointer.y,
+      bounds.width,
+      bounds.height,
+      currentPlan.orientedWidth,
+      currentPlan.orientedHeight
+    );
+    cropPointer.x = event.clientX;
+    cropPointer.y = event.clientY;
+    drawSource();
+  });
+  const finishCropPointer = event => {
+    if (!cropPointer || cropPointer.id !== event.pointerId) return;
+    cropPointer = null;
+    cropViewport.dataset.dragging = 'false';
+    if (cropViewport.hasPointerCapture?.(event.pointerId)) cropViewport.releasePointerCapture(event.pointerId);
+  };
+  cropViewport.addEventListener('pointerup', finishCropPointer);
+  cropViewport.addEventListener('pointercancel', finishCropPointer);
+  cropViewport.addEventListener('lostpointercapture', event => {
+    if (cropPointer?.id === event.pointerId) {
+      cropPointer = null;
+      cropViewport.dataset.dragging = 'false';
+    }
+  });
   root.querySelectorAll('input[name="mainImageOutput"]').forEach(input => input.addEventListener('change', updateOutput));
   byId('mainImageThreshold').addEventListener('input', event => {
     byId('mainImageThresholdValue').textContent = event.currentTarget.value;
@@ -436,6 +546,10 @@ export function mountImageUploadTab(root, session) {
     }
   });
   session.subscribeState(renderSession);
+  cropContext.fillStyle = '#fff';
+  cropContext.fillRect(0, 0, FRAME_WIDTH, FRAME_HEIGHT);
+  syncManualCropControls();
+  updateManualCropVisibility();
   updateSelectedCards();
   renderSession(session.getSnapshot());
   updateControls();
