@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TASK D20B - Product Mode gọn cho cập nhật hằng ngày</title>
+<title>EINK Clock</title>
 <style>
 :root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;--bg:#07101b;--card:#111c2c;--line:#2a3d59;--text:#f4f8ff;--muted:#9fb1c8;--ok:#45d99c;--warn:#ffd166;--bad:#ff6b86}
 *{box-sizing:border-box}body{margin:0;background:linear-gradient(#050a12,#101a2a);color:var(--text)}main{max-width:1040px;margin:auto;padding:20px}
@@ -234,6 +234,8 @@ let drawing=false,lastX=0,lastY=0;
 let packed=new Uint8Array(TOTAL);
 let browserCrc=0;
 let device=null,server=null,writeChar=null,notifyChar=null,pending=null,busy=false,token=0,transferId=1;
+const sharedBleStateSubscribers=new Set();
+let bleChooserCount=0,gattDiscoveryCount=0,notificationListenerCount=0,disconnectListenerCount=0;
 let e6Running=false,e5Success=false,latestFwCrc=null;
 let oneTapRunning=false;
 let autoSyncTimer=0,autoSyncEnabled=false,autoArmedMinuteKey='',lastAutoSentMinuteKey='';
@@ -491,7 +493,7 @@ function setupProductMode(){
 
   const header=document.createElement('div');
   header.className='productHeader productModeV2Header';
-  header.innerHTML='<div><div class="badge">EINK Clock</div><h1>Mặt đồng hồ</h1><p>Chọn Dashboard, Split View hoặc Minimal, xem preview thật và áp dụng lên màn e-ink.</p></div><div class="row" id="productConnectRow"></div>';
+  header.innerHTML='<div><div class="badge">EINK Clock</div><h1>Điều khiển màn E-ink</h1><p>Kết nối một lần để dùng đồng hồ hoặc gửi ảnh trong cùng ứng dụng.</p></div><div class="row" id="productConnectRow"></div>';
 
   const identityCard=document.createElement('section');
   identityCard.className='card identityCard productModeV2Device';
@@ -548,12 +550,12 @@ function setupProductMode(){
 
   const previewCard=document.createElement('section');
   previewCard.className='card productModeV2Preview';
-  previewCard.innerHTML='<h2>Preview màn e-ink</h2><p><small>Preview thật dùng đúng khung 250×122 của màn.</small></p>';
+  previewCard.innerHTML='<h2>Xem trước mặt đồng hồ</h2><p><small>Nội dung sẽ hiển thị trên màn E-ink.</small></p>';
 
   const advanced=document.createElement('details');
   advanced.className='advanced productModeV2Advanced';
   advanced.id='advancedPanel';
-  advanced.innerHTML='<summary>Kỹ thuật / Nâng cao</summary><div class="advancedBody"></div>';
+  advanced.innerHTML='<summary>Chi tiết kỹ thuật</summary><div class="advancedBody"></div>';
 
   const privacyLink=document.createElement('p');
   privacyLink.className='productPrivacy productModeV2Privacy';
@@ -566,12 +568,11 @@ function setupProductMode(){
     previewCard,
     statusCard,
     presetCard,
-    identityCard,
     advanced,
     privacyLink
   );
 
-  $('identityActionRow').append(refs.d2GetIdentity);
+  identityCard.querySelector('#identityActionRow').append(refs.d2GetIdentity);
   $('productConnectRow').append(refs.connect,refs.disconnect);
 
   refs.connect.textContent='Kết nối';
@@ -643,11 +644,34 @@ function setupProductMode(){
   );
 
   const advancedBody=advanced.querySelector('.advancedBody');
-  advancedBody.append(advancedDailyProgress,preferencePanel);
+  advancedBody.append(advancedDailyProgress,preferencePanel,identityCard);
 
   for(const section of originalSections){
     advancedBody.append(section);
   }
+}
+function setupMainAppTabs(){
+  const main=document.querySelector('main');
+  const header=main.querySelector('.productModeV2Header');
+  const clockPanels=[...main.children].filter(node=>node!==header);
+  for(const panel of clockPanels)panel.dataset.appView='clock';
+
+  const tabs=document.createElement('nav');
+  tabs.id='mainAppTabs';
+  tabs.className='einkAppTabs';
+  tabs.setAttribute('aria-label','Chọn chức năng chính');
+  tabs.setAttribute('role','tablist');
+  tabs.innerHTML='<button type="button" data-app-tab="clock" role="tab" aria-selected="true">ĐỒNG HỒ</button><button type="button" data-app-tab="image" role="tab" aria-selected="false">ẢNH E-INK</button>';
+
+  const imageView=document.createElement('section');
+  imageView.id='imageEinkView';
+  imageView.className='einkImageView';
+  imageView.setAttribute('aria-label','Ảnh E-ink');
+  imageView.hidden=true;
+
+  main.classList.add('hasAppTabs');
+  header.after(tabs);
+  main.append(imageView);
 }
 function markLayoutHealth(){
   requestAnimationFrame(()=>{
@@ -2955,6 +2979,75 @@ function handleD2Notify(bytes){
   controls();
 }
 
+function sharedBleSnapshot(){
+  return Object.freeze({
+    connected:!!server?.connected,
+    device,
+    server,
+    writeCharacteristic:writeChar,
+    notifyCharacteristic:notifyChar,
+    deviceName:device?.name||''
+  });
+}
+
+function emitSharedBleState(){
+  const snapshot=sharedBleSnapshot();
+  for(const listener of sharedBleStateSubscribers){
+    try{listener(snapshot)}catch(error){log(`Shared BLE listener: ${error.message}`,'ERROR')}
+  }
+}
+
+window.EINK_SHARED_BLE=Object.freeze({
+  getSnapshot:sharedBleSnapshot,
+  subscribeState(listener){
+    if(typeof listener!=='function')throw Error('BLE state listener không hợp lệ.');
+    sharedBleStateSubscribers.add(listener);
+    listener(sharedBleSnapshot());
+    return()=>sharedBleStateSubscribers.delete(listener);
+  },
+  async connect(){
+    if(server?.connected)return sharedBleSnapshot();
+    if(unifiedDailyUpdateConflicting())throw Error('Đang có thao tác khác, hãy chờ hoàn tất.');
+    setBusy(true);
+    try{
+      await connect();
+      return sharedBleSnapshot();
+    }finally{
+      setBusy(false);
+      emitSharedBleState();
+    }
+  },
+  disconnect(){
+    if(device?.gatt?.connected)device.gatt.disconnect();
+  },
+  request(packet,predicate,options){
+    if(!server?.connected)throw Error('BLE chưa kết nối.');
+    return request(packet,predicate,options);
+  },
+  async runExclusive(operation){
+    if(typeof operation!=='function')throw Error('BLE operation không hợp lệ.');
+    if(unifiedDailyUpdateConflicting())throw Error('Đang có thao tác khác, hãy chờ hoàn tất.');
+    setBusy(true);
+    try{return await operation()}
+    finally{
+      setBusy(false);
+      emitSharedBleState();
+    }
+  },
+  getDiagnostics(){
+    return Object.freeze({
+      chooser:bleChooserCount,
+      discovery:gattDiscoveryCount,
+      notificationListeners:notificationListenerCount,
+      disconnectListeners:disconnectListenerCount,
+      device,
+      server,
+      writeCharacteristic:writeChar,
+      notifyCharacteristic:notifyChar
+    });
+  }
+});
+
 function onNotify(event){
   const view=event.target.value;
   const bytes=new Uint8Array(view.buffer.slice(view.byteOffset,view.byteOffset+view.byteLength));
@@ -2969,13 +3062,19 @@ function onNotify(event){
 }
 
 async function connect(){
+  if(server?.connected)return sharedBleSnapshot();
+  bleChooserCount+=1;
   device=await navigator.bluetooth.requestDevice({
     filters:[{namePrefix:'EINK'},{namePrefix:'HINK'}],
     optionalServices:[SERVICE,BATTERY_SERVICE]
   });
+  disconnectListenerCount+=1;
   device.addEventListener('gattserverdisconnected',()=>{
     rejectPendingBleWait();
+    if(notifyChar)notifyChar.removeEventListener('characteristicvaluechanged',onNotify);
     server=null;
+    writeChar=null;
+    notifyChar=null;
     token=0;
     e5Success=false;
     latestFwCrc=null;
@@ -2988,14 +3087,18 @@ async function connect(){
       $('dailyAutoWeather').checked?'Đang chờ kết nối BLE.':'Tự động đang tắt.'
     );
     resetD2UiDisconnected();
+    controls();
+    emitSharedBleState();
     log('Disconnected');
-  });
+  },{once:true});
   server=await device.gatt.connect();
+  gattDiscoveryCount+=1;
   const service=await server.getPrimaryService(SERVICE);
   writeChar=await service.getCharacteristic(WRITE);
   notifyChar=await service.getCharacteristic(NOTIFY);
   await notifyChar.startNotifications();
   notifyChar.addEventListener('characteristicvaluechanged',onNotify);
+  notificationListenerCount+=1;
   $('ble').textContent=`Connected: ${device.name||'device'}`;
   setD2Status('READY','ok');
   renderDeviceCompatibility(null,true);
@@ -3018,6 +3121,8 @@ async function connect(){
     log(`Clock profile unavailable: ${error.message}`,'D2');
   }
   scheduleAutomaticWeatherCheck('connect');
+  emitSharedBleState();
+  return sharedBleSnapshot();
 }
 
 async function openE4(){
@@ -3674,6 +3779,7 @@ async function safe(fn){
 }
 
 setupProductMode();
+setupMainAppTabs();
 
 $('clearWhite').onclick=clearWhite;
 $('fillBlack').onclick=fillBlack;
@@ -3730,5 +3836,6 @@ document.addEventListener('visibilitychange',()=>{
 });
 log('TASK D20B s\u1eb5n s\u00e0ng. Product Mode gi\u1eef m\u1ed9t n\u00fat c\u1eadp nh\u1eadt h\u00f4m nay; c\u00e1c c\u00f4ng c\u1ee5 k\u1ef9 thu\u1eadt n\u1eb1m trong m\u1ee5c N\u00e2ng cao.');
 </script>
+<script type="module" src="./image-upload-tab.mjs"></script>
 </body>
 </html>

@@ -81,6 +81,8 @@ static uint8_t h24_format = 1; // 24å°æ—¶åˆ¶æ ‡å¿—
 #define HINK_E5_CHUNK_MAX      14U
 #define HINK_E5_TOTAL_CHUNKS   286U
 #define HINK_E5_STAGING_BUFFER fb_bw
+#define HINK_E5_PROTOCOL_LEGACY 0U
+#define HINK_E5_PROTOCOL_V1     1U
 #define HINK_E5_STATE_NONE     0U
 #define HINK_E5_STATE_ACTIVE   1U
 #define HINK_E5_STATE_COMPLETE 2U
@@ -102,6 +104,8 @@ static uint8_t hink_e5_transfer_id;
 static uint16_t hink_e5_next_seq;
 static uint16_t hink_e5_bytes;
 static uint16_t hink_e5_crc;
+static uint16_t hink_e5_expected_crc;
+static uint8_t hink_e5_protocol_version;
 
 #define HINK_E6_STATE_IDLE               0x00
 #define HINK_E6_STATE_ACCEPTED_PENDING   0x01
@@ -112,6 +116,7 @@ static uint16_t hink_e5_crc;
 static uint8_t hink_e6_state             __SECTION_ZERO("retention_mem_area0");
 static uint8_t hink_e6_transfer_id       __SECTION_ZERO("retention_mem_area0");
 static timer_hnd hink_e6_timer_hnd       __SECTION_ZERO("retention_mem_area0");
+static uint8_t hink_image_mode_active    __SECTION_ZERO("retention_mem_area0");
 
 #define HINK_D2_SET_TIME_LEN        9U
 #define HINK_D2_GET_STATUS_LEN      2U
@@ -274,7 +279,8 @@ static uint8_t hink_d3d_stale_valid        __SECTION_ZERO("retention_mem_area0")
 #define HINK_AUTO_FLAG_PENDING 0x02U
 #define HINK_AUTO_FLAG_TEST    0x04U
 #define HINK_AUTO_SENTINEL     0xFFFFFFFFUL
-#define HINK_AUTO_IDLE() ((hink_e5_state != HINK_E5_STATE_ACTIVE) && \
+#define HINK_AUTO_IDLE() ((!hink_image_mode_active) && \
+                          (hink_e5_state != HINK_E5_STATE_ACTIVE) && \
                           (hink_e6_state != HINK_E6_STATE_ACCEPTED_PENDING) && \
                           (hink_e6_state != HINK_E6_STATE_REFRESHING) && \
                           (hink_d2_render_state != HINK_D2_RENDER_ACCEPTED) && \
@@ -3251,6 +3257,8 @@ static void hink_e5_reset_state(void)
     hink_e5_next_seq = 0U;
     hink_e5_bytes = 0U;
     hink_e5_crc = 0U;
+    hink_e5_expected_crc = 0U;
+    hink_e5_protocol_version = HINK_E5_PROTOCOL_LEGACY;
 }
 
 static void hink_e5_notify(uint8_t response, uint8_t status, uint8_t transfer_id, uint8_t mode)
@@ -3309,29 +3317,44 @@ static uint8_t hink_e5_require_session(uint8_t conidx, uint8_t response, uint8_t
 static uint8_t hink_e5_handle_start(struct custs1_val_write_ind const *param, uint8_t conidx)
 {
     uint8_t transfer_id = (param->length >= 3U) ? param->value[2] : 0U;
+    uint8_t version = HINK_E5_PROTOCOL_LEGACY;
+    uint8_t geometry_offset = 3U;
     uint16_t width;
     uint16_t height;
     uint16_t total;
+    uint16_t expected_crc = 0U;
 
     if (!hink_e5_require_session(conidx, 0x80, transfer_id))
     {
         return 1U;
     }
 
-    if (param->length != 11U)
+    if ((param->length != 11U) && (param->length != 14U))
     {
         hink_e5_notify(0x80, HINK_E5_STATUS_INVALID, transfer_id, 0U);
         return 1U;
     }
 
-    width = hink_u16_le(&param->value[3]);
-    height = hink_u16_le(&param->value[5]);
-    total = hink_u16_le(&param->value[9]);
+    if (param->length == 14U)
+    {
+        version = param->value[3];
+        geometry_offset = 4U;
+        expected_crc = hink_u16_le(&param->value[12]);
+        if (version != HINK_E5_PROTOCOL_V1)
+        {
+            hink_e5_notify(0x80, HINK_E5_STATUS_UNSUPPORTED, transfer_id, 0U);
+            return 1U;
+        }
+    }
+
+    width = hink_u16_le(&param->value[geometry_offset]);
+    height = hink_u16_le(&param->value[geometry_offset + 2U]);
+    total = hink_u16_le(&param->value[geometry_offset + 6U]);
 
     if ((width != HINK_E5_WIDTH) ||
         (height != HINK_E5_HEIGHT) ||
-        (param->value[7] != 0x01U) ||
-        (param->value[8] != HINK_E5_STRIDE) ||
+        (param->value[geometry_offset + 4U] != 0x01U) ||
+        (param->value[geometry_offset + 5U] != HINK_E5_STRIDE) ||
         (total != HINK_E5_TOTAL_BYTES))
     {
         hink_e5_notify(0x80, HINK_E5_STATUS_BAD_GEOMETRY, transfer_id, 0U);
@@ -3344,6 +3367,8 @@ static uint8_t hink_e5_handle_start(struct custs1_val_write_ind const *param, ui
     hink_e5_next_seq = 0U;
     hink_e5_bytes = 0U;
     hink_e5_crc = 0xFFFFU;
+    hink_e5_expected_crc = expected_crc;
+    hink_e5_protocol_version = version;
     hink_e4_arm_timer();
     hink_e5_notify(0x80, HINK_E5_STATUS_OK, transfer_id, 2U);
     return 1U;
@@ -3440,7 +3465,9 @@ static uint8_t hink_e5_handle_commit(struct custs1_val_write_ind const *param, u
         return 1U;
     }
 
-    if (hink_e5_crc != expected_crc)
+    if ((hink_e5_crc != expected_crc) ||
+        ((hink_e5_protocol_version == HINK_E5_PROTOCOL_V1) &&
+         (hink_e5_expected_crc != expected_crc)))
     {
         hink_e5_notify(0x82, HINK_E5_STATUS_BAD_CRC, transfer_id, 2U);
         return 1U;
@@ -3624,11 +3651,15 @@ static uint8_t hink_e6_handle_request(struct custs1_val_write_ind const *param, 
 
     hink_e6_state = HINK_E6_STATE_ACCEPTED_PENDING;
     hink_e6_transfer_id = transfer_id;
+    app_clock_timer_stop();
+    hink_image_mode_active = 1U;
 
     hink_e6_timer_hnd = app_easy_timer(5, hink_e6_timer_cb);
     if (hink_e6_timer_hnd == EASY_TIMER_INVALID_TIMER)
     {
         hink_e6_state = HINK_E6_STATE_ERROR;
+        hink_image_mode_active = 0U;
+        app_clock_timer_restart();
         hink_e6_notify(0x80, 0x06, transfer_id, hink_e6_state); // INTERNAL_ERROR
     }
     else
@@ -3638,6 +3669,11 @@ static uint8_t hink_e6_handle_request(struct custs1_val_write_ind const *param, 
     }
 
     return 1U;
+}
+
+uint8_t hink_image_mode_is_active(void)
+{
+    return hink_image_mode_active;
 }
 
 static uint8_t hink_e6_handle_status(struct custs1_val_write_ind const *param, uint8_t conidx, uint8_t transfer_id)
@@ -3704,6 +3740,8 @@ static void hink_e6_session_cleanup(void)
     if (hink_e6_state == HINK_E6_STATE_ACCEPTED_PENDING)
     {
         hink_e6_reset_state();
+        hink_image_mode_active = 0U;
+        app_clock_timer_restart();
     }
     else if (hink_e6_timer_hnd != EASY_TIMER_INVALID_TIMER)
     {

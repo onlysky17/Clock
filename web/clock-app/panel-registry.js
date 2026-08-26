@@ -94,6 +94,7 @@
       controlsCard=document.createElement('section');
       controlsCard.className='card productModeV2OwnerControls';
     }
+    if(controlsCard)controlsCard.dataset.appView='clock';
     if(controlsCard&&preferencePanel&&preferencePanel.parentElement!==controlsCard){
       preferencePanel.classList.add('productOwnerPreferences');
       controlsCard.append(preferencePanel);
@@ -104,8 +105,19 @@
       workspace=document.createElement('div');
       workspace.className='productModeV2Workspace';
       workspace.innerHTML='<div class="productModeV2WorkspaceColumn productModeV2WorkspaceLeft"></div><div class="productModeV2WorkspaceColumn productModeV2WorkspaceRight"></div>';
-      if(header?.nextSibling)root.insertBefore(workspace,header.nextSibling);
+      const tabs=document.querySelector('#mainAppTabs');
+      const anchor=tabs||header;
+      if(anchor?.nextSibling)root.insertBefore(workspace,anchor.nextSibling);
       else root.append(workspace);
+    }
+    workspace.dataset.appView='clock';
+
+    const imageActive=document.querySelector('#imageEinkView')?.hidden===false;
+    workspace.hidden=imageActive;
+    workspace.setAttribute('aria-hidden',String(imageActive));
+    if(controlsCard){
+      controlsCard.hidden=imageActive;
+      controlsCard.setAttribute('aria-hidden',String(imageActive));
     }
 
     const left=workspace.querySelector('.productModeV2WorkspaceLeft');
