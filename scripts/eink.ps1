@@ -6,6 +6,9 @@ param(
 
     [switch]$DryRun,
 
+    [string]$SourceHead,
+    [string]$MergeCommit,
+
     [Parameter(DontShow = $true)]
     [string]$HomeFlashScriptPath
 )
@@ -697,8 +700,41 @@ switch ($Action) {
         }
 
         if ($sourceBranch -eq 'main') {
-            Write-Result -Result BLOCKED -ActionName $actionName -Branch $syncResult.Guard.Data.branch -Head $syncResult.Guard.Data.head -Reason 'MERGE_EVIDENCE_REQUIRED' -NextState WORKSPACE_VERIFIED
-            exit 2
+            if ([string]::IsNullOrWhiteSpace($SourceHead) -or [string]::IsNullOrWhiteSpace($MergeCommit)) {
+                Write-Result -Result BLOCKED -ActionName $actionName -Branch $syncResult.Guard.Data.branch -Head $syncResult.Guard.Data.head -Reason 'MERGE_EVIDENCE_REQUIRED' -NextState WORKSPACE_VERIFIED
+                exit 2
+            }
+
+            $resolvedSource = Invoke-GitCommand -Arguments @('rev-parse', '--verify', "$SourceHead^{commit}")
+            $resolvedMerge = Invoke-GitCommand -Arguments @('rev-parse', '--verify', "$MergeCommit^{commit}")
+            if ($resolvedSource.ExitCode -ne 0 -or $resolvedMerge.ExitCode -ne 0) {
+                Write-Result -Result BLOCKED -ActionName $actionName -Branch $syncResult.Guard.Data.branch -Head $syncResult.Guard.Data.head -Reason 'MERGE_EVIDENCE_INVALID' -NextState WORKSPACE_VERIFIED
+                exit 2
+            }
+
+            $sourceHead = $resolvedSource.Output[-1].Trim()
+            $mergeHead = $resolvedMerge.Output[-1].Trim()
+
+            $mergeAncestor = Invoke-GitCommand -Arguments @('merge-base', '--is-ancestor', $mergeHead, 'main')
+            if ($mergeAncestor.ExitCode -ne 0) {
+                Write-Result -Result BLOCKED -ActionName $actionName -Branch $syncResult.Guard.Data.branch -Head $syncResult.Guard.Data.head -Reason 'MERGE_NOT_IN_MAIN' -NextState OWNER_MERGE_REQUIRED
+                exit 2
+            }
+
+            $sourceTree = Invoke-GitCommand -Arguments @('rev-parse', "$sourceHead^{tree}")
+            $mergeTree = Invoke-GitCommand -Arguments @('rev-parse', "$mergeHead^{tree}")
+            if ($sourceTree.ExitCode -ne 0 -or $mergeTree.ExitCode -ne 0 -or $sourceTree.Output[-1].Trim() -ne $mergeTree.Output[-1].Trim()) {
+                Write-Result -Result BLOCKED -ActionName $actionName -Branch $syncResult.Guard.Data.branch -Head $syncResult.Guard.Data.head -Reason 'MERGE_TREE_MISMATCH' -NextState OWNER_MERGE_REQUIRED
+                exit 2
+            }
+
+            if (-not (Assert-TaskState -State 'CLOSED')) {
+                Write-Result -Result BLOCKED -ActionName $actionName -Branch $syncResult.Guard.Data.branch -Head $syncResult.Guard.Data.head -Reason 'TASK_STATE_INVALID' -NextState BLOCKED
+                exit 1
+            }
+
+            Write-Result -Result PASS -ActionName $actionName -Branch $syncResult.Guard.Data.branch -Head $syncResult.Guard.Data.head -NextState CLOSED -Detail "MERGED_SOURCE_HEAD: $sourceHead; MERGE_COMMIT: $mergeHead; MERGE_EVIDENCE: SQUASH_TREE_MATCH"
+            exit 0
         }
 
         $ancestor = Invoke-GitCommand -Arguments @('merge-base', '--is-ancestor', $sourceHead, 'main')
