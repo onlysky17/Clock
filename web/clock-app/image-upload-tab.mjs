@@ -157,14 +157,14 @@ export function mountImageUploadTab(root, session) {
           </div>
           <p>Auto ưu tiên lấp đầy khi Fit để lại nhiều khoảng trắng. Ảnh luôn giữ đúng tỉ lệ.</p>
           <div id="mainImageManualCrop" class="imageManualCrop" hidden>
-            <div id="mainImageManualViewport" class="imageManualViewport" data-dragging="false" aria-label="Khung Crop tay 122 × 250; kéo ảnh để chọn vùng" role="application">
+            <div id="mainImageManualViewport" class="imageManualViewport" data-dragging="false" aria-label="Khung Crop tay 122 × 250; kéo 1 ngón để chọn vùng, chụm hoặc mở 2 ngón để zoom" role="application">
               <canvas id="mainImageCropCanvas" width="122" height="250"></canvas>
             </div>
             <div class="imageManualTools">
               <label for="mainImageCropZoom"><span>Zoom</span><output id="mainImageCropZoomValue">100%</output></label>
               <input id="mainImageCropZoom" type="range" min="100" max="400" step="1" value="100" aria-label="Zoom Crop tay">
               <button id="mainImageCropReset" type="button">Đặt lại crop</button>
-              <p class="imageManualHint">Kéo ảnh trong khung để chọn vùng. Crop được giữ khi đổi mode; ảnh mới hoặc đổi xoay sẽ đặt lại ở giữa.</p>
+              <p class="imageManualHint">Kéo 1 ngón để chọn vùng, chụm hoặc mở 2 ngón để zoom. Thanh Zoom luôn đồng bộ. Crop được giữ khi đổi mode; ảnh mới hoặc đổi xoay sẽ đặt lại ở giữa.</p>
             </div>
           </div>
         </div>
@@ -248,7 +248,8 @@ export function mountImageUploadTab(root, session) {
   let imageSessionToken = 0;
   let connected = false;
   let manualCrop = normalizeManualCropState();
-  let cropPointer = null;
+  const cropPointers = new Map();
+  let cropPinch = null;
 
   const selectedValue = name => root.querySelector(`input[name="${name}"]:checked`).value;
   const setUserStatus = (text, state = 'idle') => {
@@ -469,43 +470,162 @@ export function mountImageUploadTab(root, session) {
   });
   byId('mainImageCropReset').addEventListener('click', () => resetManualCrop());
   const cropViewport = byId('mainImageManualViewport');
+  const clampUnit = value => Math.max(0, Math.min(1, value));
+
+  function cropPointPair() {
+    const points = [...cropPointers.values()];
+    return points.length >= 2 ? points.slice(0, 2) : null;
+  }
+
+  function cropMidpoint(first, second) {
+    return {
+      x: (first.x + second.x) / 2,
+      y: (first.y + second.y) / 2
+    };
+  }
+
+  function cropDistance(first, second) {
+    return Math.hypot(second.x - first.x, second.y - first.y);
+  }
+
+  function beginCropPinch() {
+    const pair = cropPointPair();
+    if (!pair || !sourceImage || !currentPlan) {
+      cropPinch = null;
+      return;
+    }
+
+    const [first, second] = pair;
+    const distance = cropDistance(first, second);
+    if (!(distance > 0)) {
+      cropPinch = null;
+      return;
+    }
+
+    cropPinch = {
+      ids: [first.id, second.id],
+      startDistance: distance,
+      startState: { ...manualCrop },
+      startMidpoint: cropMidpoint(first, second)
+    };
+  }
+
+  function applyCropPinch(currentMidpoint, currentDistance) {
+    if (!cropPinch || !sourceImage || !currentPlan || !(currentDistance > 0)) return;
+
+    const bounds = cropViewport.getBoundingClientRect();
+    if (!(bounds.width > 0) || !(bounds.height > 0)) return;
+
+    const startState = normalizeManualCropState(cropPinch.startState);
+    const startPlacement = computeManualCropPlacement(
+      currentPlan.orientedWidth,
+      currentPlan.orientedHeight,
+      startState
+    );
+
+    const startU = clampUnit((cropPinch.startMidpoint.x - bounds.left) / bounds.width);
+    const startV = clampUnit((cropPinch.startMidpoint.y - bounds.top) / bounds.height);
+    const anchorSourceX = startPlacement.sx + startPlacement.sw * startU;
+    const anchorSourceY = startPlacement.sy + startPlacement.sh * startV;
+
+    const zoomedState = normalizeManualCropState({
+      ...startState,
+      zoom: startState.zoom * currentDistance / cropPinch.startDistance
+    });
+
+    const nextPlacement = computeManualCropPlacement(
+      currentPlan.orientedWidth,
+      currentPlan.orientedHeight,
+      zoomedState
+    );
+
+    const currentU = clampUnit((currentMidpoint.x - bounds.left) / bounds.width);
+    const currentV = clampUnit((currentMidpoint.y - bounds.top) / bounds.height);
+    const wantedSx = anchorSourceX - nextPlacement.sw * currentU;
+    const wantedSy = anchorSourceY - nextPlacement.sh * currentV;
+    const clampedSx = Math.max(0, Math.min(nextPlacement.maxSx, wantedSx));
+    const clampedSy = Math.max(0, Math.min(nextPlacement.maxSy, wantedSy));
+
+    manualCrop = normalizeManualCropState({
+      zoom: zoomedState.zoom,
+      panX: nextPlacement.maxSx > 0 ? clampedSx * 2 / nextPlacement.maxSx - 1 : 0,
+      panY: nextPlacement.maxSy > 0 ? clampedSy * 2 / nextPlacement.maxSy - 1 : 0
+    });
+
+    syncManualCropControls();
+    drawSource();
+  }
+
   cropViewport.addEventListener('pointerdown', event => {
-    if (!sourceImage || selectedValue('mainImageFrameMode') !== 'manual' || cropPointer) return;
+    if (!sourceImage || selectedValue('mainImageFrameMode') !== 'manual') return;
+    if (!cropPointers.has(event.pointerId) && cropPointers.size >= 2) return;
+
     event.preventDefault();
-    cropPointer = { id: event.pointerId, x: event.clientX, y: event.clientY };
+    cropPointers.set(event.pointerId, {
+      id: event.pointerId,
+      x: event.clientX,
+      y: event.clientY
+    });
     cropViewport.dataset.dragging = 'true';
     cropViewport.setPointerCapture?.(event.pointerId);
+
+    if (cropPointers.size === 2) beginCropPinch();
   });
+
   cropViewport.addEventListener('pointermove', event => {
-    if (!cropPointer || cropPointer.id !== event.pointerId || !sourceImage || !currentPlan) return;
+    const previous = cropPointers.get(event.pointerId);
+    if (!previous || !sourceImage || !currentPlan) return;
+
     event.preventDefault();
+    cropPointers.set(event.pointerId, {
+      id: event.pointerId,
+      x: event.clientX,
+      y: event.clientY
+    });
+
+    if (cropPointers.size >= 2) {
+      if (!cropPinch) beginCropPinch();
+      const first = cropPointers.get(cropPinch?.ids?.[0]);
+      const second = cropPointers.get(cropPinch?.ids?.[1]);
+      if (first && second) {
+        applyCropPinch(cropMidpoint(first, second), cropDistance(first, second));
+      }
+      return;
+    }
+
+    cropPinch = null;
     const bounds = cropViewport.getBoundingClientRect();
     manualCrop = panManualCropByViewportDelta(
       manualCrop,
-      event.clientX - cropPointer.x,
-      event.clientY - cropPointer.y,
+      event.clientX - previous.x,
+      event.clientY - previous.y,
       bounds.width,
       bounds.height,
       currentPlan.orientedWidth,
       currentPlan.orientedHeight
     );
-    cropPointer.x = event.clientX;
-    cropPointer.y = event.clientY;
     drawSource();
   });
+
   const finishCropPointer = event => {
-    if (!cropPointer || cropPointer.id !== event.pointerId) return;
-    cropPointer = null;
-    cropViewport.dataset.dragging = 'false';
-    if (cropViewport.hasPointerCapture?.(event.pointerId)) cropViewport.releasePointerCapture(event.pointerId);
+    if (!cropPointers.has(event.pointerId)) return;
+    cropPointers.delete(event.pointerId);
+    cropPinch = null;
+
+    if (cropViewport.hasPointerCapture?.(event.pointerId)) {
+      cropViewport.releasePointerCapture(event.pointerId);
+    }
+
+    cropViewport.dataset.dragging = cropPointers.size > 0 ? 'true' : 'false';
   };
+
   cropViewport.addEventListener('pointerup', finishCropPointer);
   cropViewport.addEventListener('pointercancel', finishCropPointer);
   cropViewport.addEventListener('lostpointercapture', event => {
-    if (cropPointer?.id === event.pointerId) {
-      cropPointer = null;
-      cropViewport.dataset.dragging = 'false';
-    }
+    if (!cropPointers.has(event.pointerId)) return;
+    cropPointers.delete(event.pointerId);
+    cropPinch = null;
+    cropViewport.dataset.dragging = cropPointers.size > 0 ? 'true' : 'false';
   });
   root.querySelectorAll('input[name="mainImageOutput"]').forEach(input => input.addEventListener('change', updateOutput));
   byId('mainImageThreshold').addEventListener('input', event => {
