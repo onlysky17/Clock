@@ -692,10 +692,10 @@ switch ($Action) {
         }
 
         $sourceBranch = $guard.Data.branch
-        $sourceHead = $guard.Data.head
+        $workspaceHead = $guard.Data.head
         $syncResult = Invoke-SyncImplementation -WhatIfOnly:$DryRun
         if (-not $syncResult.Passed) {
-            Write-Result -Result BLOCKED -ActionName $actionName -Branch $sourceBranch -Head $sourceHead -Reason $syncResult.Reason -NextState BLOCKED
+            Write-Result -Result BLOCKED -ActionName $actionName -Branch $sourceBranch -Head $workspaceHead -Reason $syncResult.Reason -NextState BLOCKED
             exit 1
         }
 
@@ -712,7 +712,7 @@ switch ($Action) {
                 exit 2
             }
 
-            $sourceHead = $resolvedSource.Output[-1].Trim()
+            $evidenceSourceHead = $resolvedSource.Output[-1].Trim()
             $mergeHead = $resolvedMerge.Output[-1].Trim()
 
             $mergeAncestor = Invoke-GitCommand -Arguments @('merge-base', '--is-ancestor', $mergeHead, 'main')
@@ -721,7 +721,7 @@ switch ($Action) {
                 exit 2
             }
 
-            $sourceTree = Invoke-GitCommand -Arguments @('rev-parse', "$sourceHead^{tree}")
+            $sourceTree = Invoke-GitCommand -Arguments @('rev-parse', "$evidenceSourceHead^{tree}")
             $mergeTree = Invoke-GitCommand -Arguments @('rev-parse', "$mergeHead^{tree}")
             if ($sourceTree.ExitCode -ne 0 -or $mergeTree.ExitCode -ne 0 -or $sourceTree.Output[-1].Trim() -ne $mergeTree.Output[-1].Trim()) {
                 Write-Result -Result BLOCKED -ActionName $actionName -Branch $syncResult.Guard.Data.branch -Head $syncResult.Guard.Data.head -Reason 'MERGE_TREE_MISMATCH' -NextState OWNER_MERGE_REQUIRED
@@ -733,11 +733,11 @@ switch ($Action) {
                 exit 1
             }
 
-            Write-Result -Result PASS -ActionName $actionName -Branch $syncResult.Guard.Data.branch -Head $syncResult.Guard.Data.head -NextState CLOSED -Detail "MERGED_SOURCE_HEAD: $sourceHead; MERGE_COMMIT: $mergeHead; MERGE_EVIDENCE: SQUASH_TREE_MATCH"
+            Write-Result -Result PASS -ActionName $actionName -Branch $syncResult.Guard.Data.branch -Head $syncResult.Guard.Data.head -NextState CLOSED -Detail "MERGED_SOURCE_HEAD: $evidenceSourceHead; MERGE_COMMIT: $mergeHead; MERGE_EVIDENCE: SQUASH_TREE_MATCH"
             exit 0
         }
 
-        $ancestor = Invoke-GitCommand -Arguments @('merge-base', '--is-ancestor', $sourceHead, 'main')
+        $ancestor = Invoke-GitCommand -Arguments @('merge-base', '--is-ancestor', $workspaceHead, 'main')
         if ($ancestor.ExitCode -ne 0) {
             Write-Result -Result BLOCKED -ActionName $actionName -Branch $syncResult.Guard.Data.branch -Head $syncResult.Guard.Data.head -Reason 'MERGE_NOT_PROVABLE' -NextState OWNER_MERGE_REQUIRED
             exit 2
@@ -747,7 +747,7 @@ switch ($Action) {
             Write-Result -Result BLOCKED -ActionName $actionName -Branch $syncResult.Guard.Data.branch -Head $syncResult.Guard.Data.head -Reason 'TASK_STATE_INVALID' -NextState BLOCKED
             exit 1
         }
-        Write-Result -Result PASS -ActionName $actionName -Branch $syncResult.Guard.Data.branch -Head $syncResult.Guard.Data.head -NextState CLOSED -Detail "MERGED_SOURCE_HEAD: $sourceHead"
+        Write-Result -Result PASS -ActionName $actionName -Branch $syncResult.Guard.Data.branch -Head $syncResult.Guard.Data.head -NextState CLOSED -Detail "MERGED_SOURCE_HEAD: $workspaceHead"
         exit 0
     }
 
