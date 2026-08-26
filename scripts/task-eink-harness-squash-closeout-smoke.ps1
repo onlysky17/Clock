@@ -37,7 +37,7 @@ Assert-True ($runnerSource -match 'MERGE_EVIDENCE_INVALID') 'Missing invalid-evi
 Assert-True ($runnerSource -match 'MERGE_NOT_IN_MAIN') 'Missing merge ancestry rejection.'
 Assert-True ($runnerSource -match 'MERGE_TREE_MISMATCH') 'Missing squash tree mismatch rejection.'
 Assert-True ($runnerSource -match 'SQUASH_TREE_MATCH') 'Missing squash tree-match success evidence.'
-Assert-True ($runnerSource -match 'merge-base.*--is-ancestor.*sourceHead.*main') 'Normal merge ancestry path was not preserved.'
+Assert-True ($runnerSource -match 'merge-base.*--is-ancestor.*workspaceHead.*main') 'Normal merge ancestry path was not preserved.'
 
 $sourceHead = '1991723f3b8eb73cb9bceb8057413d2a7f73d787'
 $mergeCommit = '103307f06eb7ba10d92a291a51ea9e68765af90b'
@@ -71,9 +71,14 @@ finally {
 }
 Assert-True ($badExit -ne 0) 'Invalid merge evidence fixture was unexpectedly accepted by git.'
 
+Assert-True ($runnerSource.Contains('$workspaceHead = $guard.Data.head')) 'Workspace head variable missing.'
+Assert-True (-not $runnerSource.Contains('$sourceHead = $guard.Data.head')) 'SourceHead evidence parameter is overwritten by workspace head.'
+Assert-True ($runnerSource.Contains('$evidenceSourceHead = $resolvedSource.Output[-1].Trim()')) 'Resolved evidence source-head variable missing.'
+
 Write-Output 'EINK HARNESS SQUASH CLOSEOUT SMOKE: PASS'
 Write-Output 'POWERSHELL_PARSE: PASS'
 Write-Output 'EXPLICIT_EVIDENCE_PARAMETERS: PASS'
+Write-Output 'SOURCEHEAD_PARAMETER_ISOLATION: PASS'
 Write-Output 'NORMAL_MERGE_PATH_PRESERVED: PASS'
 Write-Output 'SQUASH_MERGE_IN_MAIN: PASS'
 Write-Output 'SQUASH_TREE_EQUIVALENCE: PASS'
