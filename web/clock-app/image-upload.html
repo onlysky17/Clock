@@ -12,7 +12,7 @@
       <div>
         <span class="eyebrow">EINK CLOCK · BLACK / WHITE</span>
         <h1>Image Upload <em>v1.1</em></h1>
-        <p>Tự xoay, scale và chuyển ảnh thành frame 1-bit đúng từng pixel cho màn hình dọc 122×250. Chưa gửi BLE.</p>
+        <p>Tự xoay, scale, chuyển ảnh thành frame 1-bit và gửi đúng 4,000 byte tới màn hình EINK qua Web Bluetooth.</p>
       </div>
       <div class="frame-contract" aria-label="Frame contract">
         <strong>4,000</strong>
@@ -109,6 +109,31 @@
           </article>
         </div>
       </section>
+    </section>
+
+    <section class="card ble-card" aria-labelledby="bleTitle">
+      <div class="ble-heading">
+        <div class="section-heading">
+          <span>BLE</span>
+          <div><h2 id="bleTitle">Gửi ảnh tới EINK</h2><p>Image Transfer v1 · RAM-only · một lần FULL refresh</p></div>
+        </div>
+        <strong id="bleState" class="ble-state" data-state="disconnected">DISCONNECTED</strong>
+      </div>
+      <div class="ble-actions">
+        <button id="connectBle" type="button">CONNECT BLE</button>
+        <button id="sendBle" class="primary" type="button" disabled>SEND TO EINK</button>
+      </div>
+      <div class="ble-progress-row">
+        <progress id="bleProgress" max="4000" value="0"></progress>
+        <b id="bleProgressText">0 / 4,000 bytes</b>
+      </div>
+      <dl class="ble-metrics">
+        <div><dt>Thiết bị</dt><dd id="bleDevice">Chưa kết nối</dd></div>
+        <div><dt>Chunks ACK</dt><dd id="bleChunks">0 / 286</dd></div>
+        <div><dt>CRC16</dt><dd id="bleCrc">----</dd></div>
+        <div><dt>Refresh</dt><dd id="bleRefresh">Chưa chạy</dd></div>
+      </dl>
+      <p id="bleMessage" class="ble-message" role="status">Kết nối bằng Chrome/Edge trên điện thoại Android có Web Bluetooth.</p>
     </section>
 
     <section class="output-grid">

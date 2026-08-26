@@ -2,6 +2,75 @@ export const FRAME_WIDTH = 122;
 export const FRAME_HEIGHT = 250;
 export const FRAME_STRIDE = 16;
 export const FRAME_BYTES = FRAME_HEIGHT * FRAME_STRIDE;
+export const BLE_SERVICE_UUID = '18424398-7cbc-11e9-8f9e-2a86e4085a59';
+export const BLE_WRITE_UUID = '2d86686a-53dc-25b3-0c4a-f0e10c8dee20';
+export const BLE_NOTIFY_UUID = '15005991-b131-3396-014c-664c9867b917';
+export const IMAGE_TRANSFER_VERSION = 1;
+export const IMAGE_CHUNK_BYTES = 14;
+export const IMAGE_TOTAL_CHUNKS = Math.ceil(FRAME_BYTES / IMAGE_CHUNK_BYTES);
+export const MANUAL_CROP_MIN_ZOOM = 1;
+export const MANUAL_CROP_MAX_ZOOM = 4;
+
+export function crc16Ccitt(data, seed = 0xFFFF) {
+  let crc = seed;
+  for (const value of data) {
+    crc ^= value << 8;
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = (crc & 0x8000) !== 0 ? ((crc << 1) ^ 0x1021) & 0xFFFF : (crc << 1) & 0xFFFF;
+    }
+  }
+  return crc;
+}
+
+export function createImageStartPacket(transferId, crc) {
+  return Uint8Array.of(
+    0xE5, 0x00, transferId, IMAGE_TRANSFER_VERSION,
+    FRAME_WIDTH & 0xFF, FRAME_WIDTH >> 8,
+    FRAME_HEIGHT & 0xFF, FRAME_HEIGHT >> 8,
+    0x01, FRAME_STRIDE,
+    FRAME_BYTES & 0xFF, FRAME_BYTES >> 8,
+    crc & 0xFF, crc >> 8
+  );
+}
+
+export function createImageDataPacket(transferId, sequence, data) {
+  if (!(data instanceof Uint8Array) || data.length < 1 || data.length > IMAGE_CHUNK_BYTES) throw new Error('INVALID_IMAGE_CHUNK');
+  return Uint8Array.of(0xE5, 0x01, transferId, sequence & 0xFF, sequence >> 8, data.length, ...data);
+}
+
+export function createImageCommitPacket(transferId, chunks, bytes, crc) {
+  return Uint8Array.of(0xE5, 0x02, transferId, chunks & 0xFF, chunks >> 8, bytes & 0xFF, bytes >> 8, crc & 0xFF, crc >> 8);
+}
+
+export function createImageTransferPlan(frame, transferId) {
+  if (!(frame instanceof Uint8Array) || frame.length !== FRAME_BYTES) throw new Error('INVALID_IMAGE_FRAME');
+  if (!hasWhitePadding(frame)) throw new Error('INVALID_IMAGE_PADDING');
+  const crc = crc16Ccitt(frame);
+  const chunks = [];
+  for (let offset = 0, sequence = 0; offset < frame.length; sequence += 1) {
+    const data = frame.slice(offset, Math.min(offset + IMAGE_CHUNK_BYTES, frame.length));
+    chunks.push({ sequence, offset, data, packet: createImageDataPacket(transferId, sequence, data) });
+    offset += data.length;
+  }
+  return {
+    transferId,
+    crc,
+    bytes: frame.length,
+    start: createImageStartPacket(transferId, crc),
+    chunks,
+    commit: createImageCommitPacket(transferId, chunks.length, frame.length, crc),
+    status: Uint8Array.of(0xE5, 0x03, transferId)
+  };
+}
+
+export function parseImageManifest(packet) {
+  if (!(packet instanceof Uint8Array) || packet.length < 11 || packet[0] !== 0xE5) throw new Error('INVALID_IMAGE_MANIFEST');
+  return {
+    response: packet[1], status: packet[2], transferId: packet[3], state: packet[4],
+    chunks: packet[5] | (packet[6] << 8), bytes: packet[7] | (packet[8] << 8),
+    crc: packet[9] | (packet[10] << 8)
+  };
+}
 
 export function computeImagePlacement(sourceWidth, sourceHeight, mode = 'cover') {
   if (!(sourceWidth > 0) || !(sourceHeight > 0)) throw new Error('INVALID_IMAGE_DIMENSIONS');
@@ -22,6 +91,55 @@ export function computeImagePlacement(sourceWidth, sourceHeight, mode = 'cover')
   const width = sourceWidth * scale;
   const height = sourceHeight * scale;
   return { sx: 0, sy: 0, sw: sourceWidth, sh: sourceHeight, dx: (FRAME_WIDTH - width) / 2, dy: (FRAME_HEIGHT - height) / 2, dw: width, dh: height };
+}
+
+function clampFinite(value, minimum, maximum, fallback) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? Math.max(minimum, Math.min(maximum, numeric)) : fallback;
+}
+
+export function normalizeManualCropState(state = {}) {
+  return {
+    zoom: clampFinite(state.zoom, MANUAL_CROP_MIN_ZOOM, MANUAL_CROP_MAX_ZOOM, MANUAL_CROP_MIN_ZOOM),
+    panX: clampFinite(state.panX, -1, 1, 0),
+    panY: clampFinite(state.panY, -1, 1, 0)
+  };
+}
+
+export function computeManualCropPlacement(sourceWidth, sourceHeight, state = {}) {
+  if (!(sourceWidth > 0) || !(sourceHeight > 0)) throw new Error('INVALID_IMAGE_DIMENSIONS');
+  const normalized = normalizeManualCropState(state);
+  const minimumCover = computeImagePlacement(sourceWidth, sourceHeight, 'cover');
+  const sw = minimumCover.sw / normalized.zoom;
+  const sh = minimumCover.sh / normalized.zoom;
+  const maxSx = Math.max(0, sourceWidth - sw);
+  const maxSy = Math.max(0, sourceHeight - sh);
+  return {
+    sx: maxSx * (normalized.panX + 1) / 2,
+    sy: maxSy * (normalized.panY + 1) / 2,
+    sw,
+    sh,
+    dx: 0,
+    dy: 0,
+    dw: FRAME_WIDTH,
+    dh: FRAME_HEIGHT,
+    maxSx,
+    maxSy,
+    ...normalized
+  };
+}
+
+export function panManualCropByViewportDelta(state, deltaX, deltaY, viewportWidth, viewportHeight, sourceWidth, sourceHeight) {
+  if (!(viewportWidth > 0) || !(viewportHeight > 0)) throw new Error('INVALID_CROP_VIEWPORT');
+  const normalized = normalizeManualCropState(state);
+  const placement = computeManualCropPlacement(sourceWidth, sourceHeight, normalized);
+  const sourceDeltaX = -clampFinite(deltaX, -viewportWidth, viewportWidth, 0) * placement.sw / viewportWidth;
+  const sourceDeltaY = -clampFinite(deltaY, -viewportHeight, viewportHeight, 0) * placement.sh / viewportHeight;
+  return normalizeManualCropState({
+    zoom: normalized.zoom,
+    panX: placement.maxSx > 0 ? normalized.panX + sourceDeltaX * 2 / placement.maxSx : 0,
+    panY: placement.maxSy > 0 ? normalized.panY + sourceDeltaY * 2 / placement.maxSy : 0
+  });
 }
 
 export function normalizeRotation(rotation) {
@@ -50,21 +168,19 @@ export function chooseAutoRotation(sourceWidth, sourceHeight) {
 }
 
 export function chooseAutoFrameMode(sourceWidth, sourceHeight) {
-  const sourceRatio = sourceWidth / sourceHeight;
-  const targetRatio = FRAME_WIDTH / FRAME_HEIGHT;
-  const retainedFraction = Math.min(sourceRatio / targetRatio, targetRatio / sourceRatio);
-  return retainedFraction >= 0.72 ? 'fill' : 'fit';
+  const fitAreaUtilization = fitUtilization(sourceWidth, sourceHeight);
+  return fitAreaUtilization >= 0.72 ? 'fit' : 'fill';
 }
 
 export function resolveProcessingPlan(sourceWidth, sourceHeight, frameMode = 'auto', rotationMode = 'auto') {
-  if (!['auto', 'fit', 'fill'].includes(frameMode)) throw new Error('INVALID_FRAME_MODE');
+  if (!['auto', 'fit', 'fill', 'manual'].includes(frameMode)) throw new Error('INVALID_FRAME_MODE');
   const rotation = rotationMode === 'auto' ? chooseAutoRotation(sourceWidth, sourceHeight) : normalizeRotation(rotationMode);
   const dimensions = orientedDimensions(sourceWidth, sourceHeight, rotation);
   const resolvedFrameMode = frameMode === 'auto' ? chooseAutoFrameMode(dimensions.width, dimensions.height) : frameMode;
   return {
     frameMode,
     resolvedFrameMode,
-    scaleMode: resolvedFrameMode === 'fill' ? 'cover' : 'contain',
+    scaleMode: resolvedFrameMode === 'manual' ? 'manual' : (resolvedFrameMode === 'fill' ? 'cover' : 'contain'),
     rotationMode,
     rotation,
     autoRotated: rotationMode === 'auto' && rotation !== 0,
@@ -148,7 +264,7 @@ export function formatHexDump(packed) {
   return lines.join('\n');
 }
 
-function monoToImageData(pixels) {
+export function monoToImageData(pixels) {
   const image = new ImageData(FRAME_WIDTH, FRAME_HEIGHT);
   for (let pixel = 0, offset = 0; pixel < pixels.length; pixel += 1, offset += 4) {
     image.data[offset] = pixels[pixel];
@@ -159,7 +275,7 @@ function monoToImageData(pixels) {
   return image;
 }
 
-function createOrientedCanvas(image, rotation) {
+export function createOrientedCanvas(image, rotation) {
   const dimensions = orientedDimensions(image.width, image.height, rotation);
   const canvas = document.createElement('canvas');
   canvas.width = dimensions.width;
@@ -202,7 +318,17 @@ function bootstrap() {
     outputLabel: document.getElementById('outputLabel'),
     blackCount: document.getElementById('blackCount'),
     paddingState: document.getElementById('paddingState'),
-    hexDump: document.getElementById('hexDump')
+    hexDump: document.getElementById('hexDump'),
+    connectBle: document.getElementById('connectBle'),
+    sendBle: document.getElementById('sendBle'),
+    bleState: document.getElementById('bleState'),
+    bleProgress: document.getElementById('bleProgress'),
+    bleProgressText: document.getElementById('bleProgressText'),
+    bleDevice: document.getElementById('bleDevice'),
+    bleChunks: document.getElementById('bleChunks'),
+    bleCrc: document.getElementById('bleCrc'),
+    bleRefresh: document.getElementById('bleRefresh'),
+    bleMessage: document.getElementById('bleMessage')
   };
   const originalContext = elements.original.getContext('2d', { willReadFrequently: true });
   const thresholdContext = elements.thresholdCanvas.getContext('2d');
@@ -213,11 +339,238 @@ function bootstrap() {
   let ditherFrame = null;
   let packedFrame = null;
   let currentPlan = null;
+  let bleDevice = null;
+  let bleServer = null;
+  let bleWrite = null;
+  let bleNotify = null;
+  let pendingBle = null;
+  let transferActive = false;
+  let sessionToken = 0;
+  let nextTransferId = 1;
 
   function frameMode() { return document.querySelector('input[name="frameMode"]:checked').value; }
   function rotationMode() { return document.querySelector('input[name="rotationMode"]:checked').value; }
   function outputMode() { return document.querySelector('input[name="outputMode"]:checked').value; }
   function setStatus(message, state = 'idle') { elements.status.textContent = message; elements.status.dataset.state = state; }
+
+  function setBleState(state, message, error = false) {
+    elements.bleState.textContent = state;
+    elements.bleState.dataset.state = state.toLowerCase();
+    elements.bleMessage.textContent = message;
+    elements.bleMessage.dataset.error = String(error);
+  }
+
+  function updateBleControls() {
+    const connected = Boolean(bleServer?.connected);
+    const frameReady = packedFrame instanceof Uint8Array && packedFrame.length === FRAME_BYTES && hasWhitePadding(packedFrame);
+    elements.connectBle.disabled = transferActive || elements.bleState.dataset.state === 'connecting';
+    elements.connectBle.textContent = connected ? 'DISCONNECT BLE' : 'CONNECT BLE';
+    elements.sendBle.disabled = !connected || !frameReady || transferActive;
+  }
+
+  function rejectPendingBle(error) {
+    if (!pendingBle) return;
+    const current = pendingBle;
+    pendingBle = null;
+    clearTimeout(current.timer);
+    current.reject(error);
+  }
+
+  function waitForBle(predicate, timeoutMs = 5000) {
+    if (pendingBle) throw new Error('BLE_REQUEST_ALREADY_PENDING');
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        pendingBle = null;
+        reject(new Error('BLE_ACK_TIMEOUT'));
+      }, timeoutMs);
+      pendingBle = { predicate, resolve, reject, timer };
+    });
+  }
+
+  function onBleNotification(event) {
+    const view = event.target.value;
+    const bytes = new Uint8Array(view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength));
+    if (pendingBle && pendingBle.predicate(bytes)) {
+      const current = pendingBle;
+      pendingBle = null;
+      clearTimeout(current.timer);
+      current.resolve(bytes);
+    }
+  }
+
+  async function writeBle(packet) {
+    if (!bleWrite || !bleServer?.connected) throw new Error('BLE_DISCONNECTED');
+    if (typeof bleWrite.writeValueWithResponse === 'function') await bleWrite.writeValueWithResponse(packet);
+    else await bleWrite.writeValue(packet);
+  }
+
+  async function requestBle(packet, predicate, timeoutMs = 5000) {
+    const response = waitForBle(predicate, timeoutMs);
+    try { await writeBle(packet); }
+    catch (error) { rejectPendingBle(error); throw error; }
+    return response;
+  }
+
+  function handleBleDisconnect() {
+    rejectPendingBle(new Error('BLE_DISCONNECTED'));
+    const interrupted = transferActive;
+    bleServer = null;
+    bleWrite = null;
+    bleNotify = null;
+    sessionToken = 0;
+    elements.bleDevice.textContent = 'Chưa kết nối';
+    if (interrupted) setBleState('FAILED', 'BLE đã ngắt trong lúc truyền. Firmware đã hủy frame chưa hoàn tất.', true);
+    else setBleState('DISCONNECTED', 'Thiết bị đã ngắt kết nối.');
+    updateBleControls();
+  }
+
+  async function connectBle() {
+    if (!('bluetooth' in navigator)) throw new Error('WEB_BLUETOOTH_NOT_SUPPORTED');
+    setBleState('CONNECTING', 'Đang tìm EINK/HINK qua Web Bluetooth...');
+    updateBleControls();
+    try {
+      bleDevice = await navigator.bluetooth.requestDevice({
+        filters: [{ namePrefix: 'EINK' }, { namePrefix: 'HINK' }],
+        optionalServices: [BLE_SERVICE_UUID]
+      });
+      bleDevice.addEventListener('gattserverdisconnected', handleBleDisconnect, { once: true });
+      bleServer = await bleDevice.gatt.connect();
+      const service = await bleServer.getPrimaryService(BLE_SERVICE_UUID);
+      bleWrite = await service.getCharacteristic(BLE_WRITE_UUID);
+      bleNotify = await service.getCharacteristic(BLE_NOTIFY_UUID);
+      await bleNotify.startNotifications();
+      bleNotify.addEventListener('characteristicvaluechanged', onBleNotification);
+      elements.bleDevice.textContent = bleDevice.name || 'EINK/HINK';
+      setBleState('READY', packedFrame ? 'Đã kết nối. Sẵn sàng gửi frame hiện tại.' : 'Đã kết nối. Upload ảnh để tạo frame 4,000 byte.');
+    } catch (error) {
+      bleServer = null;
+      setBleState('FAILED', `Kết nối BLE thất bại: ${error.message}`, true);
+      throw error;
+    } finally {
+      updateBleControls();
+    }
+  }
+
+  async function openImageSession() {
+    const response = await requestBle(
+      Uint8Array.of(0xE4, 0x00, 0x48, 0x4C, 0x32, 0x31),
+      packet => packet[0] === 0xE4 && packet[1] === 0x80
+    );
+    if (response[2] !== 0) throw new Error(`E4_SESSION_REJECTED_${response[2]}`);
+    sessionToken = response[3];
+  }
+
+  async function keepImageSession() {
+    const response = await requestBle(
+      Uint8Array.of(0xE4, 0x01, sessionToken),
+      packet => packet[0] === 0xE4 && packet[1] === 0x81
+    );
+    if (response[2] !== 0) throw new Error(`E4_KEEPALIVE_REJECTED_${response[2]}`);
+  }
+
+  async function closeImageSession() {
+    if (!sessionToken || !bleServer?.connected) return;
+    const token = sessionToken;
+    const response = await requestBle(
+      Uint8Array.of(0xE4, 0x02, token),
+      packet => packet[0] === 0xE4 && packet[1] === 0x82
+    );
+    if (response[2] !== 0) throw new Error(`E4_CLOSE_REJECTED_${response[2]}`);
+    sessionToken = 0;
+  }
+
+  const e5StatusName = status => ['OK', 'INVALID', 'NOT_OPEN', 'WRONG_OWNER', 'BAD_GEOMETRY', 'BAD_ID', 'BAD_SEQUENCE', 'OVERFLOW', 'BAD_COUNT', 'BAD_CRC', 'UNSUPPORTED'][status] || `CODE_${status}`;
+  const e6StateName = state => ['IDLE', 'ACCEPTED_PENDING', 'REFRESHING', 'COMPLETE', 'ERROR'][state] || `STATE_${state}`;
+
+  async function displayTransferredImage(transferId) {
+    setBleState('DISPLAYING', 'Frame đã verify. Đang chạy một FULL EINK refresh...');
+    elements.bleRefresh.textContent = 'ACCEPTED_PENDING';
+    let response = await requestBle(
+      Uint8Array.of(0xE6, 0x00, transferId),
+      packet => packet[0] === 0xE6 && packet[1] === 0x80 && packet[3] === transferId
+    );
+    if (response[2] !== 0) throw new Error(`E6_REQUEST_REJECTED_${response[2]}`);
+    let state = response[4];
+    const deadline = Date.now() + 45000;
+    while (state !== 0x03 && state !== 0x04) {
+      if (Date.now() >= deadline) throw new Error('E6_DISPLAY_TIMEOUT');
+      await new Promise(resolve => setTimeout(resolve, 500));
+      await keepImageSession();
+      response = await requestBle(
+        Uint8Array.of(0xE6, 0x01, transferId),
+        packet => packet[0] === 0xE6 && packet[1] === 0x81 && packet[3] === transferId
+      );
+      if (response[2] !== 0) throw new Error(`E6_STATUS_REJECTED_${response[2]}`);
+      state = response[4];
+      elements.bleRefresh.textContent = e6StateName(state);
+    }
+    if (state !== 0x03) throw new Error('E6_DISPLAY_FAILED');
+  }
+
+  async function sendCurrentFrame() {
+    if (transferActive) return;
+    if (!bleServer?.connected) throw new Error('BLE_DISCONNECTED');
+    if (!(packedFrame instanceof Uint8Array) || packedFrame.length !== FRAME_BYTES) throw new Error('INVALID_IMAGE_FRAME');
+    const frame = packedFrame.slice();
+    const transferId = nextTransferId;
+    nextTransferId = nextTransferId >= 255 ? 1 : nextTransferId + 1;
+    const plan = createImageTransferPlan(frame, transferId);
+    transferActive = true;
+    elements.bleProgress.value = 0;
+    elements.bleProgressText.textContent = `0 / ${FRAME_BYTES.toLocaleString('en-US')} bytes`;
+    elements.bleChunks.textContent = `0 / ${IMAGE_TOTAL_CHUNKS}`;
+    elements.bleCrc.textContent = plan.crc.toString(16).padStart(4, '0').toUpperCase();
+    elements.bleRefresh.textContent = 'Chưa chạy';
+    setBleState('SENDING', 'Đang mở session và gửi dữ liệu thật theo ACK từ firmware...');
+    updateBleControls();
+    try {
+      await openImageSession();
+      let response = await requestBle(
+        plan.start,
+        packet => packet[0] === 0xE5 && packet[1] === 0x80 && packet[3] === transferId
+      );
+      if (response[2] !== 0) throw new Error(`E5_START_${e5StatusName(response[2])}`);
+
+      for (const chunk of plan.chunks) {
+        response = await requestBle(
+          chunk.packet,
+          packet => packet[0] === 0xE5 && packet[1] === 0x81 && packet[3] === transferId
+        );
+        if (response[2] !== 0) throw new Error(`E5_DATA_${chunk.sequence}_${e5StatusName(response[2])}`);
+        const nextSequence = response[4] | (response[5] << 8);
+        const acknowledgedBytes = response[6] | (response[7] << 8);
+        if (nextSequence !== chunk.sequence + 1 || acknowledgedBytes !== chunk.offset + chunk.data.length) throw new Error('E5_ACK_MISMATCH');
+        elements.bleProgress.value = acknowledgedBytes;
+        elements.bleProgressText.textContent = `${acknowledgedBytes.toLocaleString('en-US')} / ${FRAME_BYTES.toLocaleString('en-US')} bytes`;
+        elements.bleChunks.textContent = `${nextSequence} / ${IMAGE_TOTAL_CHUNKS}`;
+      }
+
+      setBleState('VERIFYING', 'Đủ 4,000 byte. Đang COMMIT và đối chiếu CRC/status firmware...');
+      response = await requestBle(
+        plan.commit,
+        packet => packet[0] === 0xE5 && packet[1] === 0x82 && packet[3] === transferId
+      );
+      let manifest = parseImageManifest(response);
+      if (manifest.status !== 0) throw new Error(`E5_COMMIT_${e5StatusName(manifest.status)}`);
+      response = await requestBle(
+        plan.status,
+        packet => packet[0] === 0xE5 && packet[1] === 0x83 && packet[3] === transferId
+      );
+      manifest = parseImageManifest(response);
+      if (manifest.status !== 0 || manifest.state !== 2 || manifest.chunks !== IMAGE_TOTAL_CHUNKS || manifest.bytes !== FRAME_BYTES || manifest.crc !== plan.crc) throw new Error('E5_FINAL_MANIFEST_MISMATCH');
+
+      await displayTransferredImage(transferId);
+      setBleState('SUCCESS', 'Ảnh đã hiển thị. Clock EINK updates tạm dừng tới khi khởi động lại hoặc gửi ảnh mới.');
+      elements.bleRefresh.textContent = 'FULL PASS';
+      try { await closeImageSession(); } catch { sessionToken = 0; }
+    } catch (error) {
+      setBleState('FAILED', `Gửi ảnh thất bại: ${error.message}`, true);
+      throw error;
+    } finally {
+      transferActive = false;
+      updateBleControls();
+    }
+  }
 
   function updateTransformSummary(plan) {
     elements.frameModeState.textContent = plan.frameMode === 'auto'
@@ -280,6 +633,8 @@ function bootstrap() {
     elements.copy.disabled = false;
     const transform = currentPlan ? `${currentPlan.resolvedFrameMode.toUpperCase()} · ${currentPlan.rotation}°` : '122×250';
     setStatus(`Frame sẵn sàng: ${mode === 'dither' ? 'Dithered' : 'Threshold'} · ${transform} · 4,000 bytes.`, 'ready');
+    if (bleServer?.connected && !transferActive) setBleState('READY', 'Frame hiện tại sẵn sàng gửi; BLE dùng đúng bytes đang preview/export.');
+    updateBleControls();
   }
 
   async function loadFile(file) {
@@ -321,6 +676,17 @@ function bootstrap() {
     try { await navigator.clipboard.writeText(formatHexDump(packedFrame)); setStatus('Đã copy toàn bộ 4,000 byte dạng hex.', 'ready'); }
     catch { setStatus('Trình duyệt không cho phép copy tự động.', 'error'); }
   });
+  elements.connectBle.addEventListener('click', async () => {
+    try {
+      if (bleServer?.connected) bleDevice.gatt.disconnect();
+      else await connectBle();
+    } catch { /* Error is already reflected in the BLE status card. */ }
+  });
+  elements.sendBle.addEventListener('click', async () => {
+    try { await sendCurrentFrame(); }
+    catch { /* Error is already reflected in the BLE status card. */ }
+  });
+  updateBleControls();
 }
 
-if (typeof document !== 'undefined') bootstrap();
+if (typeof document !== 'undefined' && document.getElementById('imageFile')) bootstrap();

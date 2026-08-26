@@ -37,7 +37,7 @@
 #include "epd.h"                     // EPDç”µå­çº¸å±å¹•é©±åŠ¨
 
 /* One-shot, full-frame calibration artifact for device-proof firmware only. */
-#define HINK_IMAGE_DISPLAY_PROOF_MODE 1U
+#define HINK_IMAGE_DISPLAY_PROOF_MODE 0U
 
 /*
  * ç±»åž‹å®šä¹‰
@@ -53,7 +53,7 @@
 int app_connection_idx                          __SECTION_ZERO("retention_mem_area0"); // è¿žæŽ¥ç´¢å¼•ï¼Œä½¿ç”¨ retention å†…å­˜åŒºåŸŸä¿å­˜
 timer_hnd app_clock_timer_used                  __SECTION_ZERO("retention_mem_area0"); // æ—¶é’Ÿå®šæ—¶å™¨å¥æŸ„ï¼Œretentionå†…å­˜ä¿å­˜
 timer_hnd app_param_update_request_timer_used   __SECTION_ZERO("retention_mem_area0"); // å‚æ•°æ›´æ–°è¯·æ±‚å®šæ—¶å™¨å¥æŸ„ï¼Œretentionå†…å­˜ä¿å­˜
-static timer_hnd hink_d2_adv_restart_timer_hnd  __SECTION_ZERO("retention_mem_area0");
+static timer_hnd hink_adv_restart_timer_hnd     __SECTION_ZERO("retention_mem_area0");
 
 int adv_state = 0;                          // å¹¿æ’­çŠ¶æ€ï¼š0-æœªå¹¿æ’­ï¼Œ1-æ­£åœ¨å¹¿æ’­
 static int otp_btaddr[2];                      // ä»ŽOTPè¯»å–çš„è“ç‰™åœ°å€
@@ -72,6 +72,7 @@ const volatile u32 epd_version[3] = {0xF9A51379, ~0xF9A51379, EPD_VERSION};
 extern int year,month; // å½“å‰æ—¶é—´å˜é‡
 extern int second; // å½“å‰ç§’æ•°ï¼Œç”¨äºŽè®¡ç®—åˆ°æ•´åˆ†é’Ÿçš„å‰©ä½™æ—¶é—´
 extern uint8_t hink_d2_dedicated_clock_active(void);
+extern uint8_t hink_image_mode_is_active(void);
 extern void hink_d3d_boot_load_last_known_time(void);
 
 /*
@@ -185,7 +186,7 @@ void user_app_init(void)
 	printk("\n\nuser_app_init! %s %08x\n", __TIME__, epd_version[2]);
     app_param_update_request_timer_used = EASY_TIMER_INVALID_TIMER;  // åˆå§‹åŒ–å‚æ•°æ›´æ–°å®šæ—¶å™¨
 	app_clock_timer_used = EASY_TIMER_INVALID_TIMER;                 // åˆå§‹åŒ–æ—¶é’Ÿå®šæ—¶å™¨
-    hink_d2_adv_restart_timer_hnd = EASY_TIMER_INVALID_TIMER;
+    hink_adv_restart_timer_hnd = EASY_TIMER_INVALID_TIMER;
 
 	clock_interval = 60; // æ—¶é’Ÿæ›´æ–°é—´éš”è®¾ç½®ä¸º60ç§’
 	clock_fixup_value = 0; // åˆå§‹åŒ–æ—¶é’Ÿä¿®æ­£å€¼
@@ -417,39 +418,34 @@ void user_app_adv_start(void)
 	vbuf[3] = (EPD_VERSION>>8)&0xff;
 	app_add_ad_struct(cmd, vbuf, vbuf[0]+1, 1);
 
-	// å¯åŠ¨å¸¦è¶…æ—¶çš„æ— å‘å¹¿æ’­
-	if (hink_d2_dedicated_clock_active())
-	{
-		/* FW-AUTONOMOUS-CLOCK-001: keep D2 clock independent from BLE lifecycle.
-		 * Timed advertising consumes an app_easy_timer; D2 already owns a periodic
-		 * minute timer. Continuous connectable advertising avoids timer-slot
-		 * contention after disconnect while preserving reconnectability. */
-		app_easy_gap_undirected_advertise_start();
-	}
-	else
-	{
-		app_easy_gap_undirected_advertise_with_timeout_start(user_default_hnd_conf.advertise_period, NULL);
-	}
+	/* Keep the peripheral discoverable until a connection is established.
+	 * A timed advertising session made the board disappear after 30 seconds. */
+	app_easy_gap_undirected_advertise_start();
 	printk("\nuser_app_adv_start! %s\n", adv_name+2);
 }
 
-static void hink_d2_adv_restart_timer_cb(void)
+static void hink_adv_restart_timer_cb(void)
 {
-    hink_d2_adv_restart_timer_hnd = EASY_TIMER_INVALID_TIMER;
+    hink_adv_restart_timer_hnd = EASY_TIMER_INVALID_TIMER;
     if ((app_connection_idx == -1) && (adv_state == 0))
     {
         user_app_adv_start();
     }
 }
 
-static void hink_d2_schedule_adv_restart(void)
+static void hink_schedule_adv_restart(void)
 {
-    if (hink_d2_adv_restart_timer_hnd == EASY_TIMER_INVALID_TIMER)
+    if (hink_adv_restart_timer_hnd == EASY_TIMER_INVALID_TIMER)
     {
-        timer_hnd hnd = app_easy_timer(1, hink_d2_adv_restart_timer_cb);
+        timer_hnd hnd = app_easy_timer(1, hink_adv_restart_timer_cb);
         if (hnd != EASY_TIMER_INVALID_TIMER)
         {
-            hink_d2_adv_restart_timer_hnd = hnd;
+            hink_adv_restart_timer_hnd = hnd;
+        }
+        else if ((app_connection_idx == -1) && (adv_state == 0))
+        {
+            /* Match the SDK default disconnect handler if no timer slot is free. */
+            user_app_adv_start();
         }
     }
 }
@@ -509,9 +505,12 @@ void user_app_adv_undirect_complete(uint8_t status)
 	// çŠ¶æ€éž0è¡¨ç¤ºå¼‚å¸¸ç»“æŸï¼Œæ›´æ–°å¹¿æ’­çŠ¶æ€å¹¶åˆ·æ–°å±å¹•
 	if(status!=0){
 		adv_state = 0;
-        if ((app_connection_idx == -1) && hink_d2_dedicated_clock_active())
+        if (app_connection_idx == -1)
         {
-            hink_d2_schedule_adv_restart();
+            hink_schedule_adv_restart();
+        }
+        if (hink_image_mode_is_active() || hink_d2_dedicated_clock_active())
+        {
             return;
         }
 		//æœªè¿›è¡Œåˆå§‹åŒ–,åˆ™å§‹ç»ˆå±•ç¤ºäºŒç»´ç 
@@ -548,17 +547,22 @@ void user_app_disconnect(struct gapc_disconnect_ind const *param)
 
 	app_connection_idx = -1; // é‡ç½®è¿žæŽ¥ç´¢å¼•ä¸ºæ— æ•ˆå€¼
 	adv_state = 0; // æ ‡è®°ä¸ºæœªå¹¿æ’­
+	hink_schedule_adv_restart();
 
-    if (hink_d2_dedicated_clock_active())
+    /* A received image owns the panel until reboot or another valid image.
+     * Disconnecting BLE must not let the clock redraw over it. */
+    if (hink_image_mode_is_active())
     {
-        hink_d2_schedule_adv_restart();
         return;
     }
 
-	// éžè¿œç¨‹ç”¨æˆ·ä¸»åŠ¨æ–­å¼€æ—¶ï¼Œé‡å¯å¹¿æ’­ï¼›å¦åˆ™ä»…åˆ·æ–°å±å¹•
-	if(param->reason!=CO_ERROR_REMOTE_USER_TERM_CON){
-		user_app_adv_start();
-	}else{
+    if (hink_d2_dedicated_clock_active())
+    {
+        return;
+    }
+
+	// è¿œç¨‹ç”¨æˆ·ä¸»åŠ¨æ–­å¼€æ—¶ä¿ç•™åŽŸæœ‰å±å¹•åˆ·æ–°è¡Œä¸º
+	if(param->reason==CO_ERROR_REMOTE_USER_TERM_CON){
 		    //æœªè¿›è¡Œåˆå§‹åŒ–,åˆ™å§‹ç»ˆå±•ç¤ºäºŒç»´ç 
     if(year==2025 && month<=5){
         // åœ¨2024å¹´2æœˆæ‰§è¡Œç‰¹å®šæ“ä½œï¼ˆå ä½ç¬¦ï¼‰
