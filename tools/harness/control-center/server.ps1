@@ -212,6 +212,9 @@ $script:ExecutorChallengeExpiresUtc = [DateTime]::MinValue
 $script:ExecutorChallengeTaskId = ''
 $script:ExecutorChallengeContractSha = ''
 $script:ExecutorChallengeScopeSha = ''
+$script:ArchiveChallengeHash = ''
+$script:ArchiveChallengeExpiresUtc = [DateTime]::MinValue
+$script:ArchiveChallengeTaskId = ''
 $script:LastLog = @(
     'Harness Control Center Multiproject v0.5 started.',
     'Waiting for action.'
@@ -617,6 +620,39 @@ function Test-AndConsumeExecutorOwnerChallenge {
     $script:ExecutorChallengeTaskId = ''
     $script:ExecutorChallengeContractSha = ''
     $script:ExecutorChallengeScopeSha = ''
+    return [bool]$valid
+}
+
+function New-EinkArchiveOwnerChallenge {
+    param([Parameter(Mandatory=$true)][string]$TaskId)
+
+    $challenge = [Guid]::NewGuid().ToString('N')
+    $script:ArchiveChallengeHash = Get-TextSha256 -Text $challenge
+    $script:ArchiveChallengeExpiresUtc = [DateTime]::UtcNow.AddMinutes(2)
+    $script:ArchiveChallengeTaskId = $TaskId.Trim()
+
+    [pscustomobject]@{
+        armed = $true
+        challenge = $challenge
+        expiresUtc = $script:ArchiveChallengeExpiresUtc.ToString('o')
+        taskId = $script:ArchiveChallengeTaskId
+    }
+}
+
+function Test-AndConsumeEinkArchiveOwnerChallenge {
+    param(
+        [Parameter(Mandatory=$true)][AllowEmptyString()][string]$Challenge,
+        [Parameter(Mandatory=$true)][AllowEmptyString()][string]$TaskId
+    )
+
+    $valid = -not [string]::IsNullOrWhiteSpace($Challenge) -and
+        [DateTime]::UtcNow -le $script:ArchiveChallengeExpiresUtc -and
+        (Get-TextSha256 -Text $Challenge) -eq $script:ArchiveChallengeHash -and
+        $TaskId.Trim() -eq $script:ArchiveChallengeTaskId
+
+    $script:ArchiveChallengeHash = ''
+    $script:ArchiveChallengeExpiresUtc = [DateTime]::MinValue
+    $script:ArchiveChallengeTaskId = ''
     return [bool]$valid
 }
 
@@ -2720,11 +2756,30 @@ function Get-EinkBrainHistoryCount {
     ).Count
 }
 
+function Test-EinkBrainTerminalStatus {
+    param([string]$Status)
+
+    ([string]$Status).Trim().ToUpperInvariant() -in @(
+        'CLOSED',
+        'COMPLETED'
+    )
+}
+
 function Get-EinkBrainStatus {
     Initialize-EinkBrainStore
 
     $currentTask = Read-EinkBrainCurrentTask
-    $recentTasks = @(Get-EinkBrainHistory | Select-Object -First 20)
+    $latestTasks = @(Get-EinkBrainHistory)
+    $recentTasks = @(
+        $latestTasks |
+        Where-Object { -not [bool]$_.archived } |
+        Select-Object -First 20
+    )
+    $allArchivedTasks = @(
+        $latestTasks |
+        Where-Object { [bool]$_.archived }
+    )
+    $archivedTasks = @($allArchivedTasks | Select-Object -First 20)
 
     [ordered]@{
         version = '0.6'
@@ -2741,8 +2796,105 @@ function Get-EinkBrainStatus {
         storeRoot = $brainRoot
         currentTask = $currentTask
         recentTasks = $recentTasks
+        archivedTasks = $archivedTasks
+        archivedCount = $allArchivedTasks.Count
         historyCount = Get-EinkBrainHistoryCount
     }
+}
+
+function Invoke-EinkBrainArchiveArmAction {
+    param([Parameter(Mandatory=$true)]$Body)
+
+    if ($script:Busy) {
+        return [ordered]@{ armed = $false; reason = 'HARNESS_BUSY' }
+    }
+
+    $taskId = ([string]$Body.taskId).Trim()
+    $selected = @(
+        Get-EinkBrainHistory |
+        Where-Object { [string]$_.taskId -eq $taskId } |
+        Select-Object -First 1
+    )
+
+    if ($selected.Count -ne 1) {
+        return [ordered]@{ armed = $false; reason = 'TASK_NOT_FOUND' }
+    }
+
+    $task = $selected[0]
+    if ([bool]$task.archived) {
+        return [ordered]@{ armed = $false; reason = 'TASK_ALREADY_ARCHIVED' }
+    }
+    if (-not (Test-EinkBrainTerminalStatus -Status ([string]$task.status))) {
+        return [ordered]@{ armed = $false; reason = 'TASK_NOT_TERMINAL' }
+    }
+
+    New-EinkArchiveOwnerChallenge -TaskId $taskId
+}
+
+function Invoke-EinkBrainArchiveAction {
+    param([Parameter(Mandatory=$true)]$Body)
+
+    $taskId = ([string]$Body.taskId).Trim()
+    $challenge = [string]$Body.ownerChallenge
+
+    if (-not (Test-AndConsumeEinkArchiveOwnerChallenge `
+        -Challenge $challenge `
+        -TaskId $taskId)) {
+        Set-LastLog -Action 'BRAIN_ARCHIVE' -Result 'BLOCKED' -Lines @(
+            'BLOCKED: OWNER_ARCHIVE_CONFIRMATION_REQUIRED'
+        )
+        return Get-ControlStatus
+    }
+
+    $selected = @(
+        Get-EinkBrainHistory |
+        Where-Object { [string]$_.taskId -eq $taskId } |
+        Select-Object -First 1
+    )
+    if ($selected.Count -ne 1) {
+        Set-LastLog -Action 'BRAIN_ARCHIVE' -Result 'BLOCKED' -Lines @(
+            'BLOCKED: TASK_NOT_FOUND'
+        )
+        return Get-ControlStatus
+    }
+
+    $source = $selected[0]
+    if (
+        [bool]$source.archived -or
+        -not (Test-EinkBrainTerminalStatus -Status ([string]$source.status))
+    ) {
+        Set-LastLog -Action 'BRAIN_ARCHIVE' -Result 'BLOCKED' -Lines @(
+            'BLOCKED: TASK_NOT_TERMINAL'
+        )
+        return Get-ControlStatus
+    }
+
+    $now = [DateTime]::UtcNow.ToString('o')
+    $record = [ordered]@{}
+    foreach ($property in $source.PSObject.Properties) {
+        $record[$property.Name] = $property.Value
+    }
+    $record['event'] = 'ARCHIVE'
+    $record['archived'] = $true
+    $record['archivedUtc'] = $now
+    $record['updatedUtc'] = $now
+
+    Append-EinkBrainHistory -Record $record
+
+    $current = Read-EinkBrainCurrentTask
+    if ($current -and [string]$current.taskId -eq $taskId) {
+        Write-Utf8JsonFile -Path $brainCurrentTaskPath -Value $record
+    }
+
+    Set-LastLog -Action 'BRAIN_ARCHIVE' -Result 'PASS' -Lines @(
+        'EINK BRAIN TASK ARCHIVED.',
+        "TASK_ID: $taskId",
+        "STATE: $($record.status)",
+        'HISTORY / CONTRACT / EVIDENCE: PRESERVED',
+        'HARD DELETE: NOT PERFORMED'
+    )
+
+    Get-ControlStatus
 }
 
 function Invoke-EinkBrainCreateAction {
@@ -3185,6 +3337,9 @@ function Invoke-EinkBrainCompileAction {
     if (-not $task) {
         throw 'Brain Task Compiler requires a current task.'
     }
+    if ([bool]$task.archived) {
+        throw 'Archived Brain task is read-only and cannot be compiled.'
+    }
 
     $contract = Get-EinkTaskContract -Task $task
     $now = [DateTime]::UtcNow.ToString('o')
@@ -3262,6 +3417,10 @@ function Invoke-EinkBrainResumeAction {
     }
 
     $source = $selected[0]
+
+    if ([bool]$source.archived) {
+        throw 'Archived Brain task is read-only and cannot be resumed.'
+    }
 
     $sourceContract = $null
     if ($source.PSObject.Properties.Name -contains 'contract') {
@@ -4900,6 +5059,8 @@ try {
                         'brain-create',
                         'brain-resume',
                         'brain-compile',
+                        'brain-archive-arm',
+                        'brain-archive',
                         'brain-execute-arm',
                         'brain-execute'
                     )
@@ -4933,6 +5094,12 @@ try {
                     }
                     elseif ($actionId -eq 'brain-compile') {
                         Invoke-EinkBrainCompileAction
+                    }
+                    elseif ($actionId -eq 'brain-archive-arm') {
+                        Invoke-EinkBrainArchiveArmAction -Body $body
+                    }
+                    elseif ($actionId -eq 'brain-archive') {
+                        Invoke-EinkBrainArchiveAction -Body $body
                     }
                     elseif ($actionId -eq 'brain-execute-arm') {
                         Invoke-EinkBrainExecuteArmAction -Body $body
