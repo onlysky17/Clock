@@ -589,9 +589,25 @@
 
     /* EINK Contract Visualizer v0.5.1 */
     .contract-visualizer {
+      margin-top: 12px;
+      border: 1px solid #30363d;
+      border-radius: 10px;
+      background: rgba(13, 17, 23, .5);
+      overflow: hidden;
+    }
+
+    .contract-visualizer > summary {
+      padding: 11px 13px;
+      cursor: pointer;
+      color: #c9d1d9;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .contract-details-body {
       display: grid;
       gap: 12px;
-      margin-top: 12px;
+      padding: 0 12px 12px;
     }
 
     .contract-hero {
@@ -983,9 +999,15 @@
             <option value="">Chưa có task history</option>
           </select>
 
+          <label style="display:flex;align-items:center;gap:7px;color:#c9d1d9;font-size:12px">
+            <input id="einkBrainShowArchived" type="checkbox" style="width:auto">
+            Hiện task đã archive
+          </label>
+
           <button id="einkBrainResumeButton" disabled>RESUME TASK</button>
           <button id="einkBrainCompileButton" disabled>COMPILE TASK</button>
           <button id="einkBrainRunButton" class="run-compiled" disabled>RUN COMPILED TASK</button>
+          <button id="einkBrainArchiveButton" disabled>ARCHIVE TASK</button>
         </div>
 
         <div class="artifact">
@@ -1011,10 +1033,12 @@
           Compile task để xem Task Contract trực quan.
         </div>
 
-        <div
+        <details
           id="einkBrainContractVisualizer"
           class="contract-visualizer hidden"
         >
+          <summary>Chi tiết Contract</summary>
+          <div class="contract-details-body">
           <div class="contract-hero">
             <div class="contract-hero-title">
               Task Contract · Visual Summary
@@ -1114,7 +1138,8 @@
               class="contract-json"
             >Not compiled yet.</pre>
           </details>
-        </div>
+          </div>
+        </details>
       </div>
     </section>
     <section class="panel">
@@ -1347,6 +1372,7 @@
   <script>
     let token = "";
     let current = null;
+    let renderedContractSha = "";
     let polling = null;
     let hub = null;
     let activeProjectId = "";
@@ -1611,8 +1637,18 @@
       );
 
       if (!hasContract) {
+        renderedContractSha = "";
+        visualizer.open = false;
         raw.textContent = "Not compiled yet.";
         return;
+      }
+
+      const contractIdentity = String(
+        contract.contractSha256 || contract.taskId || contract.schema
+      );
+      if (contractIdentity !== renderedContractSha) {
+        visualizer.open = false;
+        renderedContractSha = contractIdentity;
       }
 
       const taskClass =
@@ -1739,6 +1775,8 @@
       const resumeButton = $("einkBrainResumeButton");
       const compileButton = $("einkBrainCompileButton");
       const runButton = $("einkBrainRunButton");
+      const archiveButton = $("einkBrainArchiveButton");
+      const showArchived = $("einkBrainShowArchived");
 
       if (
         !currentId ||
@@ -1750,7 +1788,9 @@
         !historySelect ||
         !resumeButton ||
         !compileButton ||
-        !runButton
+        !runButton ||
+        !archiveButton ||
+        !showArchived
       ) {
         return;
       }
@@ -1787,7 +1827,7 @@
       );
 
       compileButton.disabled =
-        !!data?.busy || !task.taskId;
+        !!data?.busy || !task.taskId || task.archived === true;
 
       const contractSha = String(contract.contractSha256 || "");
       const scopeSha = String(contract.exactScopeSha256 || "");
@@ -1811,9 +1851,15 @@
 
       historySelect.replaceChildren();
 
-      const recent = Array.isArray(brain.recentTasks)
+      const activeTasks = Array.isArray(brain.recentTasks)
         ? brain.recentTasks
         : [];
+      const archivedTasks = Array.isArray(brain.archivedTasks)
+        ? brain.archivedTasks
+        : [];
+      const recent = showArchived.checked
+        ? [...activeTasks, ...archivedTasks]
+        : activeTasks;
 
       if (recent.length === 0) {
         const option = document.createElement("option");
@@ -1824,6 +1870,8 @@
         for (const item of recent) {
           const option = document.createElement("option");
           option.value = item.taskId || "";
+          option.dataset.status = String(item.status || "").toUpperCase();
+          option.dataset.archived = item.archived === true ? "true" : "false";
 
           const request = String(item.request || "")
             .replace(/\s+/g, " ")
@@ -1835,7 +1883,8 @@
               : request;
 
           option.textContent =
-            `${item.taskId || "-"} · ${item.event || "CREATE"} · ${preview}`;
+            `${item.archived === true ? "[ARCHIVED] · " : ""}` +
+            `${item.taskId || "-"} · ${item.status || item.event || "CREATE"} · ${preview}`;
 
           historySelect.appendChild(option);
         }
@@ -1858,8 +1907,20 @@
         }
       }
 
+      const selectedOption = historySelect.selectedOptions[0];
+      const selectedArchived =
+        selectedOption?.dataset.archived === "true";
+      const selectedTerminal = ["CLOSED", "COMPLETED"].includes(
+        selectedOption?.dataset.status || ""
+      );
+
       resumeButton.disabled =
-        !!data?.busy || !historySelect.value;
+        !!data?.busy || !historySelect.value || selectedArchived;
+      archiveButton.disabled =
+        !!data?.busy ||
+        !historySelect.value ||
+        selectedArchived ||
+        !selectedTerminal;
     }
     function render(data) {
       current = data;
@@ -2315,8 +2376,11 @@
     }
 
     $("einkBrainHistorySelect").addEventListener("change", () => {
-      $("einkBrainResumeButton").disabled =
-        !$("einkBrainHistorySelect").value || !!current?.busy;
+      if (current) renderEinkBrainState(current);
+    });
+
+    $("einkBrainShowArchived").addEventListener("change", () => {
+      if (current) renderEinkBrainState(current);
     });
 
     $("einkBrainCreateButton").addEventListener("click", async () => {
@@ -2346,6 +2410,16 @@
         $("einkBrainExactFilesInput").value = "";
         $("einkBrainResumeExistingEvidence").checked = false;
         render(result);
+        const createdTaskId = result?.brain?.currentTask?.taskId;
+        if (
+          createdTaskId &&
+          [...$("einkBrainHistorySelect").options].some(
+            (option) => option.value === createdTaskId
+          )
+        ) {
+          $("einkBrainHistorySelect").value = createdTaskId;
+          renderEinkBrainState(result);
+        }
       } catch (error) {
         $("log").textContent = `Brain CREATE failed: ${error.message}`;
       }
@@ -2431,6 +2505,47 @@
       } catch (error) {
         $("log").textContent =
           `RUN COMPILED TASK blocked: ${error.message}`;
+      } finally {
+        await refresh();
+      }
+    });
+    $("einkBrainArchiveButton").addEventListener("click", async () => {
+      const select = $("einkBrainHistorySelect");
+      const taskId = select.value;
+      const option = select.selectedOptions[0];
+
+      if (
+        !taskId ||
+        option?.dataset.archived === "true" ||
+        !["CLOSED", "COMPLETED"].includes(option?.dataset.status || "")
+      ) {
+        return;
+      }
+
+      $("einkBrainArchiveButton").disabled = true;
+
+      try {
+        const armed = await einkAction("brain-archive-arm", { taskId });
+        if (!armed?.armed || !armed?.challenge) {
+          throw new Error(armed?.reason || "ARCHIVE_NOT_ARMED");
+        }
+
+        if (!window.confirm(
+          `ARCHIVE COMPLETED TASK?\n\nTask ID: ${taskId}\n\n` +
+          "Task sẽ ẩn khỏi danh sách active. History, Contract, evidence và audit vẫn được giữ nguyên."
+        )) {
+          $("log").textContent =
+            "ARCHIVE TASK cancelled by Owner; task remains active.";
+          return;
+        }
+
+        render(await einkAction("brain-archive", {
+          taskId,
+          ownerChallenge: armed.challenge
+        }));
+      } catch (error) {
+        $("log").textContent =
+          `ARCHIVE TASK blocked: ${error.message}`;
       } finally {
         await refresh();
       }
