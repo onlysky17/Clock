@@ -40,6 +40,18 @@
           "ownerGate": false
         },
         {
+          "id": "brain-execute-arm",
+          "method": "POST",
+          "destructive": true,
+          "ownerGate": true
+        },
+        {
+          "id": "brain-execute",
+          "method": "POST",
+          "destructive": true,
+          "ownerGate": true
+        },
+        {
           "id": "prepare",
           "method": "POST",
           "destructive": false,

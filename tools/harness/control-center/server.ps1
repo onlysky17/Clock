@@ -23,7 +23,9 @@ param(
 
     [switch]$FeedbackTransportAcceptance,
 
-    [string]$BrainAcceptanceRoot = ''
+    [string]$BrainAcceptanceRoot = '',
+
+    [switch]$ExecutorAcceptance
 )
 
 $ErrorActionPreference = 'Stop'
@@ -62,6 +64,7 @@ $registryPath = Join-Path $PSScriptRoot 'projects.json'
 $prepareScript = Join-Path $repoRoot 'scripts\eink.ps1'
 $burnScript    = Join-Path $repoRoot 'scripts\eink-spi-burn.ps1'
 $launcherPath  = Join-Path $repoRoot 'scripts\eink-control-center.ps1'
+$executorScript = Join-Path $repoRoot 'tools\harness\compiled-task-executor.ps1'
 $prepareEvidenceRoot = Join-Path $repoRoot '_incoming\EINK_HARNESS_PREPARE_TEST'
 $prepareTrustStatePath = Join-Path $prepareEvidenceRoot 'control-center-prepare-state.json'
 $ownerFinalizeRoot = Join-Path $repoRoot '_incoming\EINK_HARNESS_CONTROL_CENTER_FINALIZE'
@@ -95,6 +98,18 @@ else {
 
 $brainCurrentTaskPath = Join-Path $brainRoot 'current-task.json'
 $brainHistoryPath = Join-Path $brainRoot 'history.jsonl'
+$executorEvidenceRoot = Join-Path $repoRoot '_incoming\EINK_HARNESS_COMPILED_EXECUTOR'
+
+if (-not (Test-Path -LiteralPath $executorScript -PathType Leaf)) {
+    throw 'Compiled-task executor module is missing.'
+}
+. $executorScript
+
+if ($ExecutorAcceptance -and (
+    -not $AcceptanceMode -or $Port -eq 5175 -or -not $NoBrowser
+)) {
+    throw 'Executor acceptance requires isolated acceptance mode, a non-production port, and -NoBrowser.'
+}
 
 $runtimeRoot = Join-Path $repoRoot '_incoming\EINK_HARNESS_CONTROL_CENTER_RUNTIME'
 $preEraseBackupEvidenceDir = Join-Path $repoRoot '_incoming\EINK_HARNESS_SPI_BACKUP\20260822_114022'
@@ -192,6 +207,11 @@ $script:BurnRecoveryRequired = $false
 $script:RecoveryChallengeHash = ''
 $script:RecoveryChallengeExpiresUtc = [DateTime]::MinValue
 $script:RecoveryChallengeArtifactSha = ''
+$script:ExecutorChallengeHash = ''
+$script:ExecutorChallengeExpiresUtc = [DateTime]::MinValue
+$script:ExecutorChallengeTaskId = ''
+$script:ExecutorChallengeContractSha = ''
+$script:ExecutorChallengeScopeSha = ''
 $script:LastLog = @(
     'Harness Control Center Multiproject v0.5 started.',
     'Waiting for action.'
@@ -550,6 +570,53 @@ function Test-AndConsumeRecoveryOwnerChallenge {
     $script:RecoveryChallengeHash = ''
     $script:RecoveryChallengeExpiresUtc = [DateTime]::MinValue
     $script:RecoveryChallengeArtifactSha = ''
+    return [bool]$valid
+}
+
+function New-ExecutorOwnerChallenge {
+    param(
+        [Parameter(Mandatory=$true)][string]$TaskId,
+        [Parameter(Mandatory=$true)][string]$ContractSha256,
+        [Parameter(Mandatory=$true)][string]$ExactScopeSha256
+    )
+
+    $challenge = [Guid]::NewGuid().ToString('N')
+    $script:ExecutorChallengeHash = Get-TextSha256 -Text $challenge
+    $script:ExecutorChallengeExpiresUtc = [DateTime]::UtcNow.AddMinutes(2)
+    $script:ExecutorChallengeTaskId = $TaskId.Trim()
+    $script:ExecutorChallengeContractSha = $ContractSha256.Trim().ToUpperInvariant()
+    $script:ExecutorChallengeScopeSha = $ExactScopeSha256.Trim().ToUpperInvariant()
+
+    [pscustomobject]@{
+        armed = $true
+        challenge = $challenge
+        expiresUtc = $script:ExecutorChallengeExpiresUtc.ToString('o')
+        taskId = $script:ExecutorChallengeTaskId
+        contractSha256 = $script:ExecutorChallengeContractSha
+        exactScopeSha256 = $script:ExecutorChallengeScopeSha
+    }
+}
+
+function Test-AndConsumeExecutorOwnerChallenge {
+    param(
+        [Parameter(Mandatory=$true)][string]$Challenge,
+        [Parameter(Mandatory=$true)][string]$TaskId,
+        [Parameter(Mandatory=$true)][string]$ContractSha256,
+        [Parameter(Mandatory=$true)][string]$ExactScopeSha256
+    )
+
+    $valid = -not [string]::IsNullOrWhiteSpace($Challenge) -and
+        [DateTime]::UtcNow -le $script:ExecutorChallengeExpiresUtc -and
+        (Get-TextSha256 -Text $Challenge) -eq $script:ExecutorChallengeHash -and
+        $TaskId.Trim() -eq $script:ExecutorChallengeTaskId -and
+        $ContractSha256.Trim().ToUpperInvariant() -eq $script:ExecutorChallengeContractSha -and
+        $ExactScopeSha256.Trim().ToUpperInvariant() -eq $script:ExecutorChallengeScopeSha
+
+    $script:ExecutorChallengeHash = ''
+    $script:ExecutorChallengeExpiresUtc = [DateTime]::MinValue
+    $script:ExecutorChallengeTaskId = ''
+    $script:ExecutorChallengeContractSha = ''
+    $script:ExecutorChallengeScopeSha = ''
     return [bool]$valid
 }
 
@@ -2660,12 +2727,17 @@ function Get-EinkBrainStatus {
     $recentTasks = @(Get-EinkBrainHistory | Select-Object -First 20)
 
     [ordered]@{
-        version = '0.5'
+        version = '0.6'
         persistent = $true
         executionEnabled = $false
-        mutationPolicy = 'MEMORY_AND_CONTRACT_ONLY'
+        executionEligible = [bool](
+            $currentTask -and
+            [string]$currentTask.status -eq 'COMPILED' -and
+            [bool]$currentTask.contract.executionEligible
+        )
+        mutationPolicy = 'OWNER_CONFIRMED_EXACT_SCOPE'
         compilerEnabled = $true
-        compilerPolicy = 'DETERMINISTIC_HEURISTIC_V1'
+        compilerPolicy = 'DETERMINISTIC_HEURISTIC_V1_WITH_EXACT_SCOPE'
         storeRoot = $brainRoot
         currentTask = $currentTask
         recentTasks = $recentTasks
@@ -2689,6 +2761,16 @@ function Invoke-EinkBrainCreateAction {
         throw 'Brain task request exceeds 12000 characters.'
     }
 
+    $exactFiles = @(ConvertTo-EinkExecutorFiles `
+        -RepoRoot $repoRoot `
+        -Values @($Body.exactFiles))
+
+    if ($exactFiles.Count -gt 20) {
+        throw 'Brain task exact-file scope exceeds 20 files.'
+    }
+
+    $resumeExistingEvidence = [bool]$Body.resumeExistingEvidence
+
     Initialize-EinkBrainStore
 
     $repo = Get-RepoState
@@ -2709,6 +2791,8 @@ function Invoke-EinkBrainCreateAction {
         resumeCount = 0
         branchAtCreate = [string]$repo.Branch
         headAtCreate = [string]$repo.Head
+        exactFiles = $exactFiles
+        resumeExistingEvidence = $resumeExistingEvidence
     }
 
     Write-Utf8JsonFile `
@@ -2956,7 +3040,29 @@ function Get-EinkTaskContract {
         )
     }
 
+    $allowedFiles = @(ConvertTo-EinkExecutorFiles `
+        -RepoRoot $repoRoot `
+        -Values @($Task.exactFiles))
+
+    foreach ($file in $allowedFiles) {
+        $inCandidateScope = $false
+        foreach ($scope in @($candidateScopes)) {
+            $pattern = [WildcardPattern]::new(
+                ([string]$scope).Replace('\', '/'),
+                [Management.Automation.WildcardOptions]::IgnoreCase
+            )
+            if ($pattern.IsMatch($file)) {
+                $inCandidateScope = $true
+                break
+            }
+        }
+        if (-not $inCandidateScope) {
+            throw "Exact file is outside compiled candidate scope: $file"
+        }
+    }
+
     $ownerGates = @(
+        'OWNER_RUN_COMPILED_CONFIRMATION',
         'OWNER_MERGE'
     )
 
@@ -2989,14 +3095,24 @@ function Get-EinkTaskContract {
     }
 
     $repo = Get-RepoState
+    $executionEligible = (
+        $allowedFiles.Count -gt 0 -and
+        -not $requiresClassificationReview -and
+        -not $hasHardwareIntent
+    )
+
+    $exactScopeSha256 = Get-EinkExecutorSha256Text -Text (
+        $allowedFiles -join "`n"
+    )
 
     $contract = [ordered]@{
         schema = 'eink-task-contract-v1'
-        compilerVersion = '0.5.0'
-        compilerPolicy = 'DETERMINISTIC_HEURISTIC_V1'
+        compilerVersion = '0.6.0'
+        compilerPolicy = 'DETERMINISTIC_HEURISTIC_V1_WITH_EXACT_SCOPE'
         taskId = [string]$Task.taskId
         sourceRequest = $request
         projectId = 'eink'
+        workspace = [IO.Path]::GetFullPath($repoRoot)
         taskClass = $taskClass
         riskLevel = $riskLevel
         hardwareIntent = [bool]$hasHardwareIntent
@@ -3010,7 +3126,8 @@ function Get-EinkTaskContract {
             $candidateScopes |
             Select-Object -Unique
         )
-        allowedFiles = @()
+        allowedFiles = $allowedFiles
+        exactScopeSha256 = $exactScopeSha256
         exactFilesRequiredBeforeExecution = $true
         forbiddenActions = @(
             $forbiddenActions |
@@ -3025,7 +3142,16 @@ function Get-EinkTaskContract {
             Select-Object -Unique
         )
         executionEnabled = $false
-        executionState = 'PLAN_ONLY'
+        executionEligible = [bool]$executionEligible
+        ownerExecutionRequired = $true
+        executionState = if ($executionEligible) {
+            'OWNER_RUN_REQUIRED'
+        }
+        else {
+            'PLAN_ONLY'
+        }
+        allowDirtyTrackedTree = $false
+        resumeExistingEvidence = [bool]$Task.resumeExistingEvidence
         autoMerge = $false
         compiledUtc = [DateTime]::UtcNow.ToString('o')
         compiledFromBranch = [string]$repo.Branch
@@ -3074,6 +3200,8 @@ function Invoke-EinkBrainCompileAction {
         resumeCount = [int]$task.resumeCount
         branchAtCreate = [string]$task.branchAtCreate
         headAtCreate = [string]$task.headAtCreate
+        exactFiles = @($task.exactFiles)
+        resumeExistingEvidence = [bool]$task.resumeExistingEvidence
         contract = $contract
     }
 
@@ -3104,8 +3232,9 @@ function Invoke-EinkBrainCompileAction {
             "TASK_CLASS: $($contract.taskClass)",
             "RISK: $($contract.riskLevel)",
             "CONTRACT_SHA256: $($contract.contractSha256)",
-            'EXECUTION: DISABLED / PLAN_ONLY',
-            'NO BUILD / BURN / GIT MUTATION PERFORMED.'
+            "EXECUTION_STATE: $($contract.executionState)",
+            'EXECUTION REQUIRES ONE-TIME OWNER CONFIRMATION.',
+            'NO BUILD / BURN / GIT MUTATION PERFORMED DURING COMPILE.'
         )
 
     Get-ControlStatus
@@ -3156,6 +3285,8 @@ function Invoke-EinkBrainResumeAction {
         resumedOnBranch = [string]$repo.Branch
         resumedOnHead = [string]$repo.Head
         contract = $sourceContract
+        exactFiles = @($source.exactFiles)
+        resumeExistingEvidence = [bool]$source.resumeExistingEvidence
     }
 
     Write-Utf8JsonFile `
@@ -3171,10 +3302,201 @@ function Invoke-EinkBrainResumeAction {
             'EINK BRAIN TASK RESUMED.',
             "TASK_ID: $taskId",
             "RESUME_COUNT: $($record.resumeCount)",
-            'STATE: READY',
-            'EXECUTION: DISABLED',
-            'NO BUILD / BURN / GIT MUTATION PERFORMED.'
+            "STATE: $($record.status)",
+            'EXECUTION REQUIRES ONE-TIME OWNER CONFIRMATION.',
+            'NO BUILD / BURN / GIT MUTATION PERFORMED DURING RESUME.'
         )
+
+    Get-ControlStatus
+}
+
+function Write-EinkBrainExecutionSnapshot {
+    param(
+        [Parameter(Mandatory=$true)]$Task,
+        [Parameter(Mandatory=$true)][string]$Status,
+        [Parameter(Mandatory=$true)][string]$Event,
+        $Execution,
+        [switch]$AppendHistory
+    )
+
+    $record = [ordered]@{}
+    foreach ($property in $Task.PSObject.Properties) {
+        $record[$property.Name] = $property.Value
+    }
+    $record['event'] = $Event
+    $record['status'] = $Status
+    $record['updatedUtc'] = [DateTime]::UtcNow.ToString('o')
+    $record['execution'] = $Execution
+
+    Write-Utf8JsonFile -Path $brainCurrentTaskPath -Value $record
+    if ($AppendHistory) {
+        Append-EinkBrainHistory -Record $record
+    }
+    [pscustomobject]$record
+}
+
+function Invoke-EinkBrainExecuteArmAction {
+    param([Parameter(Mandatory=$true)]$Body)
+
+    if ($script:Busy) {
+        return [ordered]@{ armed = $false; reason = 'HARNESS_BUSY' }
+    }
+
+    $task = Read-EinkBrainCurrentTask
+    if (-not $task -or [string]$task.status -ne 'COMPILED') {
+        return [ordered]@{ armed = $false; reason = 'TASK_NOT_COMPILED' }
+    }
+
+    $contract = $task.contract
+    $taskId = ([string]$Body.taskId).Trim()
+    $contractSha = ([string]$Body.contractSha256).Trim().ToUpperInvariant()
+    $scopeSha = ([string]$Body.exactScopeSha256).Trim().ToUpperInvariant()
+    $actualContractSha = Get-EinkExecutorContractSha256 -Contract $contract
+
+    if (
+        $taskId -ne [string]$task.taskId -or
+        $contractSha -ne ([string]$contract.contractSha256).ToUpperInvariant() -or
+        $contractSha -ne $actualContractSha -or
+        $scopeSha -ne ([string]$contract.exactScopeSha256).ToUpperInvariant() -or
+        $scopeSha -ne (Get-EinkExecutorSha256Text -Text (@($contract.allowedFiles) -join "`n")) -or
+        -not [bool]$contract.executionEligible -or
+        -not [bool]$contract.ownerExecutionRequired
+    ) {
+        return [ordered]@{ armed = $false; reason = 'EXECUTION_AUTHORITY_MISMATCH' }
+    }
+
+    $repo = Get-EinkExecutorRepoStatus -RepoRoot $repoRoot
+    if (@($repo.Tracked).Count -gt 0 -or @($repo.Staged).Count -gt 0) {
+        return [ordered]@{ armed = $false; reason = 'DIRTY_TRACKED_TREE' }
+    }
+
+    New-ExecutorOwnerChallenge `
+        -TaskId $taskId `
+        -ContractSha256 $contractSha `
+        -ExactScopeSha256 $scopeSha
+}
+
+function Invoke-EinkBrainExecuteAction {
+    param([Parameter(Mandatory=$true)]$Body)
+
+    if ($script:Busy) { return Get-ControlStatus }
+
+    $task = Read-EinkBrainCurrentTask
+    if (-not $task) {
+        Set-LastLog -Action 'BRAIN_EXECUTE' -Result 'BLOCKED' -Lines @(
+            'BLOCKED: TASK_MISSING'
+        )
+        return Get-ControlStatus
+    }
+
+    $taskId = ([string]$Body.taskId).Trim()
+    $contractSha = ([string]$Body.contractSha256).Trim().ToUpperInvariant()
+    $scopeSha = ([string]$Body.exactScopeSha256).Trim().ToUpperInvariant()
+    $challenge = [string]$Body.ownerChallenge
+
+    if (-not (Test-AndConsumeExecutorOwnerChallenge `
+        -Challenge $challenge `
+        -TaskId $taskId `
+        -ContractSha256 $contractSha `
+        -ExactScopeSha256 $scopeSha)) {
+        Set-LastLog -Action 'BRAIN_EXECUTE' -Result 'BLOCKED' -Lines @(
+            'BLOCKED: OWNER_EXECUTION_CONFIRMATION_REQUIRED'
+        )
+        return Get-ControlStatus
+    }
+
+    if ($taskId -ne [string]$task.taskId) {
+        Set-LastLog -Action 'BRAIN_EXECUTE' -Result 'BLOCKED' -Lines @(
+            'BLOCKED: TASK_ID_MISMATCH'
+        )
+        return Get-ControlStatus
+    }
+
+    $acceptanceScenario = ([string]$Body.acceptanceScenario).Trim()
+    if (-not $ExecutorAcceptance -and -not [string]::IsNullOrWhiteSpace($acceptanceScenario)) {
+        Set-LastLog -Action 'BRAIN_EXECUTE' -Result 'BLOCKED' -Lines @(
+            'BLOCKED: ACCEPTANCE_SCENARIO_FORBIDDEN'
+        )
+        return Get-ControlStatus
+    }
+
+    $script:Busy = $true
+    try {
+        $onState = {
+            param($phase, $lines)
+            $status = switch ([string]$phase) {
+                'PUSHED' { 'PUSHED' }
+                'OWNER_MERGE_REQUIRED' { 'OWNER_MERGE_REQUIRED' }
+                'WAITING_OWNER' { 'PAUSED_OWNER_ACTION' }
+                'BLOCKED' { 'BLOCKED' }
+                default { 'EXECUTING' }
+            }
+            [void](Write-EinkBrainExecutionSnapshot `
+                -Task $task `
+                -Status $status `
+                -Event ([string]$phase) `
+                -Execution ([ordered]@{
+                    phase = [string]$phase
+                    log = @($lines)
+                    contractSha256 = $contractSha
+                    exactScopeSha256 = $scopeSha
+                }))
+            Set-LastLog -Action 'BRAIN_EXECUTE' -Result $phase -Lines @($lines)
+        }
+
+        $result = Invoke-EinkCompiledTaskExecutor `
+            -RepoRoot $repoRoot `
+            -Task $task `
+            -ExpectedContractSha256 $contractSha `
+            -EvidenceRoot $executorEvidenceRoot `
+            -AcceptanceMode:$ExecutorAcceptance `
+            -AcceptanceScenario $acceptanceScenario `
+            -OnState $onState
+
+        $finalRecord = Write-EinkBrainExecutionSnapshot `
+            -Task $task `
+            -Status ([string]$result.State) `
+            -Event 'EXECUTION_RESULT' `
+            -Execution ([ordered]@{
+                passed = [bool]$result.Passed
+                state = [string]$result.State
+                reason = [string]$result.Reason
+                contractSha256 = $contractSha
+                exactScopeSha256 = $scopeSha
+                exactFiles = @($result.AllowedFiles)
+                agentInvocations = [int]$result.AgentInvocations
+                commitSha = [string]$result.CommitSha
+                prUrl = [string]$result.PrUrl
+                evidenceDir = [string]$result.EvidenceDir
+                log = @($result.Log)
+                autoMerge = $false
+            }) `
+            -AppendHistory
+
+        Set-LastLog `
+            -Action 'BRAIN_EXECUTE' `
+            -Result ([string]$result.State) `
+            -Lines @($result.Log)
+    }
+    catch {
+        [void](Write-EinkBrainExecutionSnapshot `
+            -Task $task `
+            -Status 'BLOCKED' `
+            -Event 'EXECUTION_EXCEPTION' `
+            -Execution ([ordered]@{
+                reason = $_.Exception.Message
+                contractSha256 = $contractSha
+                exactScopeSha256 = $scopeSha
+                autoMerge = $false
+            }) `
+            -AppendHistory)
+        Set-LastLog -Action 'BRAIN_EXECUTE' -Result 'BLOCKED' -Lines @(
+            "BLOCKED: $($_.Exception.Message)"
+        )
+    }
+    finally {
+        $script:Busy = $false
+    }
 
     Get-ControlStatus
 }
@@ -4574,7 +4896,13 @@ try {
 
                 if (
                     [string]$project.adapter -eq 'eink' -and
-                    $actionId -in @('brain-create', 'brain-resume', 'brain-compile')
+                    $actionId -in @(
+                        'brain-create',
+                        'brain-resume',
+                        'brain-compile',
+                        'brain-execute-arm',
+                        'brain-execute'
+                    )
                 ) {
                     try {
                         $body = if (
@@ -4603,8 +4931,14 @@ try {
                     elseif ($actionId -eq 'brain-resume') {
                         Invoke-EinkBrainResumeAction -Body $body
                     }
-                    else {
+                    elseif ($actionId -eq 'brain-compile') {
                         Invoke-EinkBrainCompileAction
+                    }
+                    elseif ($actionId -eq 'brain-execute-arm') {
+                        Invoke-EinkBrainExecuteArmAction -Body $body
+                    }
+                    else {
+                        Invoke-EinkBrainExecuteAction -Body $body
                     }
 
                     Write-Json `
