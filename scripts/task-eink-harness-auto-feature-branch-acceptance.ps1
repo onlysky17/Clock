@@ -268,7 +268,7 @@ try {
     Assert-True (-not $contract.Passed -and $contract.Reason -eq 'CONTRACT_SHA_MISMATCH') 'CONTRACT_MISMATCH_BLOCKED'
 
     $controlRoot = Join-Path $runRoot 'control-center-smoke'
-    $sourceGitDir = (& git -C $repoRoot rev-parse --git-dir).Trim()
+    $sourceGitDir = (& git -C $repoRoot rev-parse --absolute-git-dir).Trim()
     [void](Invoke-FixtureGit -Root $runRoot -Arguments @(
         '-c',"safe.directory=$sourceGitDir",
         '-c',"safe.directory=$repoRoot",
