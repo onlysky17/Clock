@@ -265,8 +265,17 @@ try {
 
     $mainRoot = New-FixtureRepo -Name 'main-branch'
     [void](Invoke-GitFixture -Root $mainRoot -Arguments @('branch','-m','main'))
-    $mainResult = Invoke-FixtureExecutor -Root $mainRoot -Task (New-ContractTask -Root $mainRoot)
-    Assert-True (-not $mainResult.Passed -and $mainResult.Reason -eq 'FEATURE_BRANCH_REQUIRED') 'MAIN_BRANCH_EXECUTION_BLOCKED'
+    $mainRemote = Join-Path $runRoot 'main-branch-origin.git'
+    [void](Invoke-GitFixture -Root $runRoot -Arguments @('init','--bare',$mainRemote))
+    [void](Invoke-GitFixture -Root $mainRoot -Arguments @('remote','add','origin',$mainRemote))
+    [void](Invoke-GitFixture -Root $mainRoot -Arguments @('push','-u','origin','main'))
+    $mainTask = New-ContractTask -Root $mainRoot
+    $mainBranch = Get-EinkExecutorFeatureBranchName -TaskId ([string]$mainTask.taskId)
+    $mainResult = Invoke-FixtureExecutor -Root $mainRoot -Task $mainTask
+    Assert-True ($mainResult.Passed -and $mainResult.State -eq 'OWNER_MERGE_REQUIRED') 'CLEAN_SYNCED_MAIN_OWNER_MERGE_REQUIRED'
+    $mainBranchOutput = @(Invoke-GitFixture -Root $mainRoot -Arguments @('branch','--show-current'))
+    Assert-True (([string]$mainBranchOutput[-1]).Trim() -eq $mainBranch) 'MAIN_ENTERED_DETERMINISTIC_TASK_BRANCH'
+    Assert-True (@($mainResult.Log) -contains ("FEATURE_BRANCH_READY: " + $mainBranch)) 'MAIN_FEATURE_BRANCH_TRANSITION_RECORDED'
 
     $stateRoot = New-FixtureRepo -Name 'not-compiled'
     $stateTask = New-ContractTask -Root $stateRoot
