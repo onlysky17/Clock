@@ -223,6 +223,12 @@
       color: white;
     }
 
+    .run-compiled {
+      background: #8957e5;
+      border-color: #a371f7;
+      color: white;
+    }
+
     .burn {
       background: #da3633;
       border-color: #f85149;
@@ -952,14 +958,20 @@
     </section>
 
     <section class="panel">
-      <div class="label" style="margin-bottom:14px">EINK Brain v0.5 · Task Compiler · Contract Visualizer v0.5.1</div>
+      <div class="label" style="margin-bottom:14px">EINK Brain v0.6 · Compiled Task Executor</div>
       <div class="warning">
-        Nhập yêu cầu bằng ngôn ngữ tự nhiên. Brain v0.5 tạo/lưu/resume và compile Task Contract;
-        execution vẫn khóa: chưa được phép sửa code, build, burn hoặc thay đổi Git.
+        RUN COMPILED TASK chỉ mở cho contract hợp lệ và exact-file scope sạch.
+        Mỗi lần chạy cần Owner xác nhận một lần theo Task ID + Contract SHA + exact files;
+        không tự merge và không cấp quyền hardware/burn.
       </div>
 
       <div class="form-stack" style="margin-top:14px">
         <textarea id="einkBrainRequest" placeholder="Ví dụ: sửa giao diện đồng hồ để ngày âm lịch dễ đọc hơn, giữ nguyên layout Portrait hiện tại..."></textarea>
+        <textarea id="einkBrainExactFilesInput" placeholder="Exact files — mỗi dòng một repo-relative path, không wildcard"></textarea>
+        <label style="display:flex;align-items:center;gap:9px;width:max-content;max-width:100%;color:#c9d1d9;font-size:12px">
+          <input id="einkBrainResumeExistingEvidence" type="checkbox" style="width:auto">
+          Resume từ evidence/commit hợp lệ hiện có; không chạy lại implementation
+        </label>
 
         <div class="actions">
           <button id="einkBrainCreateButton" class="prepare">CREATE TASK</button>
@@ -973,6 +985,7 @@
 
           <button id="einkBrainResumeButton" disabled>RESUME TASK</button>
           <button id="einkBrainCompileButton" disabled>COMPILE TASK</button>
+          <button id="einkBrainRunButton" class="run-compiled" disabled>RUN COMPILED TASK</button>
         </div>
 
         <div class="artifact">
@@ -984,6 +997,7 @@
           <div class="artifact-line"><span>Risk</span><code id="einkBrainContractRisk">-</code></div>
           <div class="artifact-line"><span>Compiler</span><code id="einkBrainCompilerPolicy">-</code></div>
           <div class="artifact-line"><span>Exact Files</span><code id="einkBrainExactFiles">REQUIRED</code></div>
+          <div class="artifact-line"><span>Scope SHA</span><code id="einkBrainScopeSha">-</code></div>
           <div class="artifact-line"><span>Contract SHA</span><code id="einkBrainContractSha">-</code></div>
           <div class="artifact-line"><span>Store</span><code id="einkBrainStore">-</code></div>
         </div>
@@ -1625,7 +1639,10 @@
 
       const statePill = $("einkContractStatePill");
       statePill.textContent = executionState;
-      statePill.className = "contract-pill plan";
+      statePill.className =
+        executionState === "OWNER_RUN_REQUIRED"
+          ? "contract-pill class-harness"
+          : "contract-pill plan";
 
       $("einkContractVisualPill").classList.toggle(
         "hidden",
@@ -1665,27 +1682,27 @@
         $("einkContractExecutionSafety");
 
       executionSafety.textContent =
-        contract.executionEnabled
-          ? "EXECUTION ENABLED"
+        contract.executionEligible
+          ? "ONE-TIME OWNER CONFIRMATION"
           : "EXECUTION LOCKED";
 
       executionSafety.className =
-        contract.executionEnabled
-          ? "contract-safety-badge blocked"
+        contract.executionEligible
+          ? "contract-safety-badge warning"
           : "contract-safety-badge safe";
 
       const exactSafety =
         $("einkContractExactFilesSafety");
 
       exactSafety.textContent =
-        contract.exactFilesRequiredBeforeExecution
-          ? "EXACT FILES REQUIRED"
-          : "EXACT FILE GATE OFF";
+        Array.isArray(contract.allowedFiles) && contract.allowedFiles.length
+          ? `EXACT FILES LOCKED (${contract.allowedFiles.length})`
+          : "EXACT FILES REQUIRED";
 
       exactSafety.className =
-        contract.exactFilesRequiredBeforeExecution
-          ? "contract-safety-badge warning"
-          : "contract-safety-badge blocked";
+        Array.isArray(contract.allowedFiles) && contract.allowedFiles.length
+          ? "contract-safety-badge safe"
+          : "contract-safety-badge warning";
 
       const mergeSafety =
         $("einkContractMergeSafety");
@@ -1721,6 +1738,7 @@
       const historySelect = $("einkBrainHistorySelect");
       const resumeButton = $("einkBrainResumeButton");
       const compileButton = $("einkBrainCompileButton");
+      const runButton = $("einkBrainRunButton");
 
       if (
         !currentId ||
@@ -1731,7 +1749,8 @@
         !currentRequest ||
         !historySelect ||
         !resumeButton ||
-        !compileButton
+        !compileButton ||
+        !runButton
       ) {
         return;
       }
@@ -1753,9 +1772,12 @@
         contract.compilerPolicy || "-";
 
       $("einkBrainExactFiles").textContent =
-        contract.exactFilesRequiredBeforeExecution
-          ? "REQUIRED"
-          : "-";
+        Array.isArray(contract.allowedFiles) && contract.allowedFiles.length
+          ? contract.allowedFiles.join(" · ")
+          : "REQUIRED";
+
+      $("einkBrainScopeSha").textContent =
+        contract.exactScopeSha256 || "-";
 
       $("einkBrainContractSha").textContent =
         contract.contractSha256 || "-";
@@ -1766,6 +1788,24 @@
 
       compileButton.disabled =
         !!data?.busy || !task.taskId;
+
+      const contractSha = String(contract.contractSha256 || "");
+      const scopeSha = String(contract.exactScopeSha256 || "");
+      const exactFiles = Array.isArray(contract.allowedFiles)
+        ? contract.allowedFiles.filter(Boolean)
+        : [];
+      const trackedDirty = Number(data?.trackedDirtyCount || 0);
+
+      runButton.disabled = !(
+        !data?.busy &&
+        task.status === "COMPILED" &&
+        contract.executionEligible === true &&
+        contract.ownerExecutionRequired === true &&
+        /^[0-9A-F]{64}$/i.test(contractSha) &&
+        /^[0-9A-F]{64}$/i.test(scopeSha) &&
+        exactFiles.length > 0 &&
+        trackedDirty === 0
+      );
 
       const previous = historySelect.value;
 
@@ -2281,6 +2321,12 @@
 
     $("einkBrainCreateButton").addEventListener("click", async () => {
       const request = $("einkBrainRequest").value.trim();
+      const exactFiles = $("einkBrainExactFilesInput").value
+        .split(/\r?\n/)
+        .map((value) => value.trim())
+        .filter(Boolean);
+      const resumeExistingEvidence =
+        $("einkBrainResumeExistingEvidence").checked;
 
       if (!request) {
         $("log").textContent = "Brain task request is empty.";
@@ -2291,8 +2337,14 @@
       $("einkBrainResumeButton").disabled = true;
 
       try {
-        const result = await einkAction("brain-create", { request });
+        const result = await einkAction("brain-create", {
+          request,
+          exactFiles,
+          resumeExistingEvidence
+        });
         $("einkBrainRequest").value = "";
+        $("einkBrainExactFilesInput").value = "";
+        $("einkBrainResumeExistingEvidence").checked = false;
         render(result);
       } catch (error) {
         $("log").textContent = `Brain CREATE failed: ${error.message}`;
@@ -2334,6 +2386,54 @@
       }
 
       await refresh();
+    });
+    $("einkBrainRunButton").addEventListener("click", async () => {
+      const task = current?.brain?.currentTask;
+      const contract = task?.contract;
+
+      if (!task || !contract || $("einkBrainRunButton").disabled) return;
+
+      const authority = {
+        taskId: String(task.taskId || ""),
+        contractSha256: String(contract.contractSha256 || ""),
+        exactScopeSha256: String(contract.exactScopeSha256 || "")
+      };
+      const exactFiles = Array.isArray(contract.allowedFiles)
+        ? contract.allowedFiles
+        : [];
+
+      $("einkBrainRunButton").disabled = true;
+
+      try {
+        const armed = await einkAction("brain-execute-arm", authority);
+        if (!armed?.armed || !armed?.challenge) {
+          throw new Error(armed?.reason || "EXECUTION_NOT_ARMED");
+        }
+
+        const confirmed = window.confirm(
+          `RUN COMPILED TASK\n\n` +
+          `Task ID: ${authority.taskId}\n` +
+          `Contract SHA: ${authority.contractSha256}\n` +
+          `Exact files (${exactFiles.length}):\n- ${exactFiles.join("\n- ")}\n\n` +
+          `One-time confirmation only. No hardware. No auto-merge.`
+        );
+
+        if (!confirmed) {
+          $("log").textContent =
+            "RUN COMPILED TASK cancelled by Owner; no execution started.";
+          return;
+        }
+
+        render(await einkAction("brain-execute", {
+          ...authority,
+          ownerChallenge: armed.challenge
+        }));
+      } catch (error) {
+        $("log").textContent =
+          `RUN COMPILED TASK blocked: ${error.message}`;
+      } finally {
+        await refresh();
+      }
     });
     $("prepareButton").addEventListener("click", async () => {
       $("prepareButton").disabled = true;
