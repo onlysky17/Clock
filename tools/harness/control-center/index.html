@@ -211,6 +211,17 @@
       resize: vertical;
     }
 
+    #einkBrainRequest {
+      height: 280px;
+      min-height: 280px;
+      max-height: min(65vh, 640px);
+      overflow-y: auto;
+    }
+
+    #einkBrainExactFilesInput {
+      min-height: 132px;
+    }
+
     input[type="file"] {
       width: auto;
       max-width: 100%;
@@ -1772,6 +1783,7 @@
       const store = $("einkBrainStore");
       const currentRequest = $("einkBrainCurrentRequest");
       const historySelect = $("einkBrainHistorySelect");
+      const createButton = $("einkBrainCreateButton");
       const resumeButton = $("einkBrainResumeButton");
       const compileButton = $("einkBrainCompileButton");
       const runButton = $("einkBrainRunButton");
@@ -1786,6 +1798,7 @@
         !store ||
         !currentRequest ||
         !historySelect ||
+        !createButton ||
         !resumeButton ||
         !compileButton ||
         !runButton ||
@@ -1825,6 +1838,8 @@
       renderContractVisualizer(
         task.contract || null
       );
+
+      createButton.disabled = !!data?.busy;
 
       compileButton.disabled =
         !!data?.busy || !task.taskId || task.archived === true;
@@ -2375,6 +2390,42 @@
       });
     }
 
+    const EINK_BRAIN_REQUEST_DEFAULT_HEIGHT = 280;
+
+    function resizeEinkBrainRequest({ reset = false } = {}) {
+      const textarea = $("einkBrainRequest");
+      if (!textarea) return;
+
+      if (reset) {
+        textarea.style.height = "";
+        textarea.style.overflowY = "auto";
+        return;
+      }
+
+      const computedMax = Number.parseFloat(
+        window.getComputedStyle(textarea).maxHeight
+      );
+      const maxHeight = Number.isFinite(computedMax)
+        ? Math.max(EINK_BRAIN_REQUEST_DEFAULT_HEIGHT, computedMax)
+        : 640;
+
+      textarea.style.height = `${EINK_BRAIN_REQUEST_DEFAULT_HEIGHT}px`;
+      const contentHeight = textarea.scrollHeight;
+      textarea.style.height = `${Math.min(maxHeight, Math.max(
+        EINK_BRAIN_REQUEST_DEFAULT_HEIGHT,
+        contentHeight
+      ))}px`;
+      textarea.style.overflowY = contentHeight > maxHeight ? "auto" : "hidden";
+    }
+
+    $("einkBrainRequest").addEventListener("input", () => {
+      resizeEinkBrainRequest();
+    });
+
+    window.addEventListener("resize", () => {
+      resizeEinkBrainRequest();
+    });
+
     $("einkBrainHistorySelect").addEventListener("change", () => {
       if (current) renderEinkBrainState(current);
     });
@@ -2407,6 +2458,7 @@
           resumeExistingEvidence
         });
         $("einkBrainRequest").value = "";
+        resizeEinkBrainRequest({ reset: true });
         $("einkBrainExactFilesInput").value = "";
         $("einkBrainResumeExistingEvidence").checked = false;
         render(result);

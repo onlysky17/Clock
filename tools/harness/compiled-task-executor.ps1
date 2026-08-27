@@ -75,6 +75,101 @@ function Get-EinkExecutorGit {
         -WorkingDirectory $RepoRoot
 }
 
+function Get-EinkExecutorFeatureBranchName {
+    param([Parameter(Mandatory=$true)][string]$TaskId)
+
+    $slug = $TaskId.Trim().ToLowerInvariant()
+    $slug = [regex]::Replace($slug, '[^a-z0-9]+', '-')
+    $slug = $slug.Trim('-')
+    if ([string]::IsNullOrWhiteSpace($slug)) {
+        throw 'TASK_ID_BRANCH_SLUG_EMPTY'
+    }
+    if ($slug.Length -gt 80) {
+        $slug = $slug.Substring(0, 80).TrimEnd('-')
+    }
+
+    "task/$slug"
+}
+
+function Get-EinkExecutorGitValue {
+    param(
+        [Parameter(Mandatory=$true)][string]$RepoRoot,
+        [Parameter(Mandatory=$true)][string[]]$Arguments,
+        [Parameter(Mandatory=$true)][string]$FailureReason
+    )
+
+    $result = Get-EinkExecutorGit -RepoRoot $RepoRoot -Arguments $Arguments
+    if ($result.ExitCode -ne 0 -or @($result.Output).Count -eq 0) {
+        throw $FailureReason
+    }
+    ([string]$result.Output[-1]).Trim()
+}
+
+function Test-EinkExecutorGitRef {
+    param(
+        [Parameter(Mandatory=$true)][string]$RepoRoot,
+        [Parameter(Mandatory=$true)][string]$Ref
+    )
+
+    $result = Get-EinkExecutorGit -RepoRoot $RepoRoot -Arguments @(
+        'show-ref', '--verify', '--quiet', $Ref
+    )
+    $result.ExitCode -eq 0
+}
+
+function Assert-EinkExecutorTaskBranchMetadata {
+    param(
+        [Parameter(Mandatory=$true)][string]$RepoRoot,
+        [Parameter(Mandatory=$true)][string]$Branch,
+        [Parameter(Mandatory=$true)][string]$TaskId,
+        [Parameter(Mandatory=$true)][string]$ContractSha256,
+        [Parameter(Mandatory=$true)][string]$CompiledFromHead
+    )
+
+    $expected = [ordered]@{
+        einkTaskId = $TaskId
+        einkContractSha256 = $ContractSha256
+        einkCompiledFromHead = $CompiledFromHead
+    }
+    foreach ($entry in $expected.GetEnumerator()) {
+        $value = Get-EinkExecutorGit -RepoRoot $RepoRoot -Arguments @(
+            'config', '--local', '--get', "branch.$Branch.$($entry.Key)"
+        )
+        if (
+            $value.ExitCode -ne 0 -or
+            @($value.Output).Count -eq 0 -or
+            -not ([string]$value.Output[-1]).Trim().Equals(
+                [string]$entry.Value,
+                [StringComparison]::OrdinalIgnoreCase
+            )
+        ) {
+            throw 'TASK_BRANCH_COLLISION'
+        }
+    }
+}
+
+function Set-EinkExecutorTaskBranchMetadata {
+    param(
+        [Parameter(Mandatory=$true)][string]$RepoRoot,
+        [Parameter(Mandatory=$true)][string]$Branch,
+        [Parameter(Mandatory=$true)][string]$TaskId,
+        [Parameter(Mandatory=$true)][string]$ContractSha256,
+        [Parameter(Mandatory=$true)][string]$CompiledFromHead
+    )
+
+    $values = [ordered]@{
+        einkTaskId = $TaskId
+        einkContractSha256 = $ContractSha256
+        einkCompiledFromHead = $CompiledFromHead
+    }
+    foreach ($entry in $values.GetEnumerator()) {
+        $set = Get-EinkExecutorGit -RepoRoot $RepoRoot -Arguments @(
+            'config', '--local', "branch.$Branch.$($entry.Key)", [string]$entry.Value
+        )
+        if ($set.ExitCode -ne 0) { throw 'TASK_BRANCH_METADATA_WRITE_FAILED' }
+    }
+}
+
 function ConvertTo-EinkExecutorFiles {
     param(
         [Parameter(Mandatory=$true)][string]$RepoRoot,
@@ -416,6 +511,13 @@ function Invoke-EinkCompiledTaskExecutor {
             -RepoRoot $RepoRoot `
             -Values $contract.allowedFiles)
         if ($allowed.Count -eq 0) { throw 'EXACT_FILES_REQUIRED' }
+        $scopeSha = Get-EinkExecutorSha256Text -Text ($allowed -join "`n")
+        if (-not $scopeSha.Equals(
+            ([string]$contract.exactScopeSha256).Trim(),
+            [StringComparison]::OrdinalIgnoreCase
+        )) {
+            throw 'EXACT_SCOPE_SHA_MISMATCH'
+        }
 
         Publish-State 'PREFLIGHT'
         $repo = Get-EinkExecutorRepoStatus -RepoRoot $RepoRoot
@@ -437,22 +539,126 @@ function Invoke-EinkCompiledTaskExecutor {
         if ($unknownUntracked.Count -gt 0) {
             throw ('UNAPPROVED_UNTRACKED_FILES: ' + ($unknownUntracked -join ', '))
         }
+        $resume = [bool]$contract.resumeExistingEvidence -or
+            $AcceptanceScenario -eq 'RESUME_EXISTING'
+        $compiledBranch = [string]$contract.compiledFromBranch
+        $compiledHead = [string]$contract.compiledFromHead
+        $taskBranch = Get-EinkExecutorFeatureBranchName -TaskId ([string]$contract.taskId)
+        $automaticFeatureBranch = $compiledBranch -eq 'main'
         if (
-            $repo.Branch -ne [string]$contract.compiledFromBranch -or
-            $repo.Head -ne [string]$contract.compiledFromHead
+            $contract.PSObject.Properties.Name -contains 'featureBranch' -and
+            [string]$contract.featureBranch -ne $taskBranch
+        ) {
+            throw 'TASK_BRANCH_CONTRACT_MISMATCH'
+        }
+
+        if ($automaticFeatureBranch) {
+            $mainHead = Get-EinkExecutorGitValue `
+                -RepoRoot $RepoRoot `
+                -Arguments @('rev-parse','--verify','refs/heads/main') `
+                -FailureReason 'MAIN_REF_MISSING'
+            $originMainHead = Get-EinkExecutorGitValue `
+                -RepoRoot $RepoRoot `
+                -Arguments @('rev-parse','--verify','refs/remotes/origin/main') `
+                -FailureReason 'ORIGIN_MAIN_REF_MISSING'
+            if (
+                $mainHead -ne $originMainHead -or
+                $compiledHead -ne $mainHead
+            ) {
+                throw 'STALE_MAIN'
+            }
+
+            $localTaskRef = "refs/heads/$taskBranch"
+            $remoteTaskRef = "refs/remotes/origin/$taskBranch"
+            $localTaskExists = Test-EinkExecutorGitRef `
+                -RepoRoot $RepoRoot `
+                -Ref $localTaskRef
+            $remoteTaskExists = Test-EinkExecutorGitRef `
+                -RepoRoot $RepoRoot `
+                -Ref $remoteTaskRef
+
+            if ($repo.Branch -eq 'main') {
+                if ($repo.Head -ne $compiledHead) { throw 'COMPILED_SOURCE_DRIFT' }
+                if ($localTaskExists) {
+                    Assert-EinkExecutorTaskBranchMetadata `
+                        -RepoRoot $RepoRoot `
+                        -Branch $taskBranch `
+                        -TaskId ([string]$contract.taskId) `
+                        -ContractSha256 $stored `
+                        -CompiledFromHead $compiledHead
+                    $switch = Get-EinkExecutorGit -RepoRoot $RepoRoot -Arguments @(
+                        'switch', $taskBranch
+                    )
+                    if ($switch.ExitCode -ne 0) { throw 'TASK_BRANCH_SWITCH_FAILED' }
+                }
+                else {
+                    if ($remoteTaskExists) { throw 'TASK_BRANCH_COLLISION' }
+                    $switch = Get-EinkExecutorGit -RepoRoot $RepoRoot -Arguments @(
+                        'switch','-c',$taskBranch
+                    )
+                    if ($switch.ExitCode -ne 0) { throw 'TASK_BRANCH_CREATE_FAILED' }
+                    Set-EinkExecutorTaskBranchMetadata `
+                        -RepoRoot $RepoRoot `
+                        -Branch $taskBranch `
+                        -TaskId ([string]$contract.taskId) `
+                        -ContractSha256 $stored `
+                        -CompiledFromHead $compiledHead
+                }
+                $repo = Get-EinkExecutorRepoStatus -RepoRoot $RepoRoot
+            }
+            elseif ($repo.Branch -eq $taskBranch) {
+                if (-not $localTaskExists) { throw 'UNEXPECTED_GIT_STATE' }
+                Assert-EinkExecutorTaskBranchMetadata `
+                    -RepoRoot $RepoRoot `
+                    -Branch $taskBranch `
+                    -TaskId ([string]$contract.taskId) `
+                    -ContractSha256 $stored `
+                    -CompiledFromHead $compiledHead
+            }
+            else {
+                throw 'UNEXPECTED_GIT_STATE'
+            }
+
+            $taskHead = Get-EinkExecutorGitValue `
+                -RepoRoot $RepoRoot `
+                -Arguments @('rev-parse','--verify',$localTaskRef) `
+                -FailureReason 'TASK_BRANCH_REF_MISSING'
+            if ($remoteTaskExists) {
+                $remoteTaskHead = Get-EinkExecutorGitValue `
+                    -RepoRoot $RepoRoot `
+                    -Arguments @('rev-parse','--verify',$remoteTaskRef) `
+                    -FailureReason 'TASK_REMOTE_REF_INSPECTION_FAILED'
+                if ($remoteTaskHead -ne $taskHead) { throw 'TASK_BRANCH_COLLISION' }
+            }
+            if (-not $resume -and $taskHead -ne $compiledHead) {
+                throw 'TASK_BRANCH_HEAD_DRIFT'
+            }
+            if ($resume -and $taskHead -eq $compiledHead) {
+                throw 'RESUME_EVIDENCE_COMMIT_REQUIRED'
+            }
+            Publish-State 'FEATURE_BRANCH_READY' $taskBranch
+        }
+        elseif (
+            $repo.Branch -ne $compiledBranch -or
+            $repo.Head -ne $compiledHead -or
+            $repo.Branch -eq 'main'
         ) {
             throw 'COMPILED_SOURCE_DRIFT'
         }
-        if ($repo.Branch -eq 'main') { throw 'FEATURE_BRANCH_REQUIRED' }
-
-        $resume = [bool]$contract.resumeExistingEvidence -or
-            $AcceptanceScenario -eq 'RESUME_EXISTING'
 
         if ($resume) {
             Publish-State 'EXECUTING' 'RESUME_EXISTING_EVIDENCE'
-            $scope = Get-EinkExecutorGit -RepoRoot $RepoRoot -Arguments @(
-                'diff-tree','--no-commit-id','--name-only','-r','HEAD'
-            )
+            $scopeArguments = if ($automaticFeatureBranch) {
+                $ancestor = Get-EinkExecutorGit -RepoRoot $RepoRoot -Arguments @(
+                    'merge-base','--is-ancestor',$compiledHead,$repo.Head
+                )
+                if ($ancestor.ExitCode -ne 0) { throw 'RESUME_EVIDENCE_HISTORY_MISMATCH' }
+                @('diff','--name-only',"$compiledHead..$($repo.Head)")
+            }
+            else {
+                @('diff-tree','--no-commit-id','--name-only','-r','HEAD')
+            }
+            $scope = Get-EinkExecutorGit -RepoRoot $RepoRoot -Arguments $scopeArguments
             if ($scope.ExitCode -ne 0) { throw 'RESUME_SCOPE_INSPECTION_FAILED' }
             $commitFiles = @($scope.Output | Where-Object { $_ } | Sort-Object)
             $outside = @($commitFiles | Where-Object { $allowed -notcontains $_ })

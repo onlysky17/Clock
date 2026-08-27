@@ -3262,6 +3262,9 @@ function Get-EinkTaskContract {
         compilerVersion = '0.6.0'
         compilerPolicy = 'DETERMINISTIC_HEURISTIC_V1_WITH_EXACT_SCOPE'
         taskId = [string]$Task.taskId
+        featureBranchPolicy = 'AUTO_TASK_SCOPED_FROM_SYNCED_MAIN_V1'
+        featureBranch = Get-EinkExecutorFeatureBranchName `
+            -TaskId ([string]$Task.taskId)
         sourceRequest = $request
         projectId = 'eink'
         workspace = [IO.Path]::GetFullPath($repoRoot)
@@ -3527,6 +3530,34 @@ function Invoke-EinkBrainExecuteArmAction {
     $repo = Get-EinkExecutorRepoStatus -RepoRoot $repoRoot
     if (@($repo.Tracked).Count -gt 0 -or @($repo.Staged).Count -gt 0) {
         return [ordered]@{ armed = $false; reason = 'DIRTY_TRACKED_TREE' }
+    }
+    if ($repo.Branch -eq 'main') {
+        try {
+            $mainHead = Get-EinkExecutorGitValue `
+                -RepoRoot $repoRoot `
+                -Arguments @('rev-parse','--verify','refs/heads/main') `
+                -FailureReason 'MAIN_REF_MISSING'
+            $originMainHead = Get-EinkExecutorGitValue `
+                -RepoRoot $repoRoot `
+                -Arguments @('rev-parse','--verify','refs/remotes/origin/main') `
+                -FailureReason 'ORIGIN_MAIN_REF_MISSING'
+        }
+        catch {
+            return [ordered]@{ armed = $false; reason = $_.Exception.Message }
+        }
+        if (
+            $repo.Head -ne $mainHead -or
+            $mainHead -ne $originMainHead -or
+            [string]$contract.compiledFromHead -ne $mainHead
+        ) {
+            return [ordered]@{ armed = $false; reason = 'STALE_MAIN' }
+        }
+    }
+    elseif (
+        $contract.PSObject.Properties.Name -contains 'featureBranch' -and
+        $repo.Branch -ne [string]$contract.featureBranch
+    ) {
+        return [ordered]@{ armed = $false; reason = 'UNEXPECTED_GIT_STATE' }
     }
 
     New-ExecutorOwnerChallenge `
