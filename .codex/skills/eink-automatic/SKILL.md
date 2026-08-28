@@ -1,3 +1,7 @@
+---
+name: eink-automatic
+description: EINK Clock automatic workflow guardrails for repository verification, exact-scope execution, validation, and Owner-gated publication.
+---
 # EINK Automatic Workflow
 
 Use this skill for EINK Clock firmware, web, or docs tasks in `D:\EINK\Clock`.
