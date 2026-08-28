@@ -3007,6 +3007,54 @@ function ConvertTo-EinkCompilerFoldedText {
     $folded
 }
 
+function Test-EinkCompilerHardwareIntent {
+    param([string]$FoldedText)
+
+    if ([string]::IsNullOrWhiteSpace($FoldedText)) {
+        return $false
+    }
+
+    $hardwareTerms = [regex]::Matches(
+        $FoldedText,
+        '\b(burn|flash|spi|erase|write|nap|board|hardware)\b'
+    )
+
+    foreach ($term in $hardwareTerms) {
+        $prefix = $FoldedText.Substring(0, $term.Index)
+        $boundaries = [regex]::Matches(
+            $prefix,
+            '(?:[.!?;,\r\n]+|\b(?:but|however|nhung|tuy nhien|then|sau do)\b)'
+        )
+        $clauseStart = if ($boundaries.Count -gt 0) {
+            $lastBoundary = $boundaries[$boundaries.Count - 1]
+            $lastBoundary.Index + $lastBoundary.Length
+        }
+        else {
+            0
+        }
+        $context = $prefix.Substring($clauseStart).Trim()
+
+        # "not only" introduces emphasis rather than negating the action.
+        if ($context -match '\bnot\s+only(?:\s+[\p{L}\p{N}_-]+){0,3}\s*$') {
+            return $true
+        }
+
+        # A negation governs the hardware term only inside the same clause and
+        # with at most three intervening words. This keeps the rule bounded and
+        # lets a later positive clause ("but ... manual flash") win normally.
+        $isNegated = $context -match (
+            '\b(?:no|not|never|without|khong)' +
+            '(?:\s+[\p{L}\p{N}_-]+){0,3}\s*$'
+        )
+
+        if (-not $isNegated) {
+            return $true
+        }
+    }
+
+    $false
+}
+
 function Get-EinkTaskContract {
     param(
         [Parameter(Mandatory=$true)]
@@ -3035,9 +3083,8 @@ function Get-EinkTaskContract {
         'portrait|weekly|analog|display)\b'
     )
 
-    $hasHardwareIntent = $folded -match (
-        '\b(burn|flash|spi|erase|write|nap|board|hardware)\b'
-    )
+    $hasHardwareIntent = Test-EinkCompilerHardwareIntent `
+        -FoldedText $folded
 
     $hasVisualIntent = $folded -match (
         '\b(ui|visual|giao dien|man hinh|display|layout|' +
@@ -3259,8 +3306,8 @@ function Get-EinkTaskContract {
 
     $contract = [ordered]@{
         schema = 'eink-task-contract-v1'
-        compilerVersion = '0.6.0'
-        compilerPolicy = 'DETERMINISTIC_HEURISTIC_V1_WITH_EXACT_SCOPE'
+        compilerVersion = '0.6.1'
+        compilerPolicy = 'DETERMINISTIC_HEURISTIC_V1_NEGATION_AWARE_WITH_EXACT_SCOPE'
         taskId = [string]$Task.taskId
         featureBranchPolicy = 'AUTO_TASK_SCOPED_FROM_SYNCED_MAIN_V1'
         featureBranch = Get-EinkExecutorFeatureBranchName `
