@@ -166,6 +166,24 @@ function Invoke-FixtureExecutor {
         -AcceptanceScenario $(if ([bool]$Task.contract.resumeExistingEvidence) { 'RESUME_EXISTING' } else { 'IMPLEMENT_ALLOWED' })
 }
 
+function Invoke-ChildExitFixture {
+    param(
+        [Parameter(Mandatory=$true)][string]$Name,
+        [Parameter(Mandatory=$true)][string]$CommandLine,
+        [ValidateRange(1,30)][int]$TimeoutSec = 5
+    )
+
+    $root = Join-Path $runRoot "child-exit-$Name"
+    [void](New-Item -ItemType Directory -Path $root -Force)
+    Invoke-EinkExecutorTrackedChild `
+        -CommandLine $CommandLine `
+        -WorkingDirectory $root `
+        -StdoutPath (Join-Path $root 'stdout.log') `
+        -StderrPath (Join-Path $root 'stderr.log') `
+        -ExitCodePath (Join-Path $root 'exit-code.txt') `
+        -TimeoutSec $TimeoutSec
+}
+
 $realStatusBefore = @(& git -C $repoRoot status --short)
 $realBranchBefore = (@(& git -C $repoRoot branch --show-current) -join '').Trim()
 $realHeadBefore = (& git -C $repoRoot rev-parse HEAD).Trim()
@@ -184,6 +202,51 @@ try {
         )
         Assert-True (@($errors).Count -eq 0) ("POWERSHELL_PARSE_" + [IO.Path]::GetFileName($path).ToUpperInvariant())
     }
+
+    $comspec = [Environment]::GetEnvironmentVariable('ComSpec')
+    if ([string]::IsNullOrWhiteSpace($comspec)) {
+        $comspec = 'cmd.exe'
+    }
+    $exitZero = Invoke-ChildExitFixture `
+        -Name 'zero' `
+        -CommandLine ('"{0}" /d /s /c "exit /b 0"' -f $comspec)
+    Assert-True (
+        $exitZero.Passed -and $exitZero.ExitCode -eq 0
+    ) 'CHILD_EXIT_ZERO_PASS'
+
+    $exitSeven = Invoke-ChildExitFixture `
+        -Name 'seven' `
+        -CommandLine ('"{0}" /d /s /c "exit /b 7"' -f $comspec)
+    Assert-True (
+        -not $exitSeven.Passed -and $exitSeven.ExitCode -eq 7
+    ) 'CHILD_EXIT_NONZERO_EXACT_FAIL'
+
+    $timeoutReason = ''
+    try {
+        [void](Invoke-ChildExitFixture `
+            -Name 'timeout' `
+            -CommandLine (
+                '"{0}" -NoProfile -Command "Start-Sleep -Seconds 5"' -f
+                    ([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
+            ) `
+            -TimeoutSec 1)
+    }
+    catch {
+        $timeoutReason = $_.Exception.Message
+    }
+    Assert-True (
+        $timeoutReason -eq 'CODEX_EXECUTION_TIMEOUT'
+    ) 'CHILD_TIMEOUT_EXACT_REASON'
+
+    $executorSource = [IO.File]::ReadAllText(
+        $executorPath,
+        [Text.Encoding]::UTF8
+    )
+    Assert-True (
+        $executorSource.Contains('agent-exit-code.txt') -and
+        $executorSource.Contains('CHILD_EXIT_CODE_MISSING') -and
+        -not $executorSource.Contains('$process.ExitCode')
+    ) 'NULLABLE_PROCESS_EXITCODE_NOT_USED'
 
     $index = [IO.File]::ReadAllText($indexPath, [Text.Encoding]::UTF8)
     $server = [IO.File]::ReadAllText($serverPath, [Text.Encoding]::UTF8)

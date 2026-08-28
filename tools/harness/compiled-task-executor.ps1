@@ -370,6 +370,93 @@ function Copy-EinkExecutorFiles {
     }
 }
 
+function Invoke-EinkExecutorTrackedChild {
+    param(
+        [Parameter(Mandatory=$true)][string]$CommandLine,
+        [Parameter(Mandatory=$true)][string]$WorkingDirectory,
+        [Parameter(Mandatory=$true)][string]$StdoutPath,
+        [Parameter(Mandatory=$true)][string]$StderrPath,
+        [Parameter(Mandatory=$true)][string]$ExitCodePath,
+        [ValidateRange(1,3600)][int]$TimeoutSec
+    )
+
+    $wrapperPath = Join-Path (
+        Split-Path -Parent $ExitCodePath
+    ) 'agent-child.cmd'
+
+    if (Test-Path -LiteralPath $ExitCodePath -PathType Leaf) {
+        [IO.File]::Delete($ExitCodePath)
+    }
+
+    $escapedExitCodePath = $ExitCodePath.Replace('%','%%')
+    $wrapper = @"
+@echo off
+setlocal DisableDelayedExpansion
+call $CommandLine
+set "EINK_CHILD_EXIT=%ERRORLEVEL%"
+> "$escapedExitCodePath" echo %EINK_CHILD_EXIT%
+exit /b %EINK_CHILD_EXIT%
+"@
+    [IO.File]::WriteAllText(
+        $wrapperPath,
+        $wrapper,
+        [Text.ASCIIEncoding]::new()
+    )
+
+    $process = Start-Process `
+        -FilePath 'cmd.exe' `
+        -ArgumentList (
+            '/d /s /c ""' +
+            $wrapperPath.Replace('"','') +
+            '""'
+        ) `
+        -WorkingDirectory $WorkingDirectory `
+        -WindowStyle Hidden `
+        -RedirectStandardOutput $StdoutPath `
+        -RedirectStandardError $StderrPath `
+        -PassThru
+
+    try {
+        if (-not $process.WaitForExit($TimeoutSec * 1000)) {
+            Stop-Process -Id $process.Id -Force
+            [void]$process.WaitForExit(5000)
+            throw 'CODEX_EXECUTION_TIMEOUT'
+        }
+
+        # Do not use Process.ExitCode here. Some Windows PowerShell hosts leave
+        # it null even after HasExited, WaitForExit(), and Refresh(). The child
+        # wrapper is the authoritative exit-code transport.
+        [void]$process.WaitForExit()
+        $process.Refresh()
+
+        if (-not (Test-Path -LiteralPath $ExitCodePath -PathType Leaf)) {
+            throw 'CODEX_EXECUTION_FAILED: CHILD_EXIT_CODE_MISSING'
+        }
+
+        $exitCodeText = [IO.File]::ReadAllText(
+            $ExitCodePath,
+            [Text.Encoding]::ASCII
+        ).Trim()
+        $exitCode = 0
+        if (-not [int]::TryParse($exitCodeText, [ref]$exitCode)) {
+            throw (
+                'CODEX_EXECUTION_FAILED: CHILD_EXIT_CODE_INVALID: ' +
+                $exitCodeText
+            )
+        }
+
+        [pscustomobject]@{
+            Passed = $exitCode -eq 0
+            ExitCode = [int]$exitCode
+            ExitCodePath = $ExitCodePath
+            ProcessId = [int]$process.Id
+        }
+    }
+    finally {
+        $process.Dispose()
+    }
+}
+
 function Invoke-EinkExecutorCodex {
     param(
         [Parameter(Mandatory=$true)][string]$Worktree,
@@ -384,6 +471,7 @@ function Invoke-EinkExecutorCodex {
     $stdoutPath = Join-Path $EvidenceDir 'agent.stdout.log'
     $stderrPath = Join-Path $EvidenceDir 'agent.stderr.log'
     $lastMessagePath = Join-Path $EvidenceDir 'agent-final.txt'
+    $exitCodePath = Join-Path $EvidenceDir 'agent-exit-code.txt'
     $exact = $AllowedFiles -join "`n- "
     $prompt = @"
 Execute this compiled EINK Task Contract in the isolated worktree.
@@ -413,25 +501,22 @@ Rules:
         $lastMessagePath.Replace('"',''),
         $promptPath.Replace('"','')
     )
-    $process = Start-Process `
-        -FilePath 'cmd.exe' `
-        -ArgumentList @('/d','/s','/c',('"' + $command + '"')) `
+    $result = Invoke-EinkExecutorTrackedChild `
+        -CommandLine $command `
         -WorkingDirectory $Worktree `
-        -WindowStyle Hidden `
-        -RedirectStandardOutput $stdoutPath `
-        -RedirectStandardError $stderrPath `
-        -PassThru
+        -StdoutPath $stdoutPath `
+        -StderrPath $stderrPath `
+        -ExitCodePath $exitCodePath `
+        -TimeoutSec $TimeoutSec
 
-    if (-not $process.WaitForExit($TimeoutSec * 1000)) {
-        Stop-Process -Id $process.Id -Force
-        [void]$process.WaitForExit(5000)
-        throw 'CODEX_EXECUTION_TIMEOUT'
-    }
-    if ($process.ExitCode -ne 0) {
+    if (-not $result.Passed) {
         $stderr = if (Test-Path -LiteralPath $stderrPath) {
             [IO.File]::ReadAllText($stderrPath, [Text.Encoding]::UTF8)
         } else { '' }
-        throw "CODEX_EXECUTION_FAILED: $stderr"
+        throw (
+            "CODEX_EXECUTION_FAILED: EXIT_CODE=$($result.ExitCode)" +
+            $(if ($stderr) { "`n$stderr" } else { '' })
+        )
     }
 }
 
