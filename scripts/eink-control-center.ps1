@@ -350,7 +350,6 @@ if ($existingStatus) {
         exit 1
     }
 
-    Open-ControlCenter
     Write-Output 'HARNESS CONTROL CENTER: PASS'
     Write-Output 'RESULT: ALREADY_RUNNING'
     Write-Output "URL: $url"
