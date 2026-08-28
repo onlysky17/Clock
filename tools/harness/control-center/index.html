@@ -1384,6 +1384,9 @@
     let token = "";
     let current = null;
     let renderedContractSha = "";
+    let einkBrainFormInitialized = false;
+    let einkBrainFormDirty = false;
+    let einkBrainFormTaskId = "";
     let polling = null;
     let hub = null;
     let activeProjectId = "";
@@ -1936,6 +1939,10 @@
         !historySelect.value ||
         selectedArchived ||
         !selectedTerminal;
+
+      if (!einkBrainFormInitialized) {
+        hydrateEinkBrainCurrentTask(data);
+      }
     }
     function render(data) {
       current = data;
@@ -2232,7 +2239,7 @@
       });
     }
 
-    async function refresh() {
+    async function refresh({ hydrateCurrentTask = false } = {}) {
       try {
         const response = await fetch(`/api/projects/${encodeURIComponent(activeProjectId)}/status`, {
           cache: "no-store"
@@ -2240,7 +2247,25 @@
 
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-        renderProject(await response.json());
+        const data = await response.json();
+        renderProject(data);
+
+        if (activeProjectId === "eink" && hydrateCurrentTask) {
+          const currentTaskId = String(
+            data?.brain?.currentTask?.taskId || ""
+          );
+          const historySelect = $("einkBrainHistorySelect");
+
+          if (
+            currentTaskId &&
+            [...historySelect.options].some(
+              (option) => option.value === currentTaskId
+            )
+          ) {
+            historySelect.value = currentTaskId;
+          }
+          hydrateEinkBrainCurrentTask(data, { force: true });
+        }
       } catch (error) {
         $("stateBadge").textContent = "OFFLINE";
         $("stateBadge").className = "badge blocked";
@@ -2418,8 +2443,79 @@
       textarea.style.overflowY = contentHeight > maxHeight ? "auto" : "hidden";
     }
 
-    $("einkBrainRequest").addEventListener("input", () => {
+    function getEinkBrainTaskExactFiles(task) {
+      const taskFiles = Array.isArray(task?.exactFiles)
+        ? task.exactFiles
+        : [];
+      const contractFiles = Array.isArray(task?.contract?.allowedFiles)
+        ? task.contract.allowedFiles
+        : [];
+
+      return (taskFiles.length ? taskFiles : contractFiles)
+        .map((value) => String(value || "").trim())
+        .filter(Boolean);
+    }
+
+    function findEinkBrainTask(data, taskId) {
+      const id = String(taskId || "");
+      const brain = data?.brain || {};
+      const currentTask = brain.currentTask || null;
+
+      if (String(currentTask?.taskId || "") === id) {
+        return currentTask;
+      }
+
+      return [
+        ...(Array.isArray(brain.recentTasks) ? brain.recentTasks : []),
+        ...(Array.isArray(brain.archivedTasks) ? brain.archivedTasks : [])
+      ].find((task) => String(task?.taskId || "") === id) || null;
+    }
+
+    function hydrateEinkBrainTaskForm(task, { force = false } = {}) {
+      const requestInput = $("einkBrainRequest");
+      const exactFilesInput = $("einkBrainExactFilesInput");
+
+      if (
+        !task?.taskId ||
+        !requestInput ||
+        !exactFilesInput ||
+        (!force && einkBrainFormDirty)
+      ) {
+        return false;
+      }
+
+      requestInput.value = String(task.request || "");
+      exactFilesInput.value = getEinkBrainTaskExactFiles(task).join("\n");
+      einkBrainFormTaskId = String(task.taskId);
+      einkBrainFormDirty = false;
+      einkBrainFormInitialized = true;
       resizeEinkBrainRequest();
+      return true;
+    }
+
+    function hydrateEinkBrainCurrentTask(data, { force = false } = {}) {
+      return hydrateEinkBrainTaskForm(
+        data?.brain?.currentTask || null,
+        { force }
+      );
+    }
+
+    function hydrateEinkBrainSelectedTask(data, taskId) {
+      return hydrateEinkBrainTaskForm(
+        findEinkBrainTask(data, taskId),
+        { force: true }
+      );
+    }
+
+    $("einkBrainRequest").addEventListener("input", () => {
+      einkBrainFormInitialized = true;
+      einkBrainFormDirty = true;
+      resizeEinkBrainRequest();
+    });
+
+    $("einkBrainExactFilesInput").addEventListener("input", () => {
+      einkBrainFormInitialized = true;
+      einkBrainFormDirty = true;
     });
 
     window.addEventListener("resize", () => {
@@ -2427,7 +2523,12 @@
     });
 
     $("einkBrainHistorySelect").addEventListener("change", () => {
-      if (current) renderEinkBrainState(current);
+      if (!current) return;
+      renderEinkBrainState(current);
+      hydrateEinkBrainSelectedTask(
+        current,
+        $("einkBrainHistorySelect").value
+      );
     });
 
     $("einkBrainShowArchived").addEventListener("change", () => {
@@ -2457,11 +2558,9 @@
           exactFiles,
           resumeExistingEvidence
         });
-        $("einkBrainRequest").value = "";
-        resizeEinkBrainRequest({ reset: true });
-        $("einkBrainExactFilesInput").value = "";
         $("einkBrainResumeExistingEvidence").checked = false;
         render(result);
+        hydrateEinkBrainCurrentTask(result, { force: true });
         const createdTaskId = result?.brain?.currentTask?.taskId;
         if (
           createdTaskId &&
@@ -2490,6 +2589,7 @@
       try {
         const result = await einkAction("brain-resume", { taskId });
         render(result);
+        hydrateEinkBrainCurrentTask(result, { force: true });
       } catch (error) {
         $("log").textContent = `Brain RESUME failed: ${error.message}`;
       }
@@ -2897,7 +2997,9 @@
       } catch (error) { $("electronicMessage").textContent = error.message; }
     });
 
-    $("refreshButton").addEventListener("click", refresh);
+    $("refreshButton").addEventListener("click", () => {
+      refresh({ hydrateCurrentTask: true });
+    });
     $("electronicRefreshButton").addEventListener("click", refresh);
 
     $("startHarnessButton").addEventListener("click", async () => {
