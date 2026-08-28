@@ -922,6 +922,203 @@
       color: #8b949e;
       font-style: italic;
     }
+    /* EINK OWNER UI CLEANUP V1 */
+    .eink-owner-summary {
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .eink-owner-summary .card {
+      min-height: 68px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      box-shadow: none;
+    }
+
+    .eink-owner-summary .value {
+      margin-top: 6px;
+      font-size: 12px;
+    }
+
+    .eink-brain-panel {
+      padding: 14px;
+    }
+
+    .eink-safety-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 8px 0 2px;
+    }
+
+    .eink-safety-chip {
+      padding: 5px 8px;
+      border: 1px solid #30363d;
+      border-radius: 999px;
+      background: #0d1117;
+      color: #8b949e;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .04em;
+    }
+
+    .eink-now-bar {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 2px;
+    }
+
+    .eink-now-bar .artifact-line,
+    .eink-next-action {
+      display: block;
+      min-width: 0;
+      padding: 10px 12px;
+      border: 1px solid #30363d;
+      border-radius: 10px;
+      background: #0d1117;
+    }
+
+    .eink-now-bar .artifact-line span,
+    .eink-next-action .label {
+      display: block;
+      color: #8b949e;
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: .07em;
+      text-transform: uppercase;
+    }
+
+    .eink-now-bar .artifact-line code,
+    .eink-next-action .value {
+      display: block;
+      margin-top: 5px;
+      overflow: hidden;
+      color: #e6edf3;
+      font-size: 12px;
+      font-weight: 800;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    #einkOwnerNextAction {
+      color: #79c0ff;
+    }
+
+    #einkBrainRequest {
+      height: 190px;
+      min-height: 150px;
+      max-height: min(50vh, 440px);
+    }
+
+    #einkBrainExactFilesInput {
+      min-height: 88px;
+    }
+
+    .eink-primary-actions {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .eink-primary-actions button {
+      min-height: 46px;
+      margin: 0;
+    }
+
+    #einkBrainCompileButton {
+      border-color: #388bfd;
+      background: #193d66;
+      color: #dbeafe;
+    }
+
+    .eink-secondary-tools,
+    .eink-tech-details,
+    .eink-full-exec-log {
+      border: 1px solid #30363d;
+      border-radius: 10px;
+      background: rgba(13,17,23,.56);
+    }
+
+    .eink-secondary-tools > summary,
+    .eink-tech-details > summary,
+    .eink-full-exec-log > summary {
+      padding: 9px 11px;
+      cursor: pointer;
+      color: #8b949e;
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .eink-secondary-body,
+    .eink-tech-body {
+      display: grid;
+      gap: 9px;
+      padding: 0 10px 10px;
+    }
+
+    .eink-secondary-body select {
+      width: 100%;
+      min-width: 0 !important;
+    }
+
+    .eink-secondary-body button {
+      width: 100%;
+    }
+
+    .compiled-execution-status {
+      margin-top: 2px;
+      padding: 11px;
+    }
+
+    .compiled-execution-log {
+      max-height: 126px;
+      font-size: 11px;
+      line-height: 1.45;
+    }
+
+    .eink-full-exec-log {
+      margin-top: 8px;
+    }
+
+    .eink-full-exec-log pre {
+      max-height: 360px;
+      padding: 10px;
+      border-top: 1px solid #30363d;
+      font-size: 11px;
+    }
+
+    .eink-tech-details .artifact {
+      gap: 6px;
+    }
+
+    .eink-tech-details .artifact-line {
+      grid-template-columns: 120px 1fr;
+      font-size: 11px;
+    }
+
+    .eink-harness-controls {
+      padding: 10px 12px;
+    }
+
+    .eink-harness-controls .legend {
+      margin-top: 8px;
+    }
+
+    .eink-general-log-panel {
+      padding: 12px;
+    }
+
+    .eink-general-log-panel #log {
+      max-height: 160px;
+    }
+
+    @media (max-width: 700px) {
+      .eink-now-bar,
+      .eink-primary-actions {
+        grid-template-columns: 1fr;
+      }
+    }
     .hidden { display: none !important; }
 
     @media (max-width: 800px) {
@@ -1442,6 +1639,167 @@
 
     const $ = (id) => document.getElementById(id);
 
+    function ensureEinkOwnerLayout() {
+      const view = $("einkView");
+      if (!view || view.dataset.ownerUiCleanup === "v1") return;
+
+      view.dataset.ownerUiCleanup = "v1";
+
+      const headerSub = document.querySelector("header .sub");
+      if (headerSub) {
+        headerSub.textContent =
+          "Local Control Center · Owner-gated execution";
+      }
+
+      const summary = [...view.children].find(
+        (node) => node.matches?.("section.grid")
+      );
+      if (summary) {
+        summary.classList.add("eink-owner-summary");
+      }
+
+      const request = $("einkBrainRequest");
+      const brainPanel = request?.closest(".panel");
+      const stack = request?.closest(".form-stack");
+
+      if (brainPanel) {
+        brainPanel.classList.add("eink-brain-panel");
+
+        const warning = brainPanel.querySelector(".warning");
+        if (warning) {
+          warning.className = "eink-safety-strip";
+          warning.replaceChildren();
+
+          [
+            "EXACT SCOPE",
+            "OWNER CONFIRM",
+            "NO AUTO-MERGE",
+            "HARDWARE OWNER-GATED"
+          ].forEach((text) => {
+            const chip = document.createElement("span");
+            chip.className = "eink-safety-chip";
+            chip.textContent = text;
+            warning.appendChild(chip);
+          });
+        }
+      }
+
+      const artifact = $("einkBrainCurrentId")?.closest(".artifact");
+      const currentIdRow =
+        $("einkBrainCurrentId")?.closest(".artifact-line");
+      const currentStatusRow =
+        $("einkBrainCurrentStatus")?.closest(".artifact-line");
+
+      if (stack && artifact && currentIdRow && currentStatusRow) {
+        const nowBar = document.createElement("div");
+        nowBar.className = "eink-now-bar";
+
+        const next = document.createElement("div");
+        next.className = "eink-next-action";
+        next.innerHTML =
+          '<div class="label">Next Action</div>' +
+          '<div id="einkOwnerNextAction" class="value">CREATE TASK</div>';
+
+        nowBar.append(currentIdRow, currentStatusRow, next);
+        stack.insertBefore(nowBar, stack.firstElementChild);
+      }
+
+      const createButton = $("einkBrainCreateButton");
+      const primaryActions = createButton?.closest(".actions");
+
+      if (primaryActions) {
+        primaryActions.classList.add("eink-primary-actions");
+
+        const secondary = document.createElement("details");
+        secondary.className = "eink-secondary-tools";
+
+        const summaryNode = document.createElement("summary");
+        summaryNode.textContent = "Tác vụ phụ / lịch sử";
+
+        const body = document.createElement("div");
+        body.className = "eink-secondary-body";
+
+        [
+          $("einkBrainResumeExistingEvidence")?.closest("label"),
+          $("einkBrainHistorySelect"),
+          $("einkBrainShowArchived")?.closest("label"),
+          $("einkBrainResumeButton"),
+          $("einkBrainArchiveButton")
+        ].filter(Boolean).forEach((node) => body.appendChild(node));
+
+        secondary.append(summaryNode, body);
+        primaryActions.after(secondary);
+      }
+
+      const execution = $("einkBrainExecutionStatus");
+      const executionLog = $("einkBrainExecutionLog");
+
+      if (executionLog && !$("einkBrainExecutionLogFull")) {
+        const fullDetails = document.createElement("details");
+        fullDetails.className = "eink-full-exec-log";
+
+        const fullSummary = document.createElement("summary");
+        fullSummary.textContent = "Mở log đầy đủ";
+
+        const fullLog = document.createElement("pre");
+        fullLog.id = "einkBrainExecutionLogFull";
+        fullLog.textContent = "No execution log yet.";
+
+        fullDetails.append(fullSummary, fullLog);
+        executionLog.after(fullDetails);
+      }
+
+      if (artifact && execution) {
+        const tech = document.createElement("details");
+        tech.className = "eink-tech-details";
+
+        const techSummary = document.createElement("summary");
+        techSummary.textContent = "Chi tiết kỹ thuật";
+
+        const techBody = document.createElement("div");
+        techBody.className = "eink-tech-body";
+
+        [
+          artifact,
+          $("einkBrainCurrentRequest"),
+          $("einkBrainContractEmpty"),
+          $("einkBrainContractVisualizer")
+        ].filter(Boolean).forEach((node) => techBody.appendChild(node));
+
+        tech.append(techSummary, techBody);
+        execution.after(tech);
+      }
+
+      const physicalPanel =
+        $("einkPhysicalFeedback")?.closest(".panel");
+      if (physicalPanel) {
+        physicalPanel.id = "einkHardwarePhysicalGate";
+        physicalPanel.classList.add("eink-hardware-only");
+      }
+
+      const artifactPanel =
+        $("artifactTitle")?.closest(".panel");
+      if (artifactPanel) {
+        artifactPanel.id = "einkHardwareArtifactPanel";
+        artifactPanel.classList.add("eink-hardware-only");
+      }
+
+      $("prepareButton")?.classList.add("eink-hardware-control");
+      $("burnButton")?.classList.add("eink-hardware-control");
+
+      const harnessPanel =
+        $("startHarnessButton")?.closest(".panel");
+      if (harnessPanel) {
+        harnessPanel.classList.add("eink-harness-controls");
+      }
+
+      const generalLogPanel =
+        $("log")?.closest(".panel");
+      if (generalLogPanel) {
+        generalLogPanel.classList.add("eink-general-log-panel");
+      }
+    }
+
     function shortSha(value) {
       if (!value) return "-";
       return value.slice(0, 12);
@@ -1858,18 +2216,62 @@
         prNode.classList.add("hidden");
       }
 
-      const lines = Array.isArray(execution.log) ? execution.log : [];
-      $("einkBrainExecutionLog").textContent = lines.length
-        ? lines.join("\n")
-        : (visibleState === "ARMING" ? "Requesting one-time Owner challenge…" :
-          visibleState === "STARTING" ? "Launching dedicated background worker…" :
-          "No execution log yet.");
+      const lines = Array.isArray(execution.log)
+        ? execution.log
+        : [];
+
+      const fallback =
+        visibleState === "ARMING"
+          ? "Requesting one-time Owner challenge…"
+          : visibleState === "STARTING"
+            ? "Launching dedicated background worker…"
+            : "No execution log yet.";
+
+      const latestLines = lines.slice(-8);
+
+      $("einkBrainExecutionLog").textContent =
+        latestLines.length
+          ? latestLines.join("\n")
+          : fallback;
+
+      const fullLog = $("einkBrainExecutionLogFull");
+      if (fullLog) {
+        fullLog.textContent =
+          lines.length
+            ? lines.join("\n")
+            : fallback;
+      }
     }
 
     function renderEinkBrainState(data) {
       const brain = data?.brain || {};
       const task = brain.currentTask || {};
       const contract = task.contract || {};
+
+      ensureEinkOwnerLayout();
+
+      const hardwareIntent =
+        contract.hardwareIntent === true;
+
+      [
+        "einkHardwarePhysicalGate",
+        "einkHardwareArtifactPanel"
+      ].forEach((id) => {
+        const node = $(id);
+        if (node) {
+          node.classList.toggle("hidden", !hardwareIntent);
+        }
+      });
+
+      [
+        "prepareButton",
+        "burnButton"
+      ].forEach((id) => {
+        const node = $(id);
+        if (node) {
+          node.classList.toggle("hidden", !hardwareIntent);
+        }
+      });
 
       const currentId = $("einkBrainCurrentId");
       const currentStatus = $("einkBrainCurrentStatus");
@@ -1959,6 +2361,28 @@
         exactFiles.length > 0 &&
         trackedDirty === 0
       );
+
+      const nextAction = $("einkOwnerNextAction");
+
+      if (nextAction) {
+        const executionState = String(
+          brain.execution?.state || ""
+        ).toUpperCase();
+
+        nextAction.textContent =
+          brain.executionActive === true ||
+          brain.execution?.active === true
+            ? "ĐANG CHẠY"
+            : executionState === "WAITING OWNER"
+              ? "OWNER MERGE"
+              : !task.taskId
+                ? "CREATE TASK"
+                : task.status !== "COMPILED"
+                  ? "COMPILE TASK"
+                  : !runButton.disabled
+                    ? "RUN COMPILED TASK"
+                    : "CHECK GATE";
+      }
 
       const previous = historySelect.value;
 
