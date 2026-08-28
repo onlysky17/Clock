@@ -240,6 +240,39 @@
       color: white;
     }
 
+    .compiled-execution-status {
+      margin-top: 14px;
+      padding: 14px;
+      border: 1px solid #30363d;
+      border-radius: 10px;
+      background: #0d1117;
+    }
+
+    .compiled-execution-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .compiled-execution-state {
+      padding: 7px 12px;
+      border: 1px solid #388bfd;
+      border-radius: 999px;
+      color: #79c0ff;
+      font-weight: 900;
+      letter-spacing: .05em;
+    }
+
+    .compiled-execution-state.waiting { border-color:#d29922; color:#e3b341; }
+    .compiled-execution-state.blocked { border-color:#f85149; color:#ff7b72; background:#2b1115; }
+    .compiled-execution-state.complete { border-color:#3fb950; color:#56d364; }
+    .compiled-execution-meta { margin-top:10px; color:#8b949e; font-size:12px; overflow-wrap:anywhere; }
+    .compiled-execution-reason { margin-top:10px; color:#ff7b72; font-weight:800; overflow-wrap:anywhere; }
+    .compiled-execution-pr { display:block; margin-top:10px; overflow-wrap:anywhere; }
+    .compiled-execution-log { margin:10px 0 0; max-height:220px; overflow:auto; white-space:pre-wrap; }
+
     .burn {
       background: #da3633;
       border-color: #f85149;
@@ -1021,6 +1054,17 @@
           <button id="einkBrainArchiveButton" disabled>ARCHIVE TASK</button>
         </div>
 
+        <section id="einkBrainExecutionStatus" class="compiled-execution-status" aria-live="polite">
+          <div class="compiled-execution-header">
+            <div class="label">Current Brain Task Execution</div>
+            <span id="einkBrainExecutionState" class="compiled-execution-state">NOT STARTED</span>
+          </div>
+          <div id="einkBrainExecutionMeta" class="compiled-execution-meta">Task: -</div>
+          <div id="einkBrainExecutionReason" class="compiled-execution-reason hidden"></div>
+          <a id="einkBrainExecutionPr" class="compiled-execution-pr hidden" target="_blank" rel="noopener noreferrer"></a>
+          <pre id="einkBrainExecutionLog" class="compiled-execution-log">No execution log yet.</pre>
+        </section>
+
         <div class="artifact">
           <div class="artifact-line"><span>Current Task</span><code id="einkBrainCurrentId">-</code></div>
           <div class="artifact-line"><span>Status</span><code id="einkBrainCurrentStatus">-</code></div>
@@ -1388,6 +1432,8 @@
     let einkBrainFormDirty = false;
     let einkBrainFormTaskId = "";
     let polling = null;
+    let refreshInFlight = false;
+    let localExecutionState = "";
     let hub = null;
     let activeProjectId = "";
     let selectedElectronicTaskId = "";
@@ -1774,6 +1820,52 @@
        */
       raw.innerHTML = syntaxHighlightJson(contract);
     }
+    function renderEinkExecutionStatus(data) {
+      const brain = data?.brain || {};
+      const task = brain.currentTask || {};
+      const execution = brain.execution || {};
+      const authoritativeState = String(execution.state || task.status || "NOT STARTED").toUpperCase();
+      if (localExecutionState && (execution.active || ["WAITING OWNER", "BLOCKED", "COMPLETE"].includes(authoritativeState))) {
+        localExecutionState = "";
+      }
+      const visibleState = localExecutionState || authoritativeState;
+      const stateNode = $("einkBrainExecutionState");
+      stateNode.textContent = visibleState;
+      stateNode.className = "compiled-execution-state";
+      if (visibleState === "WAITING OWNER") stateNode.classList.add("waiting");
+      if (visibleState === "BLOCKED") stateNode.classList.add("blocked");
+      if (visibleState === "COMPLETE") stateNode.classList.add("complete");
+
+      const phase = execution.persistedPhase || "-";
+      const updated = execution.updatedUtc || task.updatedUtc || "-";
+      $("einkBrainExecutionMeta").textContent =
+        `Task: ${execution.taskId || task.taskId || "-"} · Persisted phase: ${phase} · Updated: ${updated}`;
+
+      const reason = String(execution.reason || "");
+      const reasonNode = $("einkBrainExecutionReason");
+      reasonNode.textContent = reason ? `BLOCKED: ${reason}` : "";
+      reasonNode.classList.toggle("hidden", !reason || visibleState !== "BLOCKED");
+
+      const prNode = $("einkBrainExecutionPr");
+      const prUrl = String(execution.prUrl || "");
+      if (visibleState === "WAITING OWNER" && /^https:\/\//i.test(prUrl)) {
+        prNode.href = prUrl;
+        prNode.textContent = `Open resulting PR: ${prUrl}`;
+        prNode.classList.remove("hidden");
+      } else {
+        prNode.removeAttribute("href");
+        prNode.textContent = "";
+        prNode.classList.add("hidden");
+      }
+
+      const lines = Array.isArray(execution.log) ? execution.log : [];
+      $("einkBrainExecutionLog").textContent = lines.length
+        ? lines.join("\n")
+        : (visibleState === "ARMING" ? "Requesting one-time Owner challenge…" :
+          visibleState === "STARTING" ? "Launching dedicated background worker…" :
+          "No execution log yet.");
+    }
+
     function renderEinkBrainState(data) {
       const brain = data?.brain || {};
       const task = brain.currentTask || {};
@@ -1813,6 +1905,7 @@
 
       currentId.textContent = task.taskId || "-";
       currentStatus.textContent = task.status || "-";
+      renderEinkExecutionStatus(data);
       resumeCount.textContent = String(task.resumeCount ?? 0);
       historyCount.textContent = String(brain.historyCount ?? 0);
       store.textContent = brain.storeRoot || "-";
@@ -1856,6 +1949,8 @@
 
       runButton.disabled = !(
         !data?.busy &&
+        brain.executionActive !== true &&
+        brain.execution?.active !== true &&
         task.status === "COMPILED" &&
         contract.executionEligible === true &&
         contract.ownerExecutionRequired === true &&
@@ -2206,6 +2301,7 @@
     }
 
     function renderProject(data) {
+      syncExecutionPolling(data);
       if (data.adapter === "eink") {
         render(data);
         return;
@@ -2220,6 +2316,19 @@
       setVisible("genericView");
       $("genericTitle").textContent = data.projectName || data.projectId || "Project";
       $("genericStatus").textContent = JSON.stringify(data, null, 2);
+    }
+
+    function syncExecutionPolling(data) {
+      const executionActive = data?.adapter === "eink" && data?.brain?.execution?.active === true;
+      const shouldPoll = data?.adapter !== "eink" || executionActive || data?.busy === true;
+      if (shouldPoll && !polling) {
+        polling = window.setInterval(() => {
+          refresh();
+        }, 1500);
+      } else if (!shouldPoll && polling) {
+        window.clearInterval(polling);
+        polling = null;
+      }
     }
 
     function renderTabs() {
@@ -2240,6 +2349,8 @@
     }
 
     async function refresh({ hydrateCurrentTask = false } = {}) {
+      if (refreshInFlight) return;
+      refreshInFlight = true;
       try {
         const response = await fetch(`/api/projects/${encodeURIComponent(activeProjectId)}/status`, {
           cache: "no-store"
@@ -2271,6 +2382,8 @@
         $("stateBadge").className = "badge blocked";
         const target = activeProjectId === "electronic" ? $("electronicLog") : $("log");
         target.textContent = `Control Center offline: ${error.message}`;
+      } finally {
+        refreshInFlight = false;
       }
     }
 
@@ -2629,6 +2742,8 @@
         : [];
 
       $("einkBrainRunButton").disabled = true;
+      localExecutionState = "ARMING";
+      renderEinkExecutionStatus(current);
 
       try {
         const armed = await einkAction("brain-execute-arm", authority);
@@ -2645,16 +2760,21 @@
         );
 
         if (!confirmed) {
+          localExecutionState = "";
+          renderEinkExecutionStatus(current);
           $("log").textContent =
             "RUN COMPILED TASK cancelled by Owner; no execution started.";
           return;
         }
 
+        localExecutionState = "STARTING";
+        renderEinkExecutionStatus(current);
         render(await einkAction("brain-execute", {
           ...authority,
           ownerChallenge: armed.challenge
         }));
       } catch (error) {
+        localExecutionState = "";
         $("log").textContent =
           `RUN COMPILED TASK blocked: ${error.message}`;
       } finally {
@@ -3044,9 +3164,6 @@
       $("log").textContent = `Control Center offline: ${error.message}`;
     });
 
-    polling = window.setInterval(() => {
-      refresh();
-    }, 2500);
   </script>
 </body>
 </html>

@@ -65,6 +65,7 @@ $prepareScript = Join-Path $repoRoot 'scripts\eink.ps1'
 $burnScript    = Join-Path $repoRoot 'scripts\eink-spi-burn.ps1'
 $launcherPath  = Join-Path $repoRoot 'scripts\eink-control-center.ps1'
 $executorScript = Join-Path $repoRoot 'tools\harness\compiled-task-executor.ps1'
+$compiledTaskWorkerScript = Join-Path $repoRoot 'tools\harness\compiled-task-worker.ps1'
 $prepareEvidenceRoot = Join-Path $repoRoot '_incoming\EINK_HARNESS_PREPARE_TEST'
 $prepareTrustStatePath = Join-Path $prepareEvidenceRoot 'control-center-prepare-state.json'
 $ownerFinalizeRoot = Join-Path $repoRoot '_incoming\EINK_HARNESS_CONTROL_CENTER_FINALIZE'
@@ -103,6 +104,9 @@ $executorEvidenceRoot = Join-Path $repoRoot '_incoming\EINK_HARNESS_COMPILED_EXE
 if (-not (Test-Path -LiteralPath $executorScript -PathType Leaf)) {
     throw 'Compiled-task executor module is missing.'
 }
+if (-not (Test-Path -LiteralPath $compiledTaskWorkerScript -PathType Leaf)) {
+    throw 'Compiled-task worker is missing.'
+}
 . $executorScript
 
 if ($ExecutorAcceptance -and (
@@ -130,6 +134,7 @@ if ($BurnSafetyAcceptance) {
 }
 $runtimeLockPath = Join-Path $runtimeRoot ("server-$Port.json")
 $burnRuntimePath = Join-Path $runtimeRoot ("burn-$Port.json")
+$compiledTaskRuntimePath = Join-Path $runtimeRoot ("compiled-task-$Port.json")
 $currentProcess = Get-Process -Id $PID
 $serverStartUtc = $currentProcess.StartTime.ToUniversalTime().ToString('o')
 $serverStartTicks = $currentProcess.StartTime.ToUniversalTime().Ticks
@@ -448,6 +453,163 @@ function Sync-BurnRuntimeState {
         Write-Utf8JsonFile -Path $burnRuntimePath -Value $record
     }
     [pscustomobject]@{ Record=$record; Phase=$phase; Running=$false }
+}
+
+function Test-CompiledTaskWorkerIdentity {
+    param($Record)
+    if (-not $Record -or [string]$Record.schema -ne 'eink-compiled-task-worker-runtime-v1') {
+        return $false
+    }
+    try {
+        $process = Get-Process -Id ([int]$Record.pid) -ErrorAction Stop
+        return (
+            $process.StartTime.ToUniversalTime().Ticks -eq [int64]$Record.processStartTicks -and
+            [IO.Path]::GetFullPath($process.Path) -eq [IO.Path]::GetFullPath([string]$Record.executablePath)
+        )
+    }
+    catch { return $false }
+}
+
+function Start-EinkCompiledTaskWorker {
+    param(
+        [Parameter(Mandatory=$true)]$Task,
+        [Parameter(Mandatory=$true)][string]$ContractSha256,
+        [Parameter(Mandatory=$true)][string]$ExactScopeSha256,
+        [string]$AcceptanceScenario = ''
+    )
+    if (-not (Test-Path -LiteralPath $runtimeRoot -PathType Container)) {
+        [void](New-Item -ItemType Directory -Path $runtimeRoot -Force)
+    }
+    $attemptId = [Guid]::NewGuid().ToString('N')
+    $stdoutPath = Join-Path $runtimeRoot ("compiled-task-$attemptId.stdout.log")
+    $stderrPath = Join-Path $runtimeRoot ("compiled-task-$attemptId.stderr.log")
+    $arguments = @(
+        '-NoProfile','-ExecutionPolicy','Bypass','-File',"`"$compiledTaskWorkerScript`"",
+        '-RepoRoot',"`"$repoRoot`"",
+        '-CurrentTaskPath',"`"$brainCurrentTaskPath`"",
+        '-HistoryPath',"`"$brainHistoryPath`"",
+        '-EvidenceRoot',"`"$executorEvidenceRoot`"",
+        '-ExpectedTaskId',"`"$([string]$Task.taskId)`"",
+        '-ExpectedContractSha256',$ContractSha256,
+        '-ExpectedExactScopeSha256',$ExactScopeSha256,
+        '-AttemptId',$attemptId
+    )
+    if ($ExecutorAcceptance) {
+        $arguments += @('-AcceptanceMode','-AcceptanceScenario',$AcceptanceScenario)
+    }
+    $processStart = [Diagnostics.ProcessStartInfo]::new()
+    $processStart.FileName = 'powershell.exe'
+    $processStart.Arguments = $arguments -join ' '
+    $processStart.UseShellExecute = $true
+    $processStart.WindowStyle = [Diagnostics.ProcessWindowStyle]::Hidden
+    $process = [Diagnostics.Process]::Start($processStart)
+    $record = [ordered]@{
+        schema = 'eink-compiled-task-worker-runtime-v1'
+        attemptId = $attemptId
+        status = 'RUNNING'
+        pid = [int]$process.Id
+        processStartTicks = [int64]$process.StartTime.ToUniversalTime().Ticks
+        executablePath = [string]$process.Path
+        taskId = [string]$Task.taskId
+        contractSha256 = $ContractSha256
+        exactScopeSha256 = $ExactScopeSha256
+        createdUtc = [DateTime]::UtcNow.ToString('o')
+        completedUtc = ''
+        reason = ''
+        stdoutPath = $stdoutPath
+        stderrPath = $stderrPath
+    }
+    Write-Utf8JsonFile -Path $compiledTaskRuntimePath -Value $record
+    $record
+}
+
+function Sync-EinkCompiledTaskRuntimeState {
+    $record = Read-Utf8JsonFile -Path $compiledTaskRuntimePath
+    if (-not $record) {
+        return [pscustomobject]@{ Record=$null; Running=$false }
+    }
+    $task = Read-EinkBrainCurrentTask
+    $terminal = $task -and [string]$task.status -in @(
+        'BLOCKED','OWNER_MERGE_REQUIRED','PAUSED_OWNER_ACTION','COMPLETED','COMPLETE','CLOSED'
+    )
+    if ([string]$record.status -eq 'RUNNING' -and $terminal) {
+        $record.status = 'COMPLETED'
+        $record.completedUtc = [DateTime]::UtcNow.ToString('o')
+        Write-Utf8JsonFile -Path $compiledTaskRuntimePath -Value $record
+        return [pscustomobject]@{ Record=$record; Running=$false }
+    }
+    if ([string]$record.status -eq 'RUNNING' -and (Test-CompiledTaskWorkerIdentity -Record $record)) {
+        return [pscustomobject]@{ Record=$record; Running=$true }
+    }
+    if ([string]$record.status -eq 'RUNNING') {
+        $record.status = 'BLOCKED'
+        $record.completedUtc = [DateTime]::UtcNow.ToString('o')
+        $record.reason = 'COMPILED_TASK_WORKER_EXITED_WITHOUT_TERMINAL_SNAPSHOT'
+        Write-Utf8JsonFile -Path $compiledTaskRuntimePath -Value $record
+        if ($task -and [string]$task.taskId -eq [string]$record.taskId) {
+            [void](Write-EinkBrainExecutionSnapshot `
+                -Task $task `
+                -Status 'BLOCKED' `
+                -Event 'BLOCKED' `
+                -Execution ([ordered]@{
+                    active = $false
+                    phase = 'BLOCKED'
+                    reason = [string]$record.reason
+                    contractSha256 = [string]$record.contractSha256
+                    exactScopeSha256 = [string]$record.exactScopeSha256
+                    attemptId = [string]$record.attemptId
+                    log = @("BLOCKED: $($record.reason)")
+                    autoMerge = $false
+                }) `
+                -AppendHistory)
+        }
+    }
+    [pscustomobject]@{ Record=$record; Running=$false }
+}
+
+function Get-EinkBrainExecutionView {
+    param($Task, $Runtime)
+    $execution = if ($Task) { $Task.execution } else { $null }
+    $phase = if ($execution -and $execution.phase) {
+        ([string]$execution.phase).Trim().ToUpperInvariant()
+    }
+    elseif ($Task) { ([string]$Task.status).Trim().ToUpperInvariant() }
+    else { '' }
+    $state = switch ($phase) {
+        'ARMING' { 'ARMING' }
+        'EXECUTION_START' { 'STARTING' }
+        'STARTING' { 'STARTING' }
+        'PREFLIGHT' { 'PREFLIGHT' }
+        'FEATURE_BRANCH_READY' { 'BRANCH READY' }
+        'BRANCH_READY' { 'BRANCH READY' }
+        'EXECUTING' { 'EXECUTING' }
+        'VALIDATING' { 'VALIDATING' }
+        'PUSHED' { 'PUSHED' }
+        'WAITING_OWNER' { 'WAITING OWNER' }
+        'PAUSED_OWNER_ACTION' { 'WAITING OWNER' }
+        'OWNER_MERGE_REQUIRED' { 'WAITING OWNER' }
+        'BLOCKED' { 'BLOCKED' }
+        'COMPLETED' { 'COMPLETE' }
+        'COMPLETE' { 'COMPLETE' }
+        'CLOSED' { 'COMPLETE' }
+        default { if ($Task) { [string]$Task.status } else { 'NOT STARTED' } }
+    }
+    if ($Runtime -and $Runtime.Running -and $state -eq 'COMPILED') {
+        $state = 'STARTING'
+        $phase = 'EXECUTION_START'
+    }
+    [ordered]@{
+        taskId = if ($Task) { [string]$Task.taskId } else { '' }
+        state = $state
+        persistedPhase = $phase
+        active = [bool]($Runtime -and $Runtime.Running -and $state -notin @('WAITING OWNER','BLOCKED','COMPLETE'))
+        reason = if ($execution) { [string]$execution.reason } else { '' }
+        commitSha = if ($execution) { [string]$execution.commitSha } else { '' }
+        prUrl = if ($execution) { [string]$execution.prUrl } else { '' }
+        log = if ($execution) { @($execution.log) } else { @() }
+        attemptId = if ($execution) { [string]$execution.attemptId } elseif ($Runtime -and $Runtime.Record) { [string]$Runtime.Record.attemptId } else { '' }
+        updatedUtc = if ($Task) { [string]$Task.updatedUtc } else { '' }
+    }
 }
 
 function Invoke-Git {
@@ -2768,6 +2930,7 @@ function Test-EinkBrainTerminalStatus {
 function Get-EinkBrainStatus {
     Initialize-EinkBrainStore
 
+    $executionRuntime = Sync-EinkCompiledTaskRuntimeState
     $currentTask = Read-EinkBrainCurrentTask
     $latestTasks = @(Get-EinkBrainHistory)
     $recentTasks = @(
@@ -2782,7 +2945,7 @@ function Get-EinkBrainStatus {
     $archivedTasks = @($allArchivedTasks | Select-Object -First 20)
 
     [ordered]@{
-        version = '0.6'
+        version = '0.7'
         persistent = $true
         executionEnabled = $false
         executionEligible = [bool](
@@ -2795,6 +2958,8 @@ function Get-EinkBrainStatus {
         compilerPolicy = 'DETERMINISTIC_HEURISTIC_V1_WITH_EXACT_SCOPE'
         storeRoot = $brainRoot
         currentTask = $currentTask
+        execution = Get-EinkBrainExecutionView -Task $currentTask -Runtime $executionRuntime
+        executionActive = [bool]($executionRuntime -and $executionRuntime.Running)
         recentTasks = $recentTasks
         archivedTasks = $archivedTasks
         archivedCount = $allArchivedTasks.Count
@@ -3547,7 +3712,8 @@ function Write-EinkBrainExecutionSnapshot {
 function Invoke-EinkBrainExecuteArmAction {
     param([Parameter(Mandatory=$true)]$Body)
 
-    if ($script:Busy) {
+    $executionRuntime = Sync-EinkCompiledTaskRuntimeState
+    if ($script:Busy -or ($executionRuntime -and $executionRuntime.Running)) {
         return [ordered]@{ armed = $false; reason = 'HARNESS_BUSY' }
     }
 
@@ -3616,7 +3782,13 @@ function Invoke-EinkBrainExecuteArmAction {
 function Invoke-EinkBrainExecuteAction {
     param([Parameter(Mandatory=$true)]$Body)
 
-    if ($script:Busy) { return Get-ControlStatus }
+    $executionRuntime = Sync-EinkCompiledTaskRuntimeState
+    if ($script:Busy -or ($executionRuntime -and $executionRuntime.Running)) {
+        Set-LastLog -Action 'BRAIN_EXECUTE' -Result 'BLOCKED' -Lines @(
+            'BLOCKED: COMPILED_TASK_WORKER_ALREADY_ACTIVE'
+        )
+        return Get-ControlStatus
+    }
 
     $task = Read-EinkBrainCurrentTask
     if (-not $task) {
@@ -3657,63 +3829,20 @@ function Invoke-EinkBrainExecuteAction {
         return Get-ControlStatus
     }
 
-    $script:Busy = $true
     try {
-        $onState = {
-            param($phase, $lines)
-            $status = switch ([string]$phase) {
-                'PUSHED' { 'PUSHED' }
-                'OWNER_MERGE_REQUIRED' { 'OWNER_MERGE_REQUIRED' }
-                'WAITING_OWNER' { 'PAUSED_OWNER_ACTION' }
-                'BLOCKED' { 'BLOCKED' }
-                default { 'EXECUTING' }
-            }
-            [void](Write-EinkBrainExecutionSnapshot `
-                -Task $task `
-                -Status $status `
-                -Event ([string]$phase) `
-                -Execution ([ordered]@{
-                    phase = [string]$phase
-                    log = @($lines)
-                    contractSha256 = $contractSha
-                    exactScopeSha256 = $scopeSha
-                }))
-            Set-LastLog -Action 'BRAIN_EXECUTE' -Result $phase -Lines @($lines)
-        }
-
-        $result = Invoke-EinkCompiledTaskExecutor `
-            -RepoRoot $repoRoot `
+        $worker = Start-EinkCompiledTaskWorker `
             -Task $task `
-            -ExpectedContractSha256 $contractSha `
-            -EvidenceRoot $executorEvidenceRoot `
-            -AcceptanceMode:$ExecutorAcceptance `
-            -AcceptanceScenario $acceptanceScenario `
-            -OnState $onState
-
-        $finalRecord = Write-EinkBrainExecutionSnapshot `
-            -Task $task `
-            -Status ([string]$result.State) `
-            -Event 'EXECUTION_RESULT' `
-            -Execution ([ordered]@{
-                passed = [bool]$result.Passed
-                state = [string]$result.State
-                reason = [string]$result.Reason
-                contractSha256 = $contractSha
-                exactScopeSha256 = $scopeSha
-                exactFiles = @($result.AllowedFiles)
-                agentInvocations = [int]$result.AgentInvocations
-                commitSha = [string]$result.CommitSha
-                prUrl = [string]$result.PrUrl
-                evidenceDir = [string]$result.EvidenceDir
-                log = @($result.Log)
-                autoMerge = $false
-            }) `
-            -AppendHistory
-
+            -ContractSha256 $contractSha `
+            -ExactScopeSha256 $scopeSha `
+            -AcceptanceScenario $acceptanceScenario
         Set-LastLog `
             -Action 'BRAIN_EXECUTE' `
-            -Result ([string]$result.State) `
-            -Lines @($result.Log)
+            -Result 'STARTING' `
+            -Lines @(
+                'STARTING: DEDICATED_BACKGROUND_WORKER',
+                "TASK_ID: $taskId",
+                "ATTEMPT_ID: $($worker.attemptId)"
+            )
     }
     catch {
         [void](Write-EinkBrainExecutionSnapshot `
@@ -3731,15 +3860,12 @@ function Invoke-EinkBrainExecuteAction {
             "BLOCKED: $($_.Exception.Message)"
         )
     }
-    finally {
-        $script:Busy = $false
-    }
-
     Get-ControlStatus
 }
 function Get-ControlStatus {
 
     $burnRuntime = Sync-BurnRuntimeState
+    $compiledTaskRuntime = Sync-EinkCompiledTaskRuntimeState
     $repo = Get-RepoState
     $trust = Get-PrepareTrustState
     $candidate = Get-LatestPrepareCandidate -RepoState $repo
@@ -3772,7 +3898,7 @@ function Get-ControlStatus {
     $state = if ($recoveryRequired) {
         'RECOVERY_REQUIRED'
     }
-    elseif ($script:Busy -or $burnRunning) {
+    elseif ($script:Busy -or $burnRunning -or ($compiledTaskRuntime -and $compiledTaskRuntime.Running)) {
         'RUNNING'
     }
     elseif ($candidate -and $burnRuntime -and [string]$burnRuntime.Record.status -eq 'FAILED_SAFE') {
@@ -3818,12 +3944,12 @@ function Get-ControlStatus {
         branch = $repo.Branch
         head = $repo.Head
         state = $state
-        busy = [bool]($script:Busy -or $burnRunning)
+        busy = [bool]($script:Busy -or $burnRunning -or ($compiledTaskRuntime -and $compiledTaskRuntime.Running))
         trackedDirtyCount = @($repo.TrackedStatus).Count
         stagedCount = @($repo.StagedFiles).Count
         untrackedCount = @($repo.Untracked).Count
         brain = (Get-EinkBrainStatus)
-        readyToBurn = [bool]($candidate -and -not $script:Busy -and -not $burnRunning -and -not $recoveryRequired)
+        readyToBurn = [bool]($candidate -and -not $script:Busy -and -not $burnRunning -and -not ($compiledTaskRuntime -and $compiledTaskRuntime.Running) -and -not $recoveryRequired)
         recovery = [ordered]@{
             required = $recoveryRequired
             target = 'CURRENT_ARTIFACT'
