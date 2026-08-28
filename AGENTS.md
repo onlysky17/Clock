@@ -38,3 +38,10 @@ Required flow:
 9. Owner merge.
 10. Sync main.
 11. Closeout.
+
+## Failure Playbook Gate
+
+- Before agent execution, load `docs/agent/ASSISTANT_FAILURE_PLAYBOOK.md`.
+- Treat the playbook as mandatory execution context, not optional documentation.
+- Diagnose failures before mutation: implementation failure, stale acceptance, or test-environment failure.
+- Do not silently mutate the playbook. New prevention rules require an explicit reviewed change.
