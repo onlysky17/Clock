@@ -473,6 +473,17 @@ function Invoke-EinkExecutorCodex {
     $lastMessagePath = Join-Path $EvidenceDir 'agent-final.txt'
     $exitCodePath = Join-Path $EvidenceDir 'agent-exit-code.txt'
     $exact = $AllowedFiles -join "`n- "
+    $failurePlaybookPath = Join-Path $Worktree 'docs\agent\ASSISTANT_FAILURE_PLAYBOOK.md'
+    if (-not (Test-Path -LiteralPath $failurePlaybookPath -PathType Leaf)) {
+        throw 'FAILURE_PLAYBOOK_MISSING'
+    }
+    $failurePlaybook = [IO.File]::ReadAllText(
+        $failurePlaybookPath,
+        [Text.Encoding]::UTF8
+    ).Trim()
+    if ([string]::IsNullOrWhiteSpace($failurePlaybook)) {
+        throw 'FAILURE_PLAYBOOK_EMPTY'
+    }
     $prompt = @"
 Execute this compiled EINK Task Contract in the isolated worktree.
 
@@ -485,6 +496,9 @@ $($Contract.sourceRequest)
 
 EXACT WRITABLE FILES:
 - $exact
+
+FAILURE PLAYBOOK (MANDATORY):
+$failurePlaybook
 
 Rules:
 - Modify only the exact writable files above.
