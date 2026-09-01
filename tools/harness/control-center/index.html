@@ -268,6 +268,46 @@
     .compiled-execution-state.waiting { border-color:#d29922; color:#e3b341; }
     .compiled-execution-state.blocked { border-color:#f85149; color:#ff7b72; background:#2b1115; }
     .compiled-execution-state.complete { border-color:#3fb950; color:#56d364; }
+    .compiled-task-progress {
+      margin-top: 12px;
+      padding: 11px 12px;
+      border: 1px solid #30363d;
+      border-radius: 9px;
+      background: #161b22;
+    }
+    .compiled-task-progress-heading { display:flex; align-items:baseline; gap:8px; }
+    .compiled-task-progress-percent {
+      color: #8b949e;
+      font-size: 21px;
+      font-weight: 900;
+      font-variant-numeric: tabular-nums;
+    }
+    .compiled-task-progress-phase { color:#8b949e; font-size:12px; font-weight:800; overflow-wrap:anywhere; }
+    .compiled-task-progress-track {
+      height: 11px;
+      margin-top: 8px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: #30363d;
+    }
+    .compiled-task-progress-fill { width:0; height:100%; background:#8b949e; }
+    .compiled-task-progress.running { border-color:#388bfd; }
+    .compiled-task-progress.running .compiled-task-progress-percent,
+    .compiled-task-progress.running .compiled-task-progress-phase { color:#79c0ff; }
+    .compiled-task-progress.running .compiled-task-progress-fill { background:#1f6feb; }
+    .compiled-task-progress.waiting { border-color:#d29922; background:#211a0d; }
+    .compiled-task-progress.waiting .compiled-task-progress-percent,
+    .compiled-task-progress.waiting .compiled-task-progress-phase { color:#e3b341; }
+    .compiled-task-progress.waiting .compiled-task-progress-fill { background:#d29922; }
+    .compiled-task-progress.pass { border-color:#3fb950; background:#0d2115; }
+    .compiled-task-progress.pass .compiled-task-progress-percent,
+    .compiled-task-progress.pass .compiled-task-progress-phase { color:#56d364; }
+    .compiled-task-progress.pass .compiled-task-progress-fill { background:#238636; }
+    .compiled-task-progress.blocked { border-color:#f85149; background:#2b1115; }
+    .compiled-task-progress.blocked .compiled-task-progress-percent,
+    .compiled-task-progress.blocked .compiled-task-progress-phase { color:#ff7b72; }
+    .compiled-task-progress.blocked .compiled-task-progress-fill { background:#da3633; }
+    .compiled-task-progress-reason { margin-top:8px; color:#ff7b72; font-size:12px; font-weight:800; overflow-wrap:anywhere; }
     .compiled-execution-meta { margin-top:10px; color:#8b949e; font-size:12px; overflow-wrap:anywhere; }
     .compiled-execution-reason { margin-top:10px; color:#ff7b72; font-weight:800; overflow-wrap:anywhere; }
     .compiled-execution-pr { display:block; margin-top:10px; overflow-wrap:anywhere; }
@@ -1256,6 +1296,16 @@
             <div class="label">Current Brain Task Execution</div>
             <span id="einkBrainExecutionState" class="compiled-execution-state">NOT STARTED</span>
           </div>
+          <div id="einkBrainExecutionProgress" class="compiled-task-progress idle">
+            <div class="compiled-task-progress-heading">
+              <span id="einkBrainExecutionProgressPercent" class="compiled-task-progress-percent">0%</span>
+              <span id="einkBrainExecutionProgressPhase" class="compiled-task-progress-phase">READY</span>
+            </div>
+            <div id="einkBrainExecutionProgressTrack" class="compiled-task-progress-track" role="progressbar" aria-label="Compiled task persisted phase progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+              <div id="einkBrainExecutionProgressFill" class="compiled-task-progress-fill"></div>
+            </div>
+            <div id="einkBrainExecutionProgressReason" class="compiled-task-progress-reason hidden"></div>
+          </div>
           <div id="einkBrainExecutionMeta" class="compiled-execution-meta">Task: -</div>
           <div id="einkBrainExecutionReason" class="compiled-execution-reason hidden"></div>
           <a id="einkBrainExecutionPr" class="compiled-execution-pr hidden" target="_blank" rel="noopener noreferrer"></a>
@@ -2178,6 +2228,88 @@
        */
       raw.innerHTML = syntaxHighlightJson(contract);
     }
+    // EINK_COMPILED_PROGRESS_LOGIC_START
+    const EINK_COMPILED_PHASE_PERCENT = Object.freeze({
+      READY: 0,
+      CREATED: 0,
+      COMPILED: 10,
+      OWNER_RUN_REQUIRED: 10,
+      EXECUTION_START: 15,
+      PREFLIGHT: 20,
+      WORKSTATION_PREREQUISITES: 25,
+      FEATURE_BRANCH_READY: 35,
+      EXECUTING: 55,
+      VALIDATING: 75,
+      PUSHED: 90,
+      OWNER_MERGE_REQUIRED: 95,
+      WAITING_OWNER: 95,
+      PAUSED_OWNER_ACTION: 95,
+      COMPLETE: 100,
+      PASS: 100
+    });
+
+    function normalizeEinkCompiledPhase(value) {
+      return String(value || "")
+        .trim()
+        .toUpperCase()
+        .replace(/[\s-]+/g, "_");
+    }
+
+    function persistedEinkCompiledPhaseFromLog(line) {
+      const normalized = normalizeEinkCompiledPhase(line);
+      if (/^WORKSTATION_PREREQUISITES:_PASS(?:_|$)/.test(normalized)) {
+        return "WORKSTATION_PREREQUISITES";
+      }
+      return Object.keys(EINK_COMPILED_PHASE_PERCENT).find(
+        phase => normalized === phase || normalized.startsWith(`${phase}:`)
+      ) || "";
+    }
+
+    function resolveEinkCompiledProgress(execution, task) {
+      const authoritativeState = normalizeEinkCompiledPhase(execution?.state || task?.status);
+      const contractState = normalizeEinkCompiledPhase(task?.contract?.executionState);
+      const blocked = authoritativeState === "BLOCKED" || authoritativeState === "FAIL" ||
+        authoritativeState.includes("BLOCKED") || authoritativeState.endsWith("_FAIL");
+      const candidates = [];
+      const addCandidate = value => {
+        const phase = normalizeEinkCompiledPhase(value);
+        const percentage = EINK_COMPILED_PHASE_PERCENT[phase];
+        if (percentage === undefined || (blocked && percentage === 100)) return;
+        candidates.push({ phase, percentage });
+      };
+
+      addCandidate(task?.status);
+      addCandidate(contractState);
+      addCandidate(authoritativeState);
+      addCandidate(execution?.persistedPhase);
+      (Array.isArray(execution?.log) ? execution.log : []).forEach(line => {
+        addCandidate(persistedEinkCompiledPhaseFromLog(line));
+      });
+
+      const reached = candidates.reduce(
+        (latest, candidate) => candidate.percentage >= latest.percentage ? candidate : latest,
+        { phase: "READY", percentage: 0 }
+      );
+      const complete = !blocked && (
+        ["COMPLETE", "PASS"].includes(authoritativeState) || reached.percentage === 100
+      );
+      const waiting = !blocked && !complete && (
+        ["WAITING_OWNER", "OWNER_MERGE_REQUIRED", "PAUSED_OWNER_ACTION", "OWNER_RUN_REQUIRED"].includes(authoritativeState) ||
+        ["WAITING_OWNER", "OWNER_MERGE_REQUIRED", "PAUSED_OWNER_ACTION", "OWNER_RUN_REQUIRED"].includes(contractState) ||
+        reached.percentage === 95
+      );
+      const mode = blocked ? "blocked" : complete ? "pass" : waiting ? "waiting" :
+        reached.percentage === 0 ? "idle" : "running";
+
+      return {
+        percentage: reached.percentage,
+        phase: reached.phase,
+        mode,
+        reason: blocked ? String(execution?.reason || "Execution blocked.") : ""
+      };
+    }
+    // EINK_COMPILED_PROGRESS_LOGIC_END
+
     function renderEinkExecutionStatus(data) {
       const brain = data?.brain || {};
       const task = brain.currentTask || {};
@@ -2193,6 +2325,19 @@
       if (visibleState === "WAITING OWNER") stateNode.classList.add("waiting");
       if (visibleState === "BLOCKED") stateNode.classList.add("blocked");
       if (visibleState === "COMPLETE") stateNode.classList.add("complete");
+
+      const progress = resolveEinkCompiledProgress(execution, task);
+      const progressNode = $("einkBrainExecutionProgress");
+      progressNode.className = `compiled-task-progress ${progress.mode}`;
+      $("einkBrainExecutionProgressPercent").textContent = `${progress.percentage}%`;
+      $("einkBrainExecutionProgressPhase").textContent = progress.phase.replaceAll("_", " ");
+      $("einkBrainExecutionProgressFill").style.width = `${progress.percentage}%`;
+      const progressTrack = $("einkBrainExecutionProgressTrack");
+      progressTrack.setAttribute("aria-valuenow", String(progress.percentage));
+      progressTrack.setAttribute("aria-valuetext", `${progress.percentage}% ${progress.phase}`);
+      const progressReason = $("einkBrainExecutionProgressReason");
+      progressReason.textContent = progress.reason ? `BLOCKED: ${progress.reason}` : "";
+      progressReason.classList.toggle("hidden", !progress.reason);
 
       const phase = execution.persistedPhase || "-";
       const updated = execution.updatedUtc || task.updatedUtc || "-";
