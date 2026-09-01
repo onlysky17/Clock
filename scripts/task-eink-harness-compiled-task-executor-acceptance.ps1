@@ -10,7 +10,7 @@ $modulePath = Join-Path $repoRoot 'tools\harness\compiled-task-executor.ps1'
 $serverPath = Join-Path $repoRoot 'tools\harness\control-center\server.ps1'
 $indexPath = Join-Path $repoRoot 'tools\harness\control-center\index.html'
 $registryPath = Join-Path $repoRoot 'tools\harness\control-center\projects.json'
-$acceptanceRoot = Join-Path $repoRoot '_incoming\EINK_HARNESS_COMPILED_EXECUTOR_ACCEPTANCE'
+$acceptanceRoot = Join-Path ([IO.Path]::GetTempPath()) 'eink-compiled-task-executor-acceptance'
 $runRoot = Join-Path $acceptanceRoot ([Guid]::NewGuid().ToString('N'))
 
 function Assert-True {
@@ -173,7 +173,7 @@ function Import-ActualChallengeFunctions {
 }
 
 $realBefore = @(& git -C $repoRoot status --short)
-$realBranchBefore = (& git -C $repoRoot branch --show-current).Trim()
+$realBranchBefore = (@(& git -C $repoRoot branch --show-current) -join '').Trim()
 $realHeadBefore = (& git -C $repoRoot rev-parse HEAD).Trim()
 
 try {
@@ -315,7 +315,7 @@ try {
 
     $realAfter = @(& git -C $repoRoot status --short)
     Assert-True ((@($realBefore) -join "`n") -eq (@($realAfter) -join "`n")) 'REAL_WORKTREE_STATUS_PRESERVED'
-    Assert-True ((& git -C $repoRoot branch --show-current).Trim() -eq $realBranchBefore) 'REAL_BRANCH_PRESERVED'
+    Assert-True ((@(& git -C $repoRoot branch --show-current) -join '').Trim() -eq $realBranchBefore) 'REAL_BRANCH_PRESERVED'
     Assert-True ((& git -C $repoRoot rev-parse HEAD).Trim() -eq $realHeadBefore) 'REAL_HEAD_PRESERVED'
 
     Write-Output 'EINK HARNESS COMPILED TASK EXECUTOR ACCEPTANCE: PASS'
