@@ -218,6 +218,12 @@ $script:ExecutorChallengeExpiresUtc = [DateTime]::MinValue
 $script:ExecutorChallengeTaskId = ''
 $script:ExecutorChallengeContractSha = ''
 $script:ExecutorChallengeScopeSha = ''
+$script:PublicationChallengeHash = ''
+$script:PublicationChallengeExpiresUtc = [DateTime]::MinValue
+$script:PublicationChallengeTaskId = ''
+$script:PublicationChallengeContractSha = ''
+$script:PublicationChallengeScopeSha = ''
+$script:PublicationChallengeFilesSha = ''
 $script:ArchiveChallengeHash = ''
 $script:ArchiveChallengeExpiresUtc = [DateTime]::MinValue
 $script:ArchiveChallengeTaskId = ''
@@ -527,6 +533,7 @@ function Start-EinkCompiledTaskWorker {
         [Parameter(Mandatory=$true)]$Task,
         [Parameter(Mandatory=$true)][string]$ContractSha256,
         [Parameter(Mandatory=$true)][string]$ExactScopeSha256,
+        [switch]$PublicationResume,
         [string]$AcceptanceScenario = ''
     )
     if (-not (Test-Path -LiteralPath $runtimeRoot -PathType Container)) {
@@ -548,6 +555,9 @@ function Start-EinkCompiledTaskWorker {
     )
     if ($ExecutorAcceptance) {
         $arguments += @('-AcceptanceMode','-AcceptanceScenario',$AcceptanceScenario)
+    }
+    if ($PublicationResume) {
+        $arguments += '-PublicationResume'
     }
     $powerShell = Get-Command 'powershell.exe' -ErrorAction Stop
     $stdoutStream = [IO.File]::Open(
@@ -609,6 +619,7 @@ function Start-EinkCompiledTaskWorker {
         taskId = [string]$Task.taskId
         contractSha256 = $ContractSha256
         exactScopeSha256 = $ExactScopeSha256
+        mode = if ($PublicationResume) { 'PUBLICATION_RESUME' } else { 'INITIAL_EXECUTION' }
         createdUtc = $createdUtc.ToString('o')
         startupGraceUntilUtc = $createdUtc.AddSeconds(10).ToString('o')
         completedUtc = ''
@@ -627,7 +638,13 @@ function Sync-EinkCompiledTaskRuntimeState {
     }
     Complete-EinkCompiledTaskWorkerIo -WorkerPid ([int]$record.pid)
     $task = Read-EinkBrainCurrentTask
-    $terminal = $task -and [string]$task.status -in @(
+    $publicationStarting = (
+        [string]$record.mode -eq 'PUBLICATION_RESUME' -and
+        $task -and
+        [string]$task.status -eq 'PAUSED_OWNER_ACTION' -and
+        [string]$task.execution.attemptId -ne [string]$record.attemptId
+    )
+    $terminal = -not $publicationStarting -and $task -and [string]$task.status -in @(
         'BLOCKED','OWNER_MERGE_REQUIRED','PAUSED_OWNER_ACTION','COMPLETED','COMPLETE','CLOSED'
     )
     if ([string]$record.status -eq 'RUNNING' -and $terminal) {
@@ -688,6 +705,12 @@ function Get-EinkBrainExecutionView {
         'BRANCH_READY' { 'BRANCH READY' }
         'EXECUTING' { 'EXECUTING' }
         'VALIDATING' { 'VALIDATING' }
+        'PUBLICATION_RESUME_START' { 'STARTING' }
+        'FEATURE_BRANCH_REVERIFIED' { 'BRANCH READY' }
+        'SCOPE_RECHECKED' { 'VALIDATING' }
+        'VALIDATION_RERUN_PASS' { 'VALIDATING' }
+        'EXACT_STAGE_INSPECTED' { 'VALIDATING' }
+        'COMMITTED' { 'PUSHED' }
         'PUSHED' { 'PUSHED' }
         'WAITING_OWNER' { 'WAITING OWNER' }
         'PAUSED_OWNER_ACTION' { 'WAITING OWNER' }
@@ -886,6 +909,59 @@ function Test-AndConsumeExecutorOwnerChallenge {
     $script:ExecutorChallengeTaskId = ''
     $script:ExecutorChallengeContractSha = ''
     $script:ExecutorChallengeScopeSha = ''
+    return [bool]$valid
+}
+
+function New-PublicationOwnerChallenge {
+    param(
+        [Parameter(Mandatory=$true)][string]$TaskId,
+        [Parameter(Mandatory=$true)][string]$ContractSha256,
+        [Parameter(Mandatory=$true)][string]$ExactScopeSha256,
+        [Parameter(Mandatory=$true)][string[]]$AllowedFiles
+    )
+
+    $challenge = [Guid]::NewGuid().ToString('N')
+    $script:PublicationChallengeHash = Get-TextSha256 -Text $challenge
+    $script:PublicationChallengeExpiresUtc = [DateTime]::UtcNow.AddMinutes(2)
+    $script:PublicationChallengeTaskId = $TaskId.Trim()
+    $script:PublicationChallengeContractSha = $ContractSha256.Trim().ToUpperInvariant()
+    $script:PublicationChallengeScopeSha = $ExactScopeSha256.Trim().ToUpperInvariant()
+    $script:PublicationChallengeFilesSha = Get-TextSha256 -Text (@($AllowedFiles) -join "`n")
+
+    [pscustomobject]@{
+        armed = $true
+        challenge = $challenge
+        expiresUtc = $script:PublicationChallengeExpiresUtc.ToString('o')
+        taskId = $script:PublicationChallengeTaskId
+        contractSha256 = $script:PublicationChallengeContractSha
+        exactScopeSha256 = $script:PublicationChallengeScopeSha
+        allowedFiles = @($AllowedFiles)
+    }
+}
+
+function Test-AndConsumePublicationOwnerChallenge {
+    param(
+        [Parameter(Mandatory=$true)][string]$Challenge,
+        [Parameter(Mandatory=$true)][string]$TaskId,
+        [Parameter(Mandatory=$true)][string]$ContractSha256,
+        [Parameter(Mandatory=$true)][string]$ExactScopeSha256,
+        [Parameter(Mandatory=$true)][string[]]$AllowedFiles
+    )
+
+    $valid = -not [string]::IsNullOrWhiteSpace($Challenge) -and
+        [DateTime]::UtcNow -le $script:PublicationChallengeExpiresUtc -and
+        (Get-TextSha256 -Text $Challenge) -eq $script:PublicationChallengeHash -and
+        $TaskId.Trim() -eq $script:PublicationChallengeTaskId -and
+        $ContractSha256.Trim().ToUpperInvariant() -eq $script:PublicationChallengeContractSha -and
+        $ExactScopeSha256.Trim().ToUpperInvariant() -eq $script:PublicationChallengeScopeSha -and
+        (Get-TextSha256 -Text (@($AllowedFiles) -join "`n")) -eq $script:PublicationChallengeFilesSha
+
+    $script:PublicationChallengeHash = ''
+    $script:PublicationChallengeExpiresUtc = [DateTime]::MinValue
+    $script:PublicationChallengeTaskId = ''
+    $script:PublicationChallengeContractSha = ''
+    $script:PublicationChallengeScopeSha = ''
+    $script:PublicationChallengeFilesSha = ''
     return [bool]$valid
 }
 
@@ -3988,6 +4064,136 @@ function Invoke-EinkBrainExecuteAction {
     }
     Get-ControlStatus
 }
+
+function Invoke-EinkBrainPublicationArmAction {
+    param([Parameter(Mandatory=$true)]$Body)
+
+    $executionRuntime = Sync-EinkCompiledTaskRuntimeState
+    if ($script:Busy -or ($executionRuntime -and $executionRuntime.Running)) {
+        return [ordered]@{ armed = $false; reason = 'HARNESS_BUSY' }
+    }
+    $task = Read-EinkBrainCurrentTask
+    if (
+        -not $task -or
+        [string]$task.status -ne 'PAUSED_OWNER_ACTION' -or
+        -not $task.execution -or
+        [string]$task.execution.phase -ne 'WAITING_OWNER' -or
+        [string]$task.execution.state -ne 'PAUSED_OWNER_ACTION'
+    ) { return [ordered]@{ armed = $false; reason = 'PUBLICATION_RESUME_WRONG_STATE' } }
+
+    $contract = $task.contract
+    $taskId = ([string]$Body.taskId).Trim()
+    $contractSha = ([string]$Body.contractSha256).Trim().ToUpperInvariant()
+    $scopeSha = ([string]$Body.exactScopeSha256).Trim().ToUpperInvariant()
+    $allowed = @($contract.allowedFiles | ForEach-Object { ([string]$_).Replace('\','/') })
+    $requestedFiles = @($Body.allowedFiles | ForEach-Object { ([string]$_).Replace('\','/') })
+    if (
+        $taskId -ne [string]$task.taskId -or
+        $contractSha -ne ([string]$contract.contractSha256).Trim().ToUpperInvariant() -or
+        $contractSha -ne (Get-EinkExecutorContractSha256 -Contract $contract) -or
+        $scopeSha -ne ([string]$contract.exactScopeSha256).Trim().ToUpperInvariant() -or
+        $scopeSha -ne (Get-EinkExecutorSha256Text -Text ($allowed -join "`n")) -or
+        ($requestedFiles -join "`n") -ne ($allowed -join "`n")
+    ) { return [ordered]@{ armed = $false; reason = 'PUBLICATION_AUTHORITY_MISMATCH' } }
+
+    $evidence = $task.execution.implementationEvidence
+    if (
+        -not [bool]$task.execution.passed -or
+        -not $evidence -or
+        -not [bool]$evidence.validated -or
+        @($evidence.validationEvidence).Count -eq 0 -or
+        (@($evidence.exactFiles) -join "`n") -ne ($allowed -join "`n") -or
+        [string]::IsNullOrWhiteSpace([string]$evidence.implementationDiffSha256)
+    ) { return [ordered]@{ armed = $false; reason = 'VALIDATED_IMPLEMENTATION_EVIDENCE_MISSING' } }
+
+    try {
+        $repo = Get-EinkExecutorRepoStatus -RepoRoot $repoRoot
+        if (
+            $repo.Staged.Count -gt 0 -or
+            $repo.Head -ne [string]$evidence.validatedHead -or
+            $repo.Branch -ne [string]$evidence.validatedBranch
+        ) { return [ordered]@{ armed = $false; reason = 'VALIDATED_REPOSITORY_STATE_DRIFT' } }
+        $changed = @(Assert-EinkExecutorScope -RepoRoot $repoRoot -AllowedFiles $allowed -RequireChange)
+        if ((@($evidence.changedFiles) -join "`n") -ne ($changed -join "`n")) {
+            return [ordered]@{ armed = $false; reason = 'VALIDATED_IMPLEMENTATION_SCOPE_DRIFT' }
+        }
+        $diffSha = Get-EinkExecutorImplementationDiffSha256 -RepoRoot $repoRoot -AllowedFiles $allowed
+        if (-not $diffSha.Equals([string]$evidence.implementationDiffSha256,[StringComparison]::OrdinalIgnoreCase)) {
+            return [ordered]@{ armed = $false; reason = 'VALIDATED_IMPLEMENTATION_DIFF_DRIFT' }
+        }
+    }
+    catch {
+        return [ordered]@{ armed = $false; reason = $_.Exception.Message }
+    }
+
+    New-PublicationOwnerChallenge `
+        -TaskId $taskId `
+        -ContractSha256 $contractSha `
+        -ExactScopeSha256 $scopeSha `
+        -AllowedFiles $allowed
+}
+
+function Invoke-EinkBrainPublicationAction {
+    param([Parameter(Mandatory=$true)]$Body)
+
+    $executionRuntime = Sync-EinkCompiledTaskRuntimeState
+    if ($script:Busy -or ($executionRuntime -and $executionRuntime.Running)) {
+        Set-LastLog -Action 'BRAIN_PUBLICATION_RESUME' -Result 'BLOCKED' -Lines @('BLOCKED: COMPILED_TASK_WORKER_ALREADY_ACTIVE')
+        return Get-ControlStatus
+    }
+    $taskId = ([string]$Body.taskId).Trim()
+    $contractSha = ([string]$Body.contractSha256).Trim().ToUpperInvariant()
+    $scopeSha = ([string]$Body.exactScopeSha256).Trim().ToUpperInvariant()
+    $challenge = [string]$Body.ownerChallenge
+    $allowed = @($Body.allowedFiles | ForEach-Object { ([string]$_).Replace('\','/') })
+    if (-not (Test-AndConsumePublicationOwnerChallenge `
+        -Challenge $challenge `
+        -TaskId $taskId `
+        -ContractSha256 $contractSha `
+        -ExactScopeSha256 $scopeSha `
+        -AllowedFiles $allowed)) {
+        Set-LastLog -Action 'BRAIN_PUBLICATION_RESUME' -Result 'BLOCKED' -Lines @('BLOCKED: OWNER_PUBLICATION_CONFIRMATION_REQUIRED')
+        return Get-ControlStatus
+    }
+
+    $task = Read-EinkBrainCurrentTask
+    if (
+        -not $task -or
+        [string]$task.status -ne 'PAUSED_OWNER_ACTION' -or
+        [string]$task.execution.phase -ne 'WAITING_OWNER' -or
+        [string]$task.execution.state -ne 'PAUSED_OWNER_ACTION'
+    ) {
+        Set-LastLog -Action 'BRAIN_PUBLICATION_RESUME' -Result 'BLOCKED' -Lines @('BLOCKED: PUBLICATION_RESUME_WRONG_STATE')
+        return Get-ControlStatus
+    }
+    if (
+        $taskId -ne [string]$task.taskId -or
+        $contractSha -ne ([string]$task.contract.contractSha256).Trim().ToUpperInvariant() -or
+        $scopeSha -ne ([string]$task.contract.exactScopeSha256).Trim().ToUpperInvariant() -or
+        ($allowed -join "`n") -ne (@($task.contract.allowedFiles) -join "`n")
+    ) {
+        Set-LastLog -Action 'BRAIN_PUBLICATION_RESUME' -Result 'BLOCKED' -Lines @('BLOCKED: PUBLICATION_AUTHORITY_MISMATCH')
+        return Get-ControlStatus
+    }
+
+    try {
+        $worker = Start-EinkCompiledTaskWorker `
+            -Task $task `
+            -ContractSha256 $contractSha `
+            -ExactScopeSha256 $scopeSha `
+            -PublicationResume
+        Set-LastLog -Action 'BRAIN_PUBLICATION_RESUME' -Result 'STARTING' -Lines @(
+            'STARTING: OWNER_APPROVED_PUBLICATION_RESUME',
+            "TASK_ID: $taskId",
+            "ATTEMPT_ID: $($worker.attemptId)",
+            'CODEX: NOT INVOKED'
+        )
+    }
+    catch {
+        Set-LastLog -Action 'BRAIN_PUBLICATION_RESUME' -Result 'BLOCKED' -Lines @("BLOCKED: $($_.Exception.Message)")
+    }
+    Get-ControlStatus
+}
 function Get-ControlStatus {
 
     $burnRuntime = Sync-BurnRuntimeState
@@ -5392,7 +5598,9 @@ try {
                         'brain-archive-arm',
                         'brain-archive',
                         'brain-execute-arm',
-                        'brain-execute'
+                        'brain-execute',
+                        'brain-publication-arm',
+                        'brain-publication-resume'
                     )
                 ) {
                     try {
@@ -5433,6 +5641,12 @@ try {
                     }
                     elseif ($actionId -eq 'brain-execute-arm') {
                         Invoke-EinkBrainExecuteArmAction -Body $body
+                    }
+                    elseif ($actionId -eq 'brain-publication-arm') {
+                        Invoke-EinkBrainPublicationArmAction -Body $body
+                    }
+                    elseif ($actionId -eq 'brain-publication-resume') {
+                        Invoke-EinkBrainPublicationAction -Body $body
                     }
                     else {
                         Invoke-EinkBrainExecuteAction -Body $body

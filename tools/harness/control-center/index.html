@@ -1288,6 +1288,7 @@
           <button id="einkBrainResumeButton" disabled>RESUME TASK</button>
           <button id="einkBrainCompileButton" disabled>COMPILE TASK</button>
           <button id="einkBrainRunButton" class="run-compiled" disabled>RUN COMPILED TASK</button>
+          <button id="einkBrainPublicationButton" class="pass-action" disabled>APPROVE PUBLICATION</button>
           <button id="einkBrainArchiveButton" disabled>ARCHIVE TASK</button>
         </div>
 
@@ -2429,6 +2430,7 @@
       const resumeButton = $("einkBrainResumeButton");
       const compileButton = $("einkBrainCompileButton");
       const runButton = $("einkBrainRunButton");
+      const publicationButton = $("einkBrainPublicationButton");
       const archiveButton = $("einkBrainArchiveButton");
       const showArchived = $("einkBrainShowArchived");
 
@@ -2444,6 +2446,7 @@
         !resumeButton ||
         !compileButton ||
         !runButton ||
+        !publicationButton ||
         !archiveButton ||
         !showArchived
       ) {
@@ -2507,6 +2510,18 @@
         trackedDirty === 0
       );
 
+      const publicationState = String(brain.execution?.persistedPhase || "").toUpperCase();
+      publicationButton.disabled = !(
+        !data?.busy &&
+        brain.executionActive !== true &&
+        brain.execution?.active !== true &&
+        task.status === "PAUSED_OWNER_ACTION" &&
+        publicationState === "WAITING_OWNER" &&
+        task.execution?.passed === true &&
+        task.execution?.implementationEvidence?.validated === true &&
+        exactFiles.length > 0
+      );
+
       const nextAction = $("einkOwnerNextAction");
 
       if (nextAction) {
@@ -2519,7 +2534,9 @@
           brain.execution?.active === true
             ? "ĐANG CHẠY"
             : executionState === "WAITING OWNER"
-              ? "OWNER MERGE"
+              ? task.status === "PAUSED_OWNER_ACTION"
+                ? "APPROVE PUBLICATION"
+                : "OWNER MERGE"
               : !task.taskId
                 ? "CREATE TASK"
                 : task.status !== "COMPILED"
@@ -3346,6 +3363,56 @@
         localExecutionState = "";
         $("log").textContent =
           `RUN COMPILED TASK blocked: ${error.message}`;
+      } finally {
+        await refresh();
+      }
+    });
+    $("einkBrainPublicationButton").addEventListener("click", async () => {
+      const task = current?.brain?.currentTask;
+      const contract = task?.contract;
+      const button = $("einkBrainPublicationButton");
+      if (!task || !contract || button.disabled) return;
+
+      const exactFiles = Array.isArray(contract.allowedFiles)
+        ? contract.allowedFiles.filter(Boolean)
+        : [];
+      const authority = {
+        taskId: String(task.taskId || ""),
+        contractSha256: String(contract.contractSha256 || ""),
+        exactScopeSha256: String(contract.exactScopeSha256 || ""),
+        allowedFiles: exactFiles
+      };
+      button.disabled = true;
+
+      try {
+        const confirmed = window.confirm(
+          `APPROVE VALIDATED PUBLICATION\n\n` +
+          `Task ID: ${authority.taskId}\n` +
+          `Contract SHA: ${authority.contractSha256}\n` +
+          `Exact files (${exactFiles.length}):\n- ${exactFiles.join("\n- ")}\n\n` +
+          `Validation and scope will be rerun. Existing changes will be committed, pushed, and opened as a PR. No Codex rerun. No auto-merge.`
+        );
+        if (!confirmed) {
+          $("log").textContent =
+            "Publication cancelled by Owner; paused validated task preserved and nothing published.";
+          return;
+        }
+        localExecutionState = "ARMING";
+        renderEinkExecutionStatus(current);
+        const armed = await einkAction("brain-publication-arm", authority);
+        if (!armed?.armed || !armed?.challenge) {
+          throw new Error(armed?.reason || "PUBLICATION_NOT_ARMED");
+        }
+        localExecutionState = "STARTING";
+        renderEinkExecutionStatus(current);
+        render(await einkAction("brain-publication-resume", {
+          ...authority,
+          ownerChallenge: armed.challenge
+        }));
+      } catch (error) {
+        localExecutionState = "";
+        $("log").textContent =
+          `Publication resume blocked: ${error.message}`;
       } finally {
         await refresh();
       }
