@@ -3829,6 +3829,28 @@ function Invoke-EinkBrainExecuteAction {
         return Get-ControlStatus
     }
 
+    if (-not $ExecutorAcceptance) {
+        $workstation = Test-EinkExecutorWorkstationPrerequisites `
+            -RepoRoot $repoRoot
+        if (-not $workstation.Ready) {
+            [void](Write-EinkBrainExecutionSnapshot `
+                -Task $task `
+                -Status 'BLOCKED' `
+                -Event 'BLOCKED_PREREQUISITE' `
+                -Execution ([ordered]@{
+                    reason = $workstation.Reason
+                    contractSha256 = $contractSha
+                    exactScopeSha256 = $scopeSha
+                    autoMerge = $false
+                }) `
+                -AppendHistory)
+            Set-LastLog -Action 'BRAIN_EXECUTE' -Result 'BLOCKED' -Lines @(
+                $workstation.Reason
+            )
+            return Get-ControlStatus
+        }
+    }
+
     try {
         $worker = Start-EinkCompiledTaskWorker `
             -Task $task `
