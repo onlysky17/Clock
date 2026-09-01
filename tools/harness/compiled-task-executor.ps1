@@ -531,70 +531,96 @@ function Invoke-EinkExecutorTrackedChild {
         [ValidateRange(1,3600)][int]$TimeoutSec
     )
 
-    $wrapperPath = Join-Path (
-        Split-Path -Parent $ExitCodePath
-    ) 'agent-child.cmd'
+    $childRoot = Split-Path -Parent $ExitCodePath
+    $wrapperPath = Join-Path $childRoot 'agent-child.ps1'
+    $commandPath = Join-Path $childRoot 'agent-command.txt'
 
     if (Test-Path -LiteralPath $ExitCodePath -PathType Leaf) {
         [IO.File]::Delete($ExitCodePath)
     }
 
-    $escapedExitCodePath = $ExitCodePath.Replace('%','%%')
-    $wrapper = @"
-@echo off
-setlocal DisableDelayedExpansion
-call $CommandLine
-set "EINK_CHILD_EXIT=%ERRORLEVEL%"
-> "$escapedExitCodePath" echo %EINK_CHILD_EXIT%
-exit /b %EINK_CHILD_EXIT%
-"@
+    [IO.File]::WriteAllText(
+        $commandPath,
+        $CommandLine,
+        [Text.UTF8Encoding]::new($false)
+    )
+    $wrapper = @'
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory=$true)][string]$CommandPath,
+    [Parameter(Mandatory=$true)][string]$ExitCodePath
+)
+$ErrorActionPreference = 'Stop'
+$commandInterpreter = [Environment]::GetEnvironmentVariable('ComSpec')
+if ([string]::IsNullOrWhiteSpace($commandInterpreter)) {
+    $commandInterpreter = 'cmd.exe'
+}
+$commandLine = [IO.File]::ReadAllText($CommandPath, [Text.Encoding]::UTF8)
+$childExitCode = $null
+try {
+    & $commandInterpreter /d /s /c $commandLine
+    $childExitCode = $LASTEXITCODE
+}
+catch {
+    [Console]::Error.WriteLine($_.Exception.Message)
+}
+$transportValue = if ($null -ne $childExitCode) {
+    ([int]$childExitCode).ToString([Globalization.CultureInfo]::InvariantCulture)
+}
+else {
+    'INVALID'
+}
+[IO.File]::WriteAllText($ExitCodePath, $transportValue, [Text.ASCIIEncoding]::new())
+if ($null -eq $childExitCode) {
+    exit 1
+}
+exit ([int]$childExitCode)
+'@
     [IO.File]::WriteAllText(
         $wrapperPath,
         $wrapper,
-        [Text.ASCIIEncoding]::new()
+        [Text.UTF8Encoding]::new($false)
     )
 
-    $process = Start-Process `
-        -FilePath 'cmd.exe' `
-        -ArgumentList (
-            '/d /s /c ""' +
-            $wrapperPath.Replace('"','') +
-            '""'
-        ) `
-        -WorkingDirectory $WorkingDirectory `
-        -WindowStyle Hidden `
-        -RedirectStandardOutput $StdoutPath `
-        -RedirectStandardError $StderrPath `
-        -PassThru
+    $processStart = [Diagnostics.ProcessStartInfo]::new()
+    $processStart.FileName = 'powershell.exe'
+    $processStart.Arguments = @(
+        '-NoProfile',
+        '-ExecutionPolicy','Bypass',
+        '-File',('"' + $wrapperPath + '"'),
+        '-CommandPath',('"' + $commandPath + '"'),
+        '-ExitCodePath',('"' + $ExitCodePath + '"')
+    ) -join ' '
+    $processStart.WorkingDirectory = $WorkingDirectory
+    $processStart.UseShellExecute = $false
+    $processStart.CreateNoWindow = $true
+    $processStart.RedirectStandardOutput = $true
+    $processStart.RedirectStandardError = $true
+    $process = [Diagnostics.Process]::new()
+    $process.StartInfo = $processStart
+    if (-not $process.Start()) {
+        throw 'CODEX_EXECUTION_FAILED: CHILD_START_FAILED'
+    }
+    $stdoutRead = $process.StandardOutput.ReadToEndAsync()
+    $stderrRead = $process.StandardError.ReadToEndAsync()
 
     try {
-        if (-not $process.WaitForExit($TimeoutSec * 1000)) {
-            Stop-Process -Id $process.Id -Force
+        $timedOut = -not $process.WaitForExit($TimeoutSec * 1000)
+        if ($timedOut) {
+            $process.Kill()
             [void]$process.WaitForExit(5000)
-            throw 'CODEX_EXECUTION_TIMEOUT'
         }
+        [void]$process.WaitForExit()
+        [IO.File]::WriteAllText($StdoutPath, [string]$stdoutRead.Result, [Text.UTF8Encoding]::new($false))
+        [IO.File]::WriteAllText($StderrPath, [string]$stderrRead.Result, [Text.UTF8Encoding]::new($false))
+        if ($timedOut) { throw 'CODEX_EXECUTION_TIMEOUT' }
 
         # Do not use Process.ExitCode here. Some Windows PowerShell hosts leave
         # it null even after HasExited, WaitForExit(), and Refresh(). The child
-        # wrapper is the authoritative exit-code transport.
-        [void]$process.WaitForExit()
+        # PowerShell host writes the authoritative native exit code directly.
         $process.Refresh()
 
-        if (-not (Test-Path -LiteralPath $ExitCodePath -PathType Leaf)) {
-            throw 'CODEX_EXECUTION_FAILED: CHILD_EXIT_CODE_MISSING'
-        }
-
-        $exitCodeText = [IO.File]::ReadAllText(
-            $ExitCodePath,
-            [Text.Encoding]::ASCII
-        ).Trim()
-        $exitCode = 0
-        if (-not [int]::TryParse($exitCodeText, [ref]$exitCode)) {
-            throw (
-                'CODEX_EXECUTION_FAILED: CHILD_EXIT_CODE_INVALID: ' +
-                $exitCodeText
-            )
-        }
+        $exitCode = Get-EinkExecutorChildExitCode -ExitCodePath $ExitCodePath
 
         [pscustomobject]@{
             Passed = $exitCode -eq 0
@@ -606,6 +632,27 @@ exit /b %EINK_CHILD_EXIT%
     finally {
         $process.Dispose()
     }
+}
+
+function Get-EinkExecutorChildExitCode {
+    param([Parameter(Mandatory=$true)][string]$ExitCodePath)
+
+    if (-not (Test-Path -LiteralPath $ExitCodePath -PathType Leaf)) {
+        throw 'CODEX_EXECUTION_FAILED: CHILD_EXIT_CODE_MISSING'
+    }
+
+    $exitCodeText = [IO.File]::ReadAllText(
+        $ExitCodePath,
+        [Text.Encoding]::ASCII
+    ).Trim()
+    $exitCode = 0
+    if (-not [int]::TryParse($exitCodeText, [ref]$exitCode)) {
+        throw (
+            'CODEX_EXECUTION_FAILED: CHILD_EXIT_CODE_INVALID: ' +
+            $exitCodeText
+        )
+    }
+    [int]$exitCode
 }
 
 function Invoke-EinkExecutorCodex {
