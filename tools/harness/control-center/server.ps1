@@ -135,6 +135,7 @@ if ($BurnSafetyAcceptance) {
 $runtimeLockPath = Join-Path $runtimeRoot ("server-$Port.json")
 $burnRuntimePath = Join-Path $runtimeRoot ("burn-$Port.json")
 $compiledTaskRuntimePath = Join-Path $runtimeRoot ("compiled-task-$Port.json")
+$script:CompiledTaskWorkerIo = @{}
 $currentProcess = Get-Process -Id $PID
 $serverStartUtc = $currentProcess.StartTime.ToUniversalTime().ToString('o')
 $serverStartTicks = $currentProcess.StartTime.ToUniversalTime().Ticks
@@ -462,12 +463,63 @@ function Test-CompiledTaskWorkerIdentity {
     }
     try {
         $process = Get-Process -Id ([int]$Record.pid) -ErrorAction Stop
-        return (
-            $process.StartTime.ToUniversalTime().Ticks -eq [int64]$Record.processStartTicks -and
-            [IO.Path]::GetFullPath($process.Path) -eq [IO.Path]::GetFullPath([string]$Record.executablePath)
-        )
+        if ($process.StartTime.ToUniversalTime().Ticks -ne [int64]$Record.processStartTicks) {
+            return $false
+        }
+        $expectedPath = [string]$Record.executablePath
+        $actualPath = [string]$process.Path
+        if (
+            -not [string]::IsNullOrWhiteSpace($expectedPath) -and
+            -not [string]::IsNullOrWhiteSpace($actualPath) -and
+            -not [IO.Path]::GetFullPath($actualPath).Equals(
+                [IO.Path]::GetFullPath($expectedPath),
+                [StringComparison]::OrdinalIgnoreCase
+            )
+        ) {
+            return $false
+        }
+        return $true
     }
     catch { return $false }
+}
+
+function Test-CompiledTaskWorkerStartupGrace {
+    param($Record)
+    if (-not $Record) { return $false }
+    $graceUntil = [DateTime]::MinValue
+    if (-not [DateTime]::TryParse(
+        [string]$Record.startupGraceUntilUtc,
+        [Globalization.CultureInfo]::InvariantCulture,
+        [Globalization.DateTimeStyles]::RoundtripKind,
+        [ref]$graceUntil
+    )) { return $false }
+    [DateTime]::UtcNow -le $graceUntil.ToUniversalTime()
+}
+
+function Complete-EinkCompiledTaskWorkerIo {
+    param(
+        [int]$WorkerPid,
+        [ValidateRange(0,2000)][int]$WaitMilliseconds = 0
+    )
+    if (-not $script:CompiledTaskWorkerIo.ContainsKey($WorkerPid)) { return }
+    $io = $script:CompiledTaskWorkerIo[$WorkerPid]
+    if (-not $io.Process.HasExited -and $WaitMilliseconds -gt 0) {
+        [void]$io.Process.WaitForExit($WaitMilliseconds)
+    }
+    if (-not $io.Process.HasExited) { return }
+    try {
+        [void]$io.Process.WaitForExit(1000)
+        [void]$io.StdoutCopy.Wait(1000)
+        [void]$io.StderrCopy.Wait(1000)
+        $io.StdoutStream.Flush()
+        $io.StderrStream.Flush()
+    }
+    finally {
+        $io.StdoutStream.Dispose()
+        $io.StderrStream.Dispose()
+        $io.Process.Dispose()
+        [void]$script:CompiledTaskWorkerIo.Remove($WorkerPid)
+    }
 }
 
 function Start-EinkCompiledTaskWorker {
@@ -497,23 +549,68 @@ function Start-EinkCompiledTaskWorker {
     if ($ExecutorAcceptance) {
         $arguments += @('-AcceptanceMode','-AcceptanceScenario',$AcceptanceScenario)
     }
+    $powerShell = Get-Command 'powershell.exe' -ErrorAction Stop
+    $stdoutStream = [IO.File]::Open(
+        $stdoutPath,
+        [IO.FileMode]::Create,
+        [IO.FileAccess]::Write,
+        [IO.FileShare]::ReadWrite
+    )
+    $stderrStream = [IO.File]::Open(
+        $stderrPath,
+        [IO.FileMode]::Create,
+        [IO.FileAccess]::Write,
+        [IO.FileShare]::ReadWrite
+    )
     $processStart = [Diagnostics.ProcessStartInfo]::new()
-    $processStart.FileName = 'powershell.exe'
+    $processStart.FileName = $powerShell.Source
     $processStart.Arguments = $arguments -join ' '
-    $processStart.UseShellExecute = $true
-    $processStart.WindowStyle = [Diagnostics.ProcessWindowStyle]::Hidden
-    $process = [Diagnostics.Process]::Start($processStart)
+    $processStart.WorkingDirectory = $repoRoot
+    $processStart.UseShellExecute = $false
+    $processStart.CreateNoWindow = $true
+    $processStart.RedirectStandardOutput = $true
+    $processStart.RedirectStandardError = $true
+    $process = [Diagnostics.Process]::new()
+    $process.StartInfo = $processStart
+    try {
+        if (-not $process.Start()) { throw 'COMPILED_TASK_WORKER_START_FAILED' }
+        $stdoutCopy = $process.StandardOutput.BaseStream.CopyToAsync($stdoutStream)
+        $stderrCopy = $process.StandardError.BaseStream.CopyToAsync($stderrStream)
+        $script:CompiledTaskWorkerIo[[int]$process.Id] = [pscustomobject]@{
+            Process = $process
+            StdoutCopy = $stdoutCopy
+            StderrCopy = $stderrCopy
+            StdoutStream = $stdoutStream
+            StderrStream = $stderrStream
+        }
+    }
+    catch {
+        $stdoutStream.Dispose()
+        $stderrStream.Dispose()
+        $process.Dispose()
+        throw
+    }
+    $processStartTicks = [int64]0
+    try {
+        $processStartTicks = [int64]$process.StartTime.ToUniversalTime().Ticks
+    }
+    catch {
+        # A fast worker may publish its terminal snapshot before StartTime is
+        # observable. Startup grace below gives that snapshot time to land.
+    }
+    $createdUtc = [DateTime]::UtcNow
     $record = [ordered]@{
         schema = 'eink-compiled-task-worker-runtime-v1'
         attemptId = $attemptId
         status = 'RUNNING'
         pid = [int]$process.Id
-        processStartTicks = [int64]$process.StartTime.ToUniversalTime().Ticks
-        executablePath = [string]$process.Path
+        processStartTicks = $processStartTicks
+        executablePath = [IO.Path]::GetFullPath([string]$powerShell.Source)
         taskId = [string]$Task.taskId
         contractSha256 = $ContractSha256
         exactScopeSha256 = $ExactScopeSha256
-        createdUtc = [DateTime]::UtcNow.ToString('o')
+        createdUtc = $createdUtc.ToString('o')
+        startupGraceUntilUtc = $createdUtc.AddSeconds(10).ToString('o')
         completedUtc = ''
         reason = ''
         stdoutPath = $stdoutPath
@@ -528,17 +625,24 @@ function Sync-EinkCompiledTaskRuntimeState {
     if (-not $record) {
         return [pscustomobject]@{ Record=$null; Running=$false }
     }
+    Complete-EinkCompiledTaskWorkerIo -WorkerPid ([int]$record.pid)
     $task = Read-EinkBrainCurrentTask
     $terminal = $task -and [string]$task.status -in @(
         'BLOCKED','OWNER_MERGE_REQUIRED','PAUSED_OWNER_ACTION','COMPLETED','COMPLETE','CLOSED'
     )
     if ([string]$record.status -eq 'RUNNING' -and $terminal) {
+        Complete-EinkCompiledTaskWorkerIo `
+            -WorkerPid ([int]$record.pid) `
+            -WaitMilliseconds 1000
         $record.status = 'COMPLETED'
         $record.completedUtc = [DateTime]::UtcNow.ToString('o')
         Write-Utf8JsonFile -Path $compiledTaskRuntimePath -Value $record
         return [pscustomobject]@{ Record=$record; Running=$false }
     }
     if ([string]$record.status -eq 'RUNNING' -and (Test-CompiledTaskWorkerIdentity -Record $record)) {
+        return [pscustomobject]@{ Record=$record; Running=$true }
+    }
+    if ([string]$record.status -eq 'RUNNING' -and (Test-CompiledTaskWorkerStartupGrace -Record $record)) {
         return [pscustomobject]@{ Record=$record; Running=$true }
     }
     if ([string]$record.status -eq 'RUNNING') {
