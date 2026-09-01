@@ -454,6 +454,20 @@ function Assert-EinkExecutorScope {
     $changed
 }
 
+function Get-EinkExecutorImplementationDiffSha256 {
+    param(
+        [Parameter(Mandatory=$true)][string]$RepoRoot,
+        [Parameter(Mandatory=$true)][string[]]$AllowedFiles
+    )
+
+    $diff = Get-EinkExecutorGit -RepoRoot $RepoRoot -Arguments (
+        @('diff','--binary','--') + $AllowedFiles
+    )
+    if ($diff.ExitCode -ne 0) { throw 'IMPLEMENTATION_DIFF_INSPECTION_FAILED' }
+    if (@($diff.Output).Count -eq 0) { throw 'NO_IMPLEMENTATION_CHANGE' }
+    Get-EinkExecutorSha256Text -Text (@($diff.Output) -join "`n")
+}
+
 function Invoke-EinkExecutorValidation {
     param(
         [Parameter(Mandatory=$true)][string]$RepoRoot,
@@ -771,6 +785,7 @@ function Invoke-EinkCompiledTaskExecutor {
     $state = 'BLOCKED'
     $commitSha = ''
     $prUrl = ''
+    $implementationEvidence = $null
     $evidenceDir = Join-Path $EvidenceRoot (
         ([string]$Task.taskId) + '-' + [Guid]::NewGuid().ToString('N')
     )
@@ -1039,6 +1054,24 @@ function Invoke-EinkCompiledTaskExecutor {
         foreach ($line in $validation) { $log.Add($line) }
 
         if ([bool]$contract.visualIntent) {
+            $validatedRepo = Get-EinkExecutorRepoStatus -RepoRoot $RepoRoot
+            $validatedFiles = @(Assert-EinkExecutorScope `
+                -RepoRoot $RepoRoot `
+                -AllowedFiles $allowed `
+                -RequireChange)
+            $implementationEvidence = [pscustomobject][ordered]@{
+                validated = $true
+                validatedUtc = [DateTime]::UtcNow.ToString('o')
+                validatedHead = [string]$validatedRepo.Head
+                validatedBranch = [string]$validatedRepo.Branch
+                exactFiles = @($allowed)
+                changedFiles = @($validatedFiles)
+                exactScopeSha256 = $scopeSha
+                implementationDiffSha256 = Get-EinkExecutorImplementationDiffSha256 `
+                    -RepoRoot $RepoRoot `
+                    -AllowedFiles $allowed
+                validationEvidence = @($validation)
+            }
             $state = 'PAUSED_OWNER_ACTION'
             Publish-State 'WAITING_OWNER' 'OWNER_UI_VISUAL_PASS_REQUIRED'
         }
@@ -1126,6 +1159,7 @@ This PR is intentionally open. Owner merge is required.
             AllowedFiles = $allowed
             AgentInvocations = $agentInvocations
             EvidenceDir = $evidenceDir
+            ImplementationEvidence = $implementationEvidence
             Log = @($log)
         }
     }
@@ -1142,6 +1176,7 @@ This PR is intentionally open. Owner merge is required.
             AllowedFiles = @()
             AgentInvocations = $agentInvocations
             EvidenceDir = $evidenceDir
+            ImplementationEvidence = $null
             Log = @($log)
         }
     }
@@ -1150,6 +1185,210 @@ This PR is intentionally open. Owner merge is required.
             [void](Get-EinkExecutorGit -RepoRoot $RepoRoot -Arguments @(
                 'worktree','remove','--force',$worktree
             ))
+        }
+    }
+}
+
+function Invoke-EinkCompiledTaskPublicationResume {
+    param(
+        [Parameter(Mandatory=$true)][string]$RepoRoot,
+        [Parameter(Mandatory=$true)]$Task,
+        [Parameter(Mandatory=$true)][string]$ExpectedTaskId,
+        [Parameter(Mandatory=$true)][string]$ExpectedContractSha256,
+        [Parameter(Mandatory=$true)][string]$ExpectedExactScopeSha256,
+        [switch]$AcceptanceMode,
+        [scriptblock]$OnState
+    )
+
+    $log = New-Object 'Collections.Generic.List[string]'
+    $commitSha = ''
+    $prUrl = ''
+    function Publish-PublicationState([string]$Name, [string]$Detail = '') {
+        $line = if ($Detail) { "$Name`: $Detail" } else { $Name }
+        $log.Add($line)
+        if ($OnState) { & $OnState $Name @($log) }
+    }
+
+    try {
+        Publish-PublicationState 'PUBLICATION_RESUME_START'
+        if (
+            [string]$Task.status -ne 'PAUSED_OWNER_ACTION' -or
+            -not $Task.execution -or
+            [string]$Task.execution.phase -ne 'WAITING_OWNER' -or
+            [string]$Task.execution.state -ne 'PAUSED_OWNER_ACTION'
+        ) { throw 'PUBLICATION_RESUME_WRONG_STATE' }
+
+        $contract = $Task.contract
+        if (-not $contract) { throw 'CONTRACT_MISSING' }
+        $taskId = $ExpectedTaskId.Trim()
+        $contractSha = $ExpectedContractSha256.Trim().ToUpperInvariant()
+        $scopeSha = $ExpectedExactScopeSha256.Trim().ToUpperInvariant()
+        if ($taskId -ne [string]$Task.taskId -or $taskId -ne [string]$contract.taskId) {
+            throw 'TASK_ID_MISMATCH'
+        }
+        if (
+            $contractSha -ne ([string]$contract.contractSha256).Trim().ToUpperInvariant() -or
+            $contractSha -ne (Get-EinkExecutorContractSha256 -Contract $contract)
+        ) { throw 'CONTRACT_SHA_MISMATCH' }
+
+        $allowed = @(ConvertTo-EinkExecutorFiles -RepoRoot $RepoRoot -Values $contract.allowedFiles)
+        if ($allowed.Count -eq 0) { throw 'EXACT_FILES_REQUIRED' }
+        $actualScopeSha = Get-EinkExecutorSha256Text -Text ($allowed -join "`n")
+        if (
+            $scopeSha -ne ([string]$contract.exactScopeSha256).Trim().ToUpperInvariant() -or
+            $scopeSha -ne $actualScopeSha
+        ) { throw 'EXACT_SCOPE_SHA_MISMATCH' }
+        if ([bool]$contract.autoMerge) { throw 'AUTO_MERGE_FORBIDDEN' }
+
+        $evidence = $Task.execution.implementationEvidence
+        if (
+            -not [bool]$Task.execution.passed -or
+            -not $evidence -or
+            -not [bool]$evidence.validated -or
+            [string]::IsNullOrWhiteSpace([string]$evidence.validatedUtc) -or
+            [string]::IsNullOrWhiteSpace([string]$evidence.validatedHead) -or
+            [string]::IsNullOrWhiteSpace([string]$evidence.validatedBranch) -or
+            [string]::IsNullOrWhiteSpace([string]$evidence.implementationDiffSha256) -or
+            @($evidence.validationEvidence).Count -eq 0
+        ) { throw 'VALIDATED_IMPLEMENTATION_EVIDENCE_MISSING' }
+        if (
+            (@($evidence.exactFiles) -join "`n") -ne ($allowed -join "`n") -or
+            (@($Task.execution.exactFiles) -join "`n") -ne ($allowed -join "`n") -or
+            ([string]$evidence.exactScopeSha256).Trim().ToUpperInvariant() -ne $scopeSha
+        ) { throw 'VALIDATED_IMPLEMENTATION_SCOPE_MISMATCH' }
+
+        Publish-PublicationState 'PREFLIGHT'
+        $repo = Get-EinkExecutorRepoStatus -RepoRoot $RepoRoot
+        $canonical = [IO.Path]::GetFullPath([string]$contract.workspace)
+        if (-not [IO.Path]::GetFullPath($repo.Root).Equals($canonical,[StringComparison]::OrdinalIgnoreCase)) {
+            throw 'WRONG_WORKSPACE'
+        }
+        if ($repo.Staged.Count -gt 0) { throw 'PREEXISTING_STAGED_FILES' }
+        if ($repo.Head -ne [string]$evidence.validatedHead -or $repo.Branch -ne [string]$evidence.validatedBranch) {
+            throw 'VALIDATED_REPOSITORY_STATE_DRIFT'
+        }
+
+        $taskBranch = Get-EinkExecutorFeatureBranchName -TaskId $taskId
+        if ([string]$contract.compiledFromBranch -eq 'main') {
+            if ($repo.Branch -ne $taskBranch) { throw 'UNEXPECTED_GIT_STATE' }
+            $mainHead = Get-EinkExecutorGitValue `
+                -RepoRoot $RepoRoot `
+                -Arguments @('rev-parse','--verify','refs/heads/main') `
+                -FailureReason 'MAIN_REF_MISSING'
+            $originMainHead = Get-EinkExecutorGitValue `
+                -RepoRoot $RepoRoot `
+                -Arguments @('rev-parse','--verify','refs/remotes/origin/main') `
+                -FailureReason 'ORIGIN_MAIN_REF_MISSING'
+            if (
+                $mainHead -ne $originMainHead -or
+                $mainHead -ne [string]$contract.compiledFromHead
+            ) { throw 'STALE_MAIN' }
+            Assert-EinkExecutorTaskBranchMetadata `
+                -RepoRoot $RepoRoot `
+                -Branch $taskBranch `
+                -TaskId $taskId `
+                -ContractSha256 $contractSha `
+                -CompiledFromHead ([string]$contract.compiledFromHead)
+            $taskRefHead = Get-EinkExecutorGitValue `
+                -RepoRoot $RepoRoot `
+                -Arguments @('rev-parse','--verify',"refs/heads/$taskBranch") `
+                -FailureReason 'TASK_BRANCH_REF_MISSING'
+            if ($taskRefHead -ne $repo.Head) { throw 'TASK_BRANCH_HEAD_DRIFT' }
+        }
+        elseif ($repo.Branch -ne [string]$contract.compiledFromBranch) {
+            throw 'COMPILED_SOURCE_DRIFT'
+        }
+        Publish-PublicationState 'FEATURE_BRANCH_REVERIFIED' $repo.Branch
+
+        $changed = @(Assert-EinkExecutorScope -RepoRoot $RepoRoot -AllowedFiles $allowed -RequireChange)
+        if ((@($evidence.changedFiles) -join "`n") -ne ($changed -join "`n")) {
+            throw 'VALIDATED_IMPLEMENTATION_SCOPE_DRIFT'
+        }
+        $diffSha = Get-EinkExecutorImplementationDiffSha256 -RepoRoot $RepoRoot -AllowedFiles $allowed
+        if (-not $diffSha.Equals([string]$evidence.implementationDiffSha256,[StringComparison]::OrdinalIgnoreCase)) {
+            throw 'VALIDATED_IMPLEMENTATION_DIFF_DRIFT'
+        }
+        Publish-PublicationState 'SCOPE_RECHECKED' $scopeSha
+
+        Publish-PublicationState 'VALIDATING'
+        $validation = @(Invoke-EinkExecutorValidation -RepoRoot $RepoRoot -AllowedFiles $allowed)
+        foreach ($line in $validation) { $log.Add($line) }
+        Publish-PublicationState 'VALIDATION_RERUN_PASS'
+
+        $add = Get-EinkExecutorGit -RepoRoot $RepoRoot -Arguments (@('add','--') + $allowed)
+        if ($add.ExitCode -ne 0) { throw 'EXACT_STAGE_FAILED' }
+        $afterStage = Get-EinkExecutorRepoStatus -RepoRoot $RepoRoot
+        $outsideStaged = @($afterStage.Staged | Where-Object { $allowed -notcontains $_ })
+        $missingStaged = @($changed | Where-Object { $afterStage.Staged -notcontains $_ })
+        if ($afterStage.Staged.Count -eq 0 -or $outsideStaged.Count -gt 0 -or $missingStaged.Count -gt 0) {
+            throw 'EXACT_STAGE_SCOPE_MISMATCH'
+        }
+        Publish-PublicationState 'EXACT_STAGE_INSPECTED' ($afterStage.Staged -join ', ')
+
+        $commit = Get-EinkExecutorGit -RepoRoot $RepoRoot -Arguments @(
+            'commit','-m',"feat: execute $taskId"
+        )
+        if ($commit.ExitCode -ne 0) { throw ('COMMIT_FAILED: ' + ($commit.Output -join ' ')) }
+        $current = Get-EinkExecutorRepoStatus -RepoRoot $RepoRoot
+        $commitSha = $current.Head
+        Publish-PublicationState 'COMMITTED' $commitSha
+
+        if ($AcceptanceMode) {
+            Publish-PublicationState 'PUSHED' 'ACCEPTANCE_SIMULATED'
+            $prUrl = 'https://example.invalid/eink-publication-resume/pull/1'
+        }
+        else {
+            $push = Get-EinkExecutorGit -RepoRoot $RepoRoot -Arguments @('push','-u','origin',$current.Branch)
+            if ($push.ExitCode -ne 0) { throw ('PUSH_FAILED: ' + ($push.Output -join ' ')) }
+            Publish-PublicationState 'PUSHED'
+            $existingPr = Invoke-EinkExecutorNative `
+                -FilePath 'gh' `
+                -Arguments @('pr','view',$current.Branch,'--json','url','--jq','.url') `
+                -WorkingDirectory $RepoRoot
+            if ($existingPr.ExitCode -eq 0) {
+                $prUrl = @($existingPr.Output | Where-Object { $_ -match '^https://github\.com/.+/pull/\d+$' }) | Select-Object -Last 1
+            }
+            if (-not $prUrl) {
+                $body = "Task: $taskId`nContract SHA256: $contractSha`nExact files: $($allowed.Count)`n`nValidation rerun:`n$($validation -join "`n")`n`nOwner merge is required. Auto-merge is disabled."
+                $pr = Invoke-EinkExecutorNative `
+                    -FilePath 'gh' `
+                    -Arguments @('pr','create','--base','main','--head',$current.Branch,'--title',"$taskId`: compiled task execution",'--body',$body) `
+                    -WorkingDirectory $RepoRoot
+                if ($pr.ExitCode -ne 0) { throw ('PR_CREATE_FAILED: ' + ($pr.Output -join ' ')) }
+                $prUrl = @($pr.Output | Where-Object { $_ -match '^https://github\.com/.+/pull/\d+$' }) | Select-Object -Last 1
+            }
+            if (-not $prUrl) { throw 'PR_URL_MISSING' }
+        }
+
+        Publish-PublicationState 'OWNER_MERGE_REQUIRED'
+        $log.Add('AUTO_MERGE: DISABLED')
+        [pscustomobject]@{
+            Passed = $true
+            State = 'OWNER_MERGE_REQUIRED'
+            CommitSha = $commitSha
+            PrUrl = [string]$prUrl
+            AllowedFiles = $allowed
+            AgentInvocations = 0
+            EvidenceDir = [string]$Task.execution.evidenceDir
+            ImplementationEvidence = $evidence
+            Log = @($log)
+        }
+    }
+    catch {
+        $reason = $_.Exception.Message
+        $log.Add("BLOCKED: $reason")
+        if ($OnState) { & $OnState 'BLOCKED' @($log) }
+        [pscustomobject]@{
+            Passed = $false
+            State = 'BLOCKED'
+            Reason = $reason
+            CommitSha = $commitSha
+            PrUrl = ''
+            AllowedFiles = @()
+            AgentInvocations = 0
+            EvidenceDir = ''
+            ImplementationEvidence = $null
+            Log = @($log)
         }
     }
 }

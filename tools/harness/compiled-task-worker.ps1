@@ -8,6 +8,7 @@ param(
     [Parameter(Mandatory=$true)][string]$ExpectedContractSha256,
     [Parameter(Mandatory=$true)][string]$ExpectedExactScopeSha256,
     [Parameter(Mandatory=$true)][string]$AttemptId,
+    [switch]$PublicationResume,
     [switch]$AcceptanceMode,
     [ValidateSet('','LIVE_STATUS','BLOCKED_TERMINAL','OWNER_MERGE_REQUIRED_TERMINAL')]
     [string]$AcceptanceScenario = ''
@@ -107,6 +108,9 @@ function Write-ExecutionSnapshot {
         $record.execution['exactFiles'] = @($Result.AllowedFiles)
         $record.execution['agentInvocations'] = [int]$Result.AgentInvocations
         $record.execution['evidenceDir'] = [string]$Result.EvidenceDir
+        if ($Result.PSObject.Properties.Name -contains 'ImplementationEvidence') {
+            $record.execution['implementationEvidence'] = $Result.ImplementationEvidence
+        }
     }
     Write-WorkerJsonAtomic -Path $CurrentTaskPath -Value $record
     if ($AppendHistory) {
@@ -120,7 +124,12 @@ function Write-ExecutionSnapshot {
 
 try {
     if (-not $task) { throw 'TASK_MISSING' }
-    if ([string]$task.status -ne 'COMPILED') { throw 'TASK_NOT_COMPILED' }
+    if ($PublicationResume) {
+        if ([string]$task.status -ne 'PAUSED_OWNER_ACTION') {
+            throw 'PUBLICATION_RESUME_WRONG_STATE'
+        }
+    }
+    elseif ([string]$task.status -ne 'COMPILED') { throw 'TASK_NOT_COMPILED' }
     if ([string]$task.taskId -ne $ExpectedTaskId.Trim()) { throw 'TASK_ID_MISMATCH' }
     if (-not $task.contract) { throw 'CONTRACT_MISSING' }
     if (
@@ -132,7 +141,37 @@ try {
         (Get-EinkExecutorSha256Text -Text (@($task.contract.allowedFiles) -join "`n")) -ne $scopeSha
     ) { throw 'EXACT_SCOPE_SHA_MISMATCH' }
 
-    Write-ExecutionSnapshot -Phase 'EXECUTION_START' -Status 'EXECUTING' -Log @('EXECUTION_START')
+    $startPhase = if ($PublicationResume) { 'PUBLICATION_RESUME_START' } else { 'EXECUTION_START' }
+    Write-ExecutionSnapshot -Phase $startPhase -Status 'EXECUTING' -Log @($startPhase)
+
+    if ($PublicationResume) {
+        $onPublicationState = {
+            param($phase, $lines)
+            Write-ExecutionSnapshot `
+                -Phase ([string]$phase) `
+                -Status (Get-WorkerTaskStatus -Phase ([string]$phase)) `
+                -Log @($lines)
+        }
+        $publicationResult = Invoke-EinkCompiledTaskPublicationResume `
+            -RepoRoot $resolvedRepoRoot `
+            -Task $task `
+            -ExpectedTaskId $ExpectedTaskId `
+            -ExpectedContractSha256 $contractSha `
+            -ExpectedExactScopeSha256 $scopeSha `
+            -AcceptanceMode:$AcceptanceMode `
+            -OnState $onPublicationState
+        Write-ExecutionSnapshot `
+            -Phase ([string]$publicationResult.State) `
+            -Status ([string]$publicationResult.State) `
+            -Reason ([string]$publicationResult.Reason) `
+            -CommitSha ([string]$publicationResult.CommitSha) `
+            -PrUrl ([string]$publicationResult.PrUrl) `
+            -Log @($publicationResult.Log) `
+            -Result $publicationResult `
+            -AppendHistory
+        if (-not $publicationResult.Passed) { exit 1 }
+        exit 0
+    }
 
     if ($AcceptanceMode -and $AcceptanceScenario) {
         Start-Sleep -Milliseconds 700
