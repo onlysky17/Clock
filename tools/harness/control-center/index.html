@@ -308,6 +308,17 @@
     .compiled-task-progress.blocked .compiled-task-progress-phase { color:#ff7b72; }
     .compiled-task-progress.blocked .compiled-task-progress-fill { background:#da3633; }
     .compiled-task-progress-reason { margin-top:8px; color:#ff7b72; font-size:12px; font-weight:800; overflow-wrap:anywhere; }
+    .task-selection-notice {
+      margin-top: 12px;
+      padding: 10px 12px;
+      border: 1px solid #d29922;
+      border-radius: 8px;
+      background: #211a0d;
+      color: #e3b341;
+      font-size: 12px;
+      font-weight: 800;
+      overflow-wrap: anywhere;
+    }
     .compiled-execution-meta { margin-top:10px; color:#8b949e; font-size:12px; overflow-wrap:anywhere; }
     .compiled-execution-reason { margin-top:10px; color:#ff7b72; font-weight:800; overflow-wrap:anywhere; }
     .compiled-execution-pr { display:block; margin-top:10px; overflow-wrap:anywhere; }
@@ -1216,9 +1227,119 @@
         grid-template-columns: 1fr;
       }
     }
-  </style>
+
+    /* OWNER VISUAL READABILITY FIX 2026-09-01 */
+
+    /* TASKS / HISTORY + TECHNICAL DETAILS:
+       these are primary navigation sections, not tiny metadata */
+    .eink-secondary-tools > summary,
+    .eink-tech-details > summary {
+      padding: 17px 18px;
+      min-height: 58px;
+      display: flex;
+      align-items: center;
+      color: #f0f6fc;
+      font-size: 20px;
+      line-height: 1.25;
+      font-weight: 900;
+      letter-spacing: .01em;
+      background: #161b22;
+      border-radius: 10px;
+    }
+
+    .eink-secondary-tools[open] > summary,
+    .eink-tech-details[open] > summary {
+      border-bottom: 1px solid #30363d;
+      border-radius: 10px 10px 0 0;
+      margin-bottom: 12px;
+    }
+
+    /* TASKS / HISTORY contents */
+    .eink-secondary-body {
+      gap: 14px;
+      padding: 4px 16px 18px;
+    }
+
+    .eink-secondary-body select {
+      min-height: 48px;
+      padding: 11px 13px !important;
+      font-size: 15px;
+      line-height: 1.4;
+    }
+
+    .eink-secondary-body label {
+      font-size: 14px !important;
+      line-height: 1.5;
+    }
+
+    .eink-secondary-body button {
+      min-height: 46px;
+      font-size: 14px;
+    }
+
+    /* TECHNICAL DETAILS contents */
+    .eink-tech-details .eink-tech-body {
+      gap: 8px;
+      padding: 4px 16px 18px;
+    }
+
+    .eink-tech-details .artifact {
+      gap: 3px;
+    }
+
+    .eink-tech-details .artifact-line {
+      grid-template-columns: 165px minmax(0, 1fr);
+      gap: 16px;
+      min-height: 36px;
+      padding: 7px 4px;
+      align-items: start;
+      border-bottom: 1px solid rgba(48,54,61,.55);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .eink-tech-details .artifact-line:last-child {
+      border-bottom: 0;
+    }
+
+    .eink-tech-details .artifact-line span:first-child {
+      color: #aab6c5;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .eink-tech-details .artifact-line code {
+      color: #f0f6fc;
+      font-size: 14px;
+      line-height: 1.55;
+      overflow-wrap: anywhere;
+    }
+
+    /* Long task description remains secondary */
+    #einkBrainCurrentRequest {
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    @media (max-width: 800px) {
+      .eink-secondary-tools > summary,
+      .eink-tech-details > summary {
+        font-size: 18px;
+      }
+
+      .eink-tech-details .artifact-line {
+        grid-template-columns: 1fr;
+        gap: 4px;
+      }
+    }
+
+    /* OWNER INITIAL HYDRATION FLASH FIX */
+    body.eink-initializing #einkView {
+      visibility: hidden;
+    }
+</style>
 </head>
-<body>
+<body class="eink-initializing">
   <main class="shell">
     <header>
       <div>
@@ -1271,7 +1392,7 @@
         </label>
 
         <div class="actions">
-          <button id="einkBrainCreateButton" class="prepare">CREATE TASK</button>
+          <button id="einkBrainCreateButton" class="prepare">CREATE NEW TASK</button>
 
           <select
             id="einkBrainHistorySelect"
@@ -1294,9 +1415,10 @@
 
         <section id="einkBrainExecutionStatus" class="compiled-execution-status" aria-live="polite">
           <div class="compiled-execution-header">
-            <div class="label">Current Brain Task Execution</div>
+            <div id="einkBrainExecutionLabel" class="label">Selected Task Execution</div>
             <span id="einkBrainExecutionState" class="compiled-execution-state">NOT STARTED</span>
           </div>
+          <div id="einkBrainSelectionNotice" class="task-selection-notice hidden"></div>
           <div id="einkBrainExecutionProgress" class="compiled-task-progress idle">
             <div class="compiled-task-progress-heading">
               <span id="einkBrainExecutionProgressPercent" class="compiled-task-progress-percent">0%</span>
@@ -1314,10 +1436,10 @@
         </section>
 
         <div class="artifact">
-          <div class="artifact-line"><span>Current Task</span><code id="einkBrainCurrentId">-</code></div>
+          <div class="artifact-line"><span>Selected Task</span><code id="einkBrainCurrentId">-</code></div>
           <div class="artifact-line"><span>Status</span><code id="einkBrainCurrentStatus">-</code></div>
           <div class="artifact-line"><span>Resume Count</span><code id="einkBrainResumeCount">0</code></div>
-          <div class="artifact-line"><span>History Events</span><code id="einkBrainHistoryCount">0</code></div>
+          <div class="artifact-line"><span>History Metadata</span><code id="einkBrainHistoryCount">-</code></div>
           <div class="artifact-line"><span>Task Class</span><code id="einkBrainContractClass">-</code></div>
           <div class="artifact-line"><span>Risk</span><code id="einkBrainContractRisk">-</code></div>
           <div class="artifact-line"><span>Compiler</span><code id="einkBrainCompilerPolicy">-</code></div>
@@ -2311,15 +2433,67 @@
     }
     // EINK_COMPILED_PROGRESS_LOGIC_END
 
-    function renderEinkExecutionStatus(data) {
+    function getHistoricalEinkExecutionView(task) {
+      const execution = task?.execution || {};
+      const phase = normalizeEinkCompiledPhase(
+        execution.phase || task?.status
+      );
+      const states = {
+        EXECUTION_START: "STARTING",
+        FEATURE_BRANCH_READY: "BRANCH READY",
+        OWNER_MERGE_REQUIRED: "WAITING OWNER",
+        WAITING_OWNER: "WAITING OWNER",
+        PAUSED_OWNER_ACTION: "WAITING OWNER",
+        COMPLETED: "COMPLETE",
+        COMPLETE: "COMPLETE",
+        CLOSED: "COMPLETE"
+      };
+
+      return {
+        taskId: String(task?.taskId || ""),
+        state: states[phase] || String(task?.status || phase || "NOT STARTED"),
+        persistedPhase: phase,
+        active: false,
+        reason: String(execution.reason || ""),
+        prUrl: String(execution.prUrl || ""),
+        log: Array.isArray(execution.log) ? execution.log : [],
+        updatedUtc: String(task?.updatedUtc || "")
+      };
+    }
+
+    function renderEinkExecutionStatus(data, selectedTask = null) {
       const brain = data?.brain || {};
-      const task = brain.currentTask || {};
-      const execution = brain.execution || {};
+      const currentTask = brain.currentTask || {};
+      const task = selectedTask || currentTask;
+      const selectedIsCurrent =
+        !!task?.taskId &&
+        String(task.taskId) === String(currentTask.taskId || "");
+      const historical = !!task?.taskId && !selectedIsCurrent;
+      const execution = selectedIsCurrent
+        ? (brain.execution || {})
+        : getHistoricalEinkExecutionView(task);
       const authoritativeState = String(execution.state || task.status || "NOT STARTED").toUpperCase();
-      if (localExecutionState && (execution.active || ["WAITING OWNER", "BLOCKED", "COMPLETE"].includes(authoritativeState))) {
+      if (selectedIsCurrent && localExecutionState && (execution.active || ["WAITING OWNER", "BLOCKED", "COMPLETE"].includes(authoritativeState))) {
         localExecutionState = "";
       }
-      const visibleState = localExecutionState || authoritativeState;
+      const visibleState = selectedIsCurrent
+        ? (localExecutionState || authoritativeState)
+        : authoritativeState;
+      const executionLabel = $("einkBrainExecutionLabel");
+      executionLabel.textContent = historical
+        ? "Historical Task Execution Record"
+        : "Selected Task Execution";
+      const selectionNotice = $("einkBrainSelectionNotice");
+      const activeTaskId = String(brain.execution?.taskId || currentTask.taskId || "");
+      const activeElsewhere = historical && (
+        brain.executionActive === true || brain.execution?.active === true
+      );
+      selectionNotice.textContent = historical
+        ? `HISTORICAL TASK / NOT CURRENTLY EXECUTING${activeElsewhere && activeTaskId
+            ? ` · Active execution is ${activeTaskId}; select it to view progress.`
+            : ""}`
+        : "";
+      selectionNotice.classList.toggle("hidden", !historical);
       const stateNode = $("einkBrainExecutionState");
       stateNode.textContent = visibleState;
       stateNode.className = "compiled-execution-state";
@@ -2352,9 +2526,9 @@
 
       const prNode = $("einkBrainExecutionPr");
       const prUrl = String(execution.prUrl || "");
-      if (visibleState === "WAITING OWNER" && /^https:\/\//i.test(prUrl)) {
+      if (/^https:\/\//i.test(prUrl)) {
         prNode.href = prUrl;
-        prNode.textContent = `Open resulting PR: ${prUrl}`;
+        prNode.textContent = `Open selected task PR: ${prUrl}`;
         prNode.classList.remove("hidden");
       } else {
         prNode.removeAttribute("href");
@@ -2391,8 +2565,25 @@
 
     function renderEinkBrainState(data) {
       const brain = data?.brain || {};
-      const task = brain.currentTask || {};
+      const currentTask = brain.currentTask || {};
+      const visibleHistoryTasks = [
+        ...(Array.isArray(brain.recentTasks) ? brain.recentTasks : []),
+        ...($("einkBrainShowArchived")?.checked && Array.isArray(brain.archivedTasks)
+          ? brain.archivedTasks
+          : [])
+      ];
+      const requestedTaskId = String($("einkBrainHistorySelect")?.value || "");
+      const requestedTask = visibleHistoryTasks.find(
+        item => String(item?.taskId || "") === requestedTaskId
+      );
+      const visibleCurrentTask = visibleHistoryTasks.find(
+        item => String(item?.taskId || "") === String(currentTask.taskId || "")
+      );
+      const task = requestedTask || visibleCurrentTask || visibleHistoryTasks[0] || currentTask;
       const contract = task.contract || {};
+      const selectedIsCurrent =
+        !!task.taskId &&
+        String(task.taskId) === String(currentTask.taskId || "");
 
       ensureEinkOwnerLayout();
 
@@ -2406,6 +2597,7 @@
         const node = $(id);
         if (node) {
           node.classList.toggle("hidden", !hardwareIntent);
+          if (!selectedIsCurrent) node.classList.add("hidden");
         }
       });
 
@@ -2416,6 +2608,7 @@
         const node = $(id);
         if (node) {
           node.classList.toggle("hidden", !hardwareIntent);
+          if (!selectedIsCurrent) node.classList.add("hidden");
         }
       });
 
@@ -2455,9 +2648,16 @@
 
       currentId.textContent = task.taskId || "-";
       currentStatus.textContent = task.status || "-";
-      renderEinkExecutionStatus(data);
+      renderEinkExecutionStatus(data, task);
       resumeCount.textContent = String(task.resumeCount ?? 0);
-      historyCount.textContent = String(brain.historyCount ?? 0);
+      historyCount.textContent = task.taskId
+        ? [
+            task.event || "-",
+            `Created ${task.createdUtc || "-"}`,
+            `Updated ${task.updatedUtc || "-"}`,
+            task.archivedUtc ? `Archived ${task.archivedUtc}` : ""
+          ].filter(Boolean).join(" · ")
+        : "-";
       store.textContent = brain.storeRoot || "-";
       currentRequest.textContent = task.request || "Chưa có Brain task.";
 
@@ -2488,7 +2688,7 @@
       createButton.disabled = !!data?.busy;
 
       compileButton.disabled =
-        !!data?.busy || !task.taskId || task.archived === true;
+        !!data?.busy || !selectedIsCurrent || !task.taskId || task.archived === true;
 
       const contractSha = String(contract.contractSha256 || "");
       const scopeSha = String(contract.exactScopeSha256 || "");
@@ -2499,6 +2699,7 @@
 
       runButton.disabled = !(
         !data?.busy &&
+        selectedIsCurrent &&
         brain.executionActive !== true &&
         brain.execution?.active !== true &&
         task.status === "COMPILED" &&
@@ -2513,6 +2714,7 @@
       const publicationState = String(brain.execution?.persistedPhase || "").toUpperCase();
       publicationButton.disabled = !(
         !data?.busy &&
+        selectedIsCurrent &&
         brain.executionActive !== true &&
         brain.execution?.active !== true &&
         task.status === "PAUSED_OWNER_ACTION" &&
@@ -2530,9 +2732,11 @@
         ).toUpperCase();
 
         nextAction.textContent =
-          brain.executionActive === true ||
-          brain.execution?.active === true
-            ? "ĐANG CHẠY"
+          task.taskId && !selectedIsCurrent
+            ? "RESUME SELECTED TASK"
+            : brain.executionActive === true ||
+              brain.execution?.active === true
+              ? "ĐANG CHẠY"
             : executionState === "WAITING OWNER"
               ? task.status === "PAUSED_OWNER_ACTION"
                 ? "APPROVE PUBLICATION"
@@ -2734,6 +2938,7 @@
       // Authoritative Brain view is always rendered from the latest
       // /api/projects/eink/status payload.
       renderEinkBrainState(data);
+      document.body.classList.remove("eink-initializing");
     }
 
     function renderElectronic(data) {
@@ -3248,6 +3453,21 @@
         return;
       }
 
+      const presentedTaskId = String(
+        $("einkBrainCurrentId").textContent || "-"
+      );
+      if (!window.confirm(
+        `CREATE NEW TASK\n\n` +
+        `Currently selected: ${presentedTaskId}\n` +
+        `New request: ${request}\n` +
+        `Exact files (${exactFiles.length}):\n- ${exactFiles.join("\n- ")}\n\n` +
+        `This creates a new Task ID and switches the detail view to it.`
+      )) {
+        $("log").textContent =
+          "CREATE NEW TASK cancelled; selected task remains unchanged.";
+        return;
+      }
+
       $("einkBrainCreateButton").disabled = true;
       $("einkBrainResumeButton").disabled = true;
 
@@ -3296,7 +3516,20 @@
       await refresh();
     });
     $("einkBrainCompileButton").addEventListener("click", async () => {
-      if (!current?.brain?.currentTask?.taskId) return;
+      const currentTask = current?.brain?.currentTask;
+      const selectedTask = findEinkBrainTask(
+        current,
+        $("einkBrainHistorySelect").value
+      );
+      if (
+        !currentTask?.taskId ||
+        !selectedTask?.taskId ||
+        String(selectedTask.taskId) !== String(currentTask.taskId)
+      ) {
+        $("log").textContent =
+          "Brain COMPILE blocked: resume the selected task before compiling it.";
+        return;
+      }
 
       $("einkBrainCreateButton").disabled = true;
       $("einkBrainResumeButton").disabled = true;
@@ -3313,10 +3546,19 @@
       await refresh();
     });
     $("einkBrainRunButton").addEventListener("click", async () => {
-      const task = current?.brain?.currentTask;
+      const currentTask = current?.brain?.currentTask;
+      const task = findEinkBrainTask(
+        current,
+        $("einkBrainHistorySelect").value
+      );
       const contract = task?.contract;
 
-      if (!task || !contract || $("einkBrainRunButton").disabled) return;
+      if (
+        !task ||
+        !contract ||
+        String(task.taskId || "") !== String(currentTask?.taskId || "") ||
+        $("einkBrainRunButton").disabled
+      ) return;
 
       const authority = {
         taskId: String(task.taskId || ""),
@@ -3368,10 +3610,19 @@
       }
     });
     $("einkBrainPublicationButton").addEventListener("click", async () => {
-      const task = current?.brain?.currentTask;
+      const currentTask = current?.brain?.currentTask;
+      const task = findEinkBrainTask(
+        current,
+        $("einkBrainHistorySelect").value
+      );
       const contract = task?.contract;
       const button = $("einkBrainPublicationButton");
-      if (!task || !contract || button.disabled) return;
+      if (
+        !task ||
+        !contract ||
+        String(task.taskId || "") !== String(currentTask?.taskId || "") ||
+        button.disabled
+      ) return;
 
       const exactFiles = Array.isArray(contract.allowedFiles)
         ? contract.allowedFiles.filter(Boolean)
