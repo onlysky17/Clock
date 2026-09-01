@@ -14,6 +14,8 @@ $codexRoot = Join-Path $runRoot 'codex'
 $codexPath = Join-Path $codexRoot 'codex.cmd'
 $authPath = Join-Path $codexRoot 'auth.txt'
 $configPath = Join-Path $codexRoot 'config.toml'
+$ghPath = Join-Path $codexRoot 'gh.cmd'
+$ghAuthPath = Join-Path $codexRoot 'gh-auth.txt'
 $emptyGlobalGitConfig = Join-Path $runRoot 'empty-global.gitconfig'
 $previousGlobalGitConfig = [Environment]::GetEnvironmentVariable(
     'GIT_CONFIG_GLOBAL',
@@ -52,6 +54,7 @@ function Set-FixtureText {
 
 function Set-HealthyFixture {
     Set-FixtureText -Path $authPath -Value 'ready'
+    Set-FixtureText -Path $ghAuthPath -Value 'ready'
     Set-FixtureText -Path $configPath -Value "model = `"gpt-5.6-sol`"`n"
     [void](Invoke-FixtureGit @('config','--local','user.name','EINK Acceptance'))
     [void](Invoke-FixtureGit @('config','--local','user.email','eink-acceptance@example.invalid'))
@@ -59,11 +62,15 @@ function Set-HealthyFixture {
 }
 
 function Invoke-PrerequisiteCheck {
-    param([string]$CommandPath = $codexPath)
+    param(
+        [string]$CommandPath = $codexPath,
+        [string]$GhPath = $ghPath
+    )
     Test-EinkExecutorWorkstationPrerequisites `
         -RepoRoot $fixtureRoot `
         -CodexCommandPath $CommandPath `
-        -CodexConfigPath $configPath
+        -CodexConfigPath $configPath `
+        -GhCommandPath $GhPath
 }
 
 function Assert-BlockedCase {
@@ -111,6 +118,20 @@ if /I "%~1"=="login" if /I "%~2"=="status" (
 )
 exit /b 2
 '@
+    Set-FixtureText -Path $ghPath -Value @'
+@echo off
+setlocal EnableDelayedExpansion
+if /I "%~1"=="auth" if /I "%~2"=="status" (
+    set /p EINK_GH_AUTH=<"%~dp0gh-auth.txt"
+    if /I "!EINK_GH_AUTH!"=="ready" (
+        echo Logged in to github.com
+        exit /b 0
+    )
+    echo Not logged in to github.com
+    exit /b 1
+)
+exit /b 2
+'@
     [void](Invoke-FixtureGit @('init','-b','main'))
     Set-HealthyFixture
 
@@ -125,6 +146,19 @@ exit /b 2
         -Result (Invoke-PrerequisiteCheck) `
         -Code 'CODEX_AUTHENTICATION_UNAVAILABLE' `
         -Name 'MISSING_CODEX_AUTHENTICATION_BLOCKED'
+
+    Set-HealthyFixture
+    Assert-BlockedCase `
+        -Result (Invoke-PrerequisiteCheck -GhPath (Join-Path $runRoot 'missing-gh.cmd')) `
+        -Code 'GH_COMMAND_UNAVAILABLE' `
+        -Name 'MISSING_GH_COMMAND_BLOCKED'
+
+    Set-HealthyFixture
+    Set-FixtureText -Path $ghAuthPath -Value 'missing'
+    Assert-BlockedCase `
+        -Result (Invoke-PrerequisiteCheck) `
+        -Code 'GH_AUTHENTICATION_UNAVAILABLE' `
+        -Name 'MISSING_GH_AUTHENTICATION_BLOCKED'
 
     Set-HealthyFixture
     Set-FixtureText -Path $configPath -Value "model = `"gpt-5.5`"`n"
