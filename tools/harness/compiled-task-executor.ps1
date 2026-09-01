@@ -122,7 +122,8 @@ function Test-EinkExecutorWorkstationPrerequisites {
     param(
         [Parameter(Mandatory=$true)][string]$RepoRoot,
         [string]$CodexCommandPath,
-        [string]$CodexConfigPath
+        [string]$CodexConfigPath,
+        [string]$GhCommandPath
     )
 
     $codex = $null
@@ -151,6 +152,34 @@ function Test-EinkExecutorWorkstationPrerequisites {
         return Get-EinkExecutorBlockedPrerequisite `
             -Code 'CODEX_AUTHENTICATION_UNAVAILABLE' `
             -Action 'Run codex login, then verify codex login status succeeds.'
+    }
+
+    $gh = $null
+    if ($PSBoundParameters.ContainsKey('GhCommandPath')) {
+        if (-not (Test-Path -LiteralPath $GhCommandPath -PathType Leaf)) {
+            return Get-EinkExecutorBlockedPrerequisite `
+                -Code 'GH_COMMAND_UNAVAILABLE' `
+                -Action 'Install GitHub CLI and ensure gh is on PATH.'
+        }
+        $gh = [pscustomobject]@{ Source = [IO.Path]::GetFullPath($GhCommandPath) }
+    }
+    else {
+        $gh = Get-Command 'gh' -ErrorAction SilentlyContinue
+        if (-not $gh) {
+            return Get-EinkExecutorBlockedPrerequisite `
+                -Code 'GH_COMMAND_UNAVAILABLE' `
+                -Action 'Install GitHub CLI and ensure gh is on PATH.'
+        }
+    }
+
+    $ghAuth = Invoke-EinkExecutorNative `
+        -FilePath $gh.Source `
+        -Arguments @('auth','status') `
+        -WorkingDirectory $RepoRoot
+    if ($ghAuth.ExitCode -ne 0) {
+        return Get-EinkExecutorBlockedPrerequisite `
+            -Code 'GH_AUTHENTICATION_UNAVAILABLE' `
+            -Action 'Run gh auth login, then verify gh auth status succeeds.'
     }
 
     $configPath = if ($PSBoundParameters.ContainsKey('CodexConfigPath')) {
