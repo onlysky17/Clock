@@ -105,6 +105,128 @@ function Get-EinkExecutorGitValue {
     ([string]$result.Output[-1]).Trim()
 }
 
+function Get-EinkExecutorBlockedPrerequisite {
+    param(
+        [Parameter(Mandatory=$true)][string]$Code,
+        [Parameter(Mandatory=$true)][string]$Action
+    )
+
+    [pscustomobject]@{
+        Ready = $false
+        Code = $Code
+        Reason = "BLOCKED_PREREQUISITE: $Code - $Action"
+    }
+}
+
+function Test-EinkExecutorWorkstationPrerequisites {
+    param(
+        [Parameter(Mandatory=$true)][string]$RepoRoot,
+        [string]$CodexCommandPath,
+        [string]$CodexConfigPath
+    )
+
+    $codex = $null
+    if ($PSBoundParameters.ContainsKey('CodexCommandPath')) {
+        if (-not (Test-Path -LiteralPath $CodexCommandPath -PathType Leaf)) {
+            return Get-EinkExecutorBlockedPrerequisite `
+                -Code 'CODEX_COMMAND_UNAVAILABLE' `
+                -Action 'Install Codex CLI and ensure codex.cmd is on PATH.'
+        }
+        $codex = [pscustomobject]@{ Source = [IO.Path]::GetFullPath($CodexCommandPath) }
+    }
+    else {
+        $codex = Get-Command 'codex.cmd' -ErrorAction SilentlyContinue
+        if (-not $codex) {
+            return Get-EinkExecutorBlockedPrerequisite `
+                -Code 'CODEX_COMMAND_UNAVAILABLE' `
+                -Action 'Install Codex CLI and ensure codex.cmd is on PATH.'
+        }
+    }
+
+    $login = Invoke-EinkExecutorNative `
+        -FilePath $codex.Source `
+        -Arguments @('login','status') `
+        -WorkingDirectory $RepoRoot
+    if ($login.ExitCode -ne 0) {
+        return Get-EinkExecutorBlockedPrerequisite `
+            -Code 'CODEX_AUTHENTICATION_UNAVAILABLE' `
+            -Action 'Run codex login, then verify codex login status succeeds.'
+    }
+
+    $configPath = if ($PSBoundParameters.ContainsKey('CodexConfigPath')) {
+        $CodexConfigPath
+    }
+    else {
+        $codexHome = [Environment]::GetEnvironmentVariable('CODEX_HOME', 'Process')
+        if ([string]::IsNullOrWhiteSpace($codexHome)) {
+            $codexHome = Join-Path $env:USERPROFILE '.codex'
+        }
+        Join-Path $codexHome 'config.toml'
+    }
+    $model = ''
+    if (Test-Path -LiteralPath $configPath -PathType Leaf) {
+        foreach ($line in [IO.File]::ReadAllLines($configPath, [Text.Encoding]::UTF8)) {
+            $trimmed = $line.Trim()
+            if ($trimmed -match '^\[') { break }
+            if ($trimmed -match '^model\s*=\s*["'']([^"'']+)["'']\s*(?:#.*)?$') {
+                $model = [string]$Matches[1]
+                break
+            }
+        }
+    }
+    if (-not $model.Equals('gpt-5.6-sol', [StringComparison]::OrdinalIgnoreCase)) {
+        return Get-EinkExecutorBlockedPrerequisite `
+            -Code 'CODEX_DEFAULT_MODEL_NOT_GPT_5_6_SOL' `
+            -Action 'Set model = "gpt-5.6-sol" in the Codex config.toml file.'
+    }
+
+    $authorName = Get-EinkExecutorGit -RepoRoot $RepoRoot -Arguments @(
+        'config','--get','user.name'
+    )
+    if (
+        $authorName.ExitCode -ne 0 -or
+        [string]::IsNullOrWhiteSpace(($authorName.Output -join ''))
+    ) {
+        return Get-EinkExecutorBlockedPrerequisite `
+            -Code 'GIT_AUTHOR_NAME_MISSING' `
+            -Action 'Run git config --global user.name "Your Name".'
+    }
+
+    $authorEmail = Get-EinkExecutorGit -RepoRoot $RepoRoot -Arguments @(
+        'config','--get','user.email'
+    )
+    if (
+        $authorEmail.ExitCode -ne 0 -or
+        [string]::IsNullOrWhiteSpace(($authorEmail.Output -join ''))
+    ) {
+        return Get-EinkExecutorBlockedPrerequisite `
+            -Code 'GIT_AUTHOR_EMAIL_MISSING' `
+            -Action 'Run git config --global user.email "you@example.com".'
+    }
+
+    $longPaths = Get-EinkExecutorGit -RepoRoot $RepoRoot -Arguments @(
+        'config','--get','core.longpaths'
+    )
+    $longPathsValue = if (@($longPaths.Output).Count -gt 0) {
+        ([string]$longPaths.Output[-1]).Trim()
+    }
+    else { '' }
+    if (
+        $longPaths.ExitCode -ne 0 -or
+        -not $longPathsValue.Equals('true', [StringComparison]::OrdinalIgnoreCase)
+    ) {
+        return Get-EinkExecutorBlockedPrerequisite `
+            -Code 'GIT_CORE_LONGPATHS_NOT_TRUE' `
+            -Action 'Run git config --global core.longpaths true.'
+    }
+
+    [pscustomobject]@{
+        Ready = $true
+        Code = ''
+        Reason = ''
+    }
+}
+
 function Test-EinkExecutorGitRef {
     param(
         [Parameter(Mandatory=$true)][string]$RepoRoot,
@@ -619,6 +741,14 @@ function Invoke-EinkCompiledTaskExecutor {
         }
 
         Publish-State 'PREFLIGHT'
+        if (-not $AcceptanceMode) {
+            $workstation = Test-EinkExecutorWorkstationPrerequisites `
+                -RepoRoot $RepoRoot
+            if (-not $workstation.Ready) {
+                throw $workstation.Reason
+            }
+            $log.Add('WORKSTATION_PREREQUISITES: PASS')
+        }
         $repo = Get-EinkExecutorRepoStatus -RepoRoot $RepoRoot
         $canonical = [IO.Path]::GetFullPath([string]$contract.workspace)
         if (-not [IO.Path]::GetFullPath($repo.Root).Equals(
