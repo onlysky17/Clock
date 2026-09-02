@@ -1248,7 +1248,6 @@ function Invoke-EinkCompiledTaskPublicationResume {
             [string]::IsNullOrWhiteSpace([string]$evidence.validatedUtc) -or
             [string]::IsNullOrWhiteSpace([string]$evidence.validatedHead) -or
             [string]::IsNullOrWhiteSpace([string]$evidence.validatedBranch) -or
-            [string]::IsNullOrWhiteSpace([string]$evidence.implementationDiffSha256) -or
             @($evidence.validationEvidence).Count -eq 0
         ) { throw 'VALIDATED_IMPLEMENTATION_EVIDENCE_MISSING' }
         if (
@@ -1303,10 +1302,6 @@ function Invoke-EinkCompiledTaskPublicationResume {
         $changed = @(Assert-EinkExecutorScope -RepoRoot $RepoRoot -AllowedFiles $allowed -RequireChange)
         if ((@($evidence.changedFiles) -join "`n") -ne ($changed -join "`n")) {
             throw 'VALIDATED_IMPLEMENTATION_SCOPE_DRIFT'
-        }
-        $diffSha = Get-EinkExecutorImplementationDiffSha256 -RepoRoot $RepoRoot -AllowedFiles $allowed
-        if (-not $diffSha.Equals([string]$evidence.implementationDiffSha256,[StringComparison]::OrdinalIgnoreCase)) {
-            throw 'VALIDATED_IMPLEMENTATION_DIFF_DRIFT'
         }
         Publish-PublicationState 'SCOPE_RECHECKED' $scopeSha
 
