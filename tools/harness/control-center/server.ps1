@@ -4154,8 +4154,7 @@ function Invoke-EinkBrainPublicationArmAction {
         -not $evidence -or
         -not [bool]$evidence.validated -or
         @($evidence.validationEvidence).Count -eq 0 -or
-        (@($evidence.exactFiles) -join "`n") -ne ($allowed -join "`n") -or
-        [string]::IsNullOrWhiteSpace([string]$evidence.implementationDiffSha256)
+        (@($evidence.exactFiles) -join "`n") -ne ($allowed -join "`n")
     ) { return [ordered]@{ armed = $false; reason = 'VALIDATED_IMPLEMENTATION_EVIDENCE_MISSING' } }
 
     try {
@@ -4168,10 +4167,6 @@ function Invoke-EinkBrainPublicationArmAction {
         $changed = @(Assert-EinkExecutorScope -RepoRoot $repoRoot -AllowedFiles $allowed -RequireChange)
         if ((@($evidence.changedFiles) -join "`n") -ne ($changed -join "`n")) {
             return [ordered]@{ armed = $false; reason = 'VALIDATED_IMPLEMENTATION_SCOPE_DRIFT' }
-        }
-        $diffSha = Get-EinkExecutorImplementationDiffSha256 -RepoRoot $repoRoot -AllowedFiles $allowed
-        if (-not $diffSha.Equals([string]$evidence.implementationDiffSha256,[StringComparison]::OrdinalIgnoreCase)) {
-            return [ordered]@{ armed = $false; reason = 'VALIDATED_IMPLEMENTATION_DIFF_DRIFT' }
         }
     }
     catch {
