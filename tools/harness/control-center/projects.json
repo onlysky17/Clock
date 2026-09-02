@@ -64,6 +64,18 @@
           "ownerGate": true
         },
         {
+          "id": "brain-publication-arm",
+          "method": "POST",
+          "destructive": false,
+          "ownerGate": true
+        },
+        {
+          "id": "brain-publication-resume",
+          "method": "POST",
+          "destructive": true,
+          "ownerGate": true
+        },
+        {
           "id": "prepare",
           "method": "POST",
           "destructive": false,
