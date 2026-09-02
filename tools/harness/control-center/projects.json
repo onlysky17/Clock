@@ -76,6 +76,18 @@
           "ownerGate": true
         },
         {
+          "id": "brain-post-merge-arm",
+          "method": "POST",
+          "destructive": false,
+          "ownerGate": true
+        },
+        {
+          "id": "brain-post-merge-complete",
+          "method": "POST",
+          "destructive": true,
+          "ownerGate": true
+        },
+        {
           "id": "prepare",
           "method": "POST",
           "destructive": false,

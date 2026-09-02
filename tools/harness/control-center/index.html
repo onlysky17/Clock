@@ -1410,6 +1410,7 @@
           <button id="einkBrainCompileButton" disabled>COMPILE TASK</button>
           <button id="einkBrainRunButton" class="run-compiled" disabled>RUN COMPILED TASK</button>
           <button id="einkBrainPublicationButton" class="pass-action" disabled>APPROVE PUBLICATION</button>
+          <button id="einkBrainPostMergeButton" class="pass-action" disabled>COMPLETE MERGED TASK</button>
           <button id="einkBrainArchiveButton" disabled>ARCHIVE TASK</button>
         </div>
 
@@ -2624,6 +2625,7 @@
       const compileButton = $("einkBrainCompileButton");
       const runButton = $("einkBrainRunButton");
       const publicationButton = $("einkBrainPublicationButton");
+      const postMergeButton = $("einkBrainPostMergeButton");
       const archiveButton = $("einkBrainArchiveButton");
       const showArchived = $("einkBrainShowArchived");
 
@@ -2640,6 +2642,7 @@
         !compileButton ||
         !runButton ||
         !publicationButton ||
+        !postMergeButton ||
         !archiveButton ||
         !showArchived
       ) {
@@ -2721,6 +2724,19 @@
         publicationState === "WAITING_OWNER" &&
         task.execution?.passed === true &&
         task.execution?.implementationEvidence?.validated === true &&
+        exactFiles.length > 0
+      );
+
+      postMergeButton.disabled = !(
+        !data?.busy &&
+        selectedIsCurrent &&
+        brain.executionActive !== true &&
+        brain.execution?.active !== true &&
+        task.status === "OWNER_MERGE_REQUIRED" &&
+        /^[0-9a-f]{40}$/i.test(String(task.execution?.commitSha || "")) &&
+        /^https:\/\/github\.com\/.+\/pull\/\d+$/i.test(String(task.execution?.prUrl || "")) &&
+        /^[0-9A-F]{64}$/i.test(contractSha) &&
+        /^[0-9A-F]{64}$/i.test(scopeSha) &&
         exactFiles.length > 0
       );
 
@@ -3664,6 +3680,59 @@
         localExecutionState = "";
         $("log").textContent =
           `Publication resume blocked: ${error.message}`;
+      } finally {
+        await refresh();
+      }
+    });
+    $("einkBrainPostMergeButton").addEventListener("click", async () => {
+      const currentTask = current?.brain?.currentTask;
+      const task = findEinkBrainTask(
+        current,
+        $("einkBrainHistorySelect").value
+      );
+      const contract = task?.contract;
+      const button = $("einkBrainPostMergeButton");
+      if (
+        !task ||
+        !contract ||
+        String(task.taskId || "") !== String(currentTask?.taskId || "") ||
+        button.disabled
+      ) return;
+
+      const exactFiles = Array.isArray(contract.allowedFiles)
+        ? contract.allowedFiles.filter(Boolean)
+        : [];
+      const authority = {
+        taskId: String(task.taskId || ""),
+        contractSha256: String(contract.contractSha256 || ""),
+        exactScopeSha256: String(contract.exactScopeSha256 || "")
+      };
+      const prUrl = String(task.execution?.prUrl || "");
+
+      if (!window.confirm(
+        `COMPLETE MERGED TASK\n\n` +
+        `Task ID: ${authority.taskId}\n` +
+        `PR: ${prUrl}\n` +
+        `Exact files (${exactFiles.length}):\n- ${exactFiles.join("\n- ")}\n\n` +
+        `This verifies the PR is merged, syncs main with --ff-only, and verifies exact-file content before marking COMPLETED. It does not merge the PR.`
+      )) {
+        $("log").textContent =
+          "Post-merge completion cancelled by Owner; task remains OWNER_MERGE_REQUIRED.";
+        return;
+      }
+
+      button.disabled = true;
+      try {
+        const armed = await einkAction("brain-post-merge-arm", authority);
+        if (!armed?.armed || !armed?.challenge) {
+          throw new Error(armed?.reason || "POST_MERGE_NOT_ARMED");
+        }
+        render(await einkAction("brain-post-merge-complete", {
+          ...authority,
+          ownerChallenge: armed.challenge
+        }));
+      } catch (error) {
+        $("log").textContent = `Post-merge completion blocked: ${error.message}`;
       } finally {
         await refresh();
       }

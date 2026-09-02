@@ -227,6 +227,11 @@ $script:PublicationChallengeFilesSha = ''
 $script:ArchiveChallengeHash = ''
 $script:ArchiveChallengeExpiresUtc = [DateTime]::MinValue
 $script:ArchiveChallengeTaskId = ''
+$script:PostMergeChallengeHash = ''
+$script:PostMergeChallengeExpiresUtc = [DateTime]::MinValue
+$script:PostMergeChallengeTaskId = ''
+$script:PostMergeChallengeContractSha = ''
+$script:PostMergeChallengeScopeSha = ''
 $script:LastLog = @(
     'Harness Control Center Multiproject v0.5 started.',
     'Waiting for action.'
@@ -995,6 +1000,53 @@ function Test-AndConsumeEinkArchiveOwnerChallenge {
     $script:ArchiveChallengeHash = ''
     $script:ArchiveChallengeExpiresUtc = [DateTime]::MinValue
     $script:ArchiveChallengeTaskId = ''
+    return [bool]$valid
+}
+
+function New-EinkPostMergeOwnerChallenge {
+    param(
+        [Parameter(Mandatory=$true)][string]$TaskId,
+        [Parameter(Mandatory=$true)][string]$ContractSha256,
+        [Parameter(Mandatory=$true)][string]$ExactScopeSha256
+    )
+
+    $challenge = [Guid]::NewGuid().ToString('N')
+    $script:PostMergeChallengeHash = Get-TextSha256 -Text $challenge
+    $script:PostMergeChallengeExpiresUtc = [DateTime]::UtcNow.AddMinutes(2)
+    $script:PostMergeChallengeTaskId = $TaskId.Trim()
+    $script:PostMergeChallengeContractSha = $ContractSha256.Trim().ToUpperInvariant()
+    $script:PostMergeChallengeScopeSha = $ExactScopeSha256.Trim().ToUpperInvariant()
+
+    [pscustomobject]@{
+        armed = $true
+        challenge = $challenge
+        expiresUtc = $script:PostMergeChallengeExpiresUtc.ToString('o')
+        taskId = $script:PostMergeChallengeTaskId
+        contractSha256 = $script:PostMergeChallengeContractSha
+        exactScopeSha256 = $script:PostMergeChallengeScopeSha
+    }
+}
+
+function Test-AndConsumeEinkPostMergeOwnerChallenge {
+    param(
+        [Parameter(Mandatory=$true)][AllowEmptyString()][string]$Challenge,
+        [Parameter(Mandatory=$true)][AllowEmptyString()][string]$TaskId,
+        [Parameter(Mandatory=$true)][AllowEmptyString()][string]$ContractSha256,
+        [Parameter(Mandatory=$true)][AllowEmptyString()][string]$ExactScopeSha256
+    )
+
+    $valid = -not [string]::IsNullOrWhiteSpace($Challenge) -and
+        [DateTime]::UtcNow -le $script:PostMergeChallengeExpiresUtc -and
+        (Get-TextSha256 -Text $Challenge) -eq $script:PostMergeChallengeHash -and
+        $TaskId.Trim() -eq $script:PostMergeChallengeTaskId -and
+        $ContractSha256.Trim().ToUpperInvariant() -eq $script:PostMergeChallengeContractSha -and
+        $ExactScopeSha256.Trim().ToUpperInvariant() -eq $script:PostMergeChallengeScopeSha
+
+    $script:PostMergeChallengeHash = ''
+    $script:PostMergeChallengeExpiresUtc = [DateTime]::MinValue
+    $script:PostMergeChallengeTaskId = ''
+    $script:PostMergeChallengeContractSha = ''
+    $script:PostMergeChallengeScopeSha = ''
     return [bool]$valid
 }
 
@@ -4194,6 +4246,237 @@ function Invoke-EinkBrainPublicationAction {
     }
     Get-ControlStatus
 }
+
+function Invoke-EinkBrainPostMergeArmAction {
+    param([Parameter(Mandatory=$true)]$Body)
+
+    $executionRuntime = Sync-EinkCompiledTaskRuntimeState
+    if ($script:Busy -or ($executionRuntime -and $executionRuntime.Running)) {
+        return [ordered]@{ armed = $false; reason = 'HARNESS_BUSY' }
+    }
+
+    $task = Read-EinkBrainCurrentTask
+    if (
+        -not $task -or
+        [string]$task.status -ne 'OWNER_MERGE_REQUIRED' -or
+        -not $task.execution
+    ) {
+        return [ordered]@{ armed = $false; reason = 'POST_MERGE_WRONG_STATE' }
+    }
+
+    $taskId = ([string]$Body.taskId).Trim()
+    $contractSha = ([string]$Body.contractSha256).Trim().ToUpperInvariant()
+    $scopeSha = ([string]$Body.exactScopeSha256).Trim().ToUpperInvariant()
+    $contract = $task.contract
+    $allowed = @($contract.allowedFiles | ForEach-Object { ([string]$_).Replace('\','/') })
+    if (
+        $taskId -ne [string]$task.taskId -or
+        $contractSha -ne ([string]$contract.contractSha256).Trim().ToUpperInvariant() -or
+        $contractSha -ne (Get-EinkExecutorContractSha256 -Contract $contract) -or
+        $scopeSha -ne ([string]$contract.exactScopeSha256).Trim().ToUpperInvariant() -or
+        $scopeSha -ne (Get-EinkExecutorSha256Text -Text ($allowed -join "`n")) -or
+        $allowed.Count -eq 0 -or
+        [string]$task.execution.commitSha -notmatch '^[0-9a-fA-F]{40}$' -or
+        [string]$task.execution.prUrl -notmatch '^https://github\.com/.+/pull/\d+$'
+    ) {
+        return [ordered]@{ armed = $false; reason = 'POST_MERGE_AUTHORITY_MISMATCH' }
+    }
+
+    New-EinkPostMergeOwnerChallenge `
+        -TaskId $taskId `
+        -ContractSha256 $contractSha `
+        -ExactScopeSha256 $scopeSha
+}
+
+function Invoke-EinkBrainPostMergeCompleteAction {
+    param([Parameter(Mandatory=$true)]$Body)
+
+    $taskId = ([string]$Body.taskId).Trim()
+    $contractSha = ([string]$Body.contractSha256).Trim().ToUpperInvariant()
+    $scopeSha = ([string]$Body.exactScopeSha256).Trim().ToUpperInvariant()
+    $challenge = [string]$Body.ownerChallenge
+    if (-not (Test-AndConsumeEinkPostMergeOwnerChallenge `
+        -Challenge $challenge `
+        -TaskId $taskId `
+        -ContractSha256 $contractSha `
+        -ExactScopeSha256 $scopeSha)) {
+        Set-LastLog -Action 'BRAIN_POST_MERGE' -Result 'BLOCKED' -Lines @(
+            'BLOCKED: OWNER_POST_MERGE_CONFIRMATION_REQUIRED'
+        )
+        return Get-ControlStatus
+    }
+
+    $executionRuntime = Sync-EinkCompiledTaskRuntimeState
+    if ($script:Busy -or ($executionRuntime -and $executionRuntime.Running)) {
+        Set-LastLog -Action 'BRAIN_POST_MERGE' -Result 'BLOCKED' -Lines @(
+            'BLOCKED: HARNESS_BUSY'
+        )
+        return Get-ControlStatus
+    }
+
+    $task = Read-EinkBrainCurrentTask
+    if (
+        -not $task -or
+        [string]$task.status -ne 'OWNER_MERGE_REQUIRED' -or
+        -not $task.execution
+    ) {
+        Set-LastLog -Action 'BRAIN_POST_MERGE' -Result 'BLOCKED' -Lines @(
+            'BLOCKED: POST_MERGE_WRONG_STATE'
+        )
+        return Get-ControlStatus
+    }
+
+    $contract = $task.contract
+    $allowed = @($contract.allowedFiles | ForEach-Object { ([string]$_).Replace('\','/') })
+    if (
+        $taskId -ne [string]$task.taskId -or
+        $contractSha -ne ([string]$contract.contractSha256).Trim().ToUpperInvariant() -or
+        $contractSha -ne (Get-EinkExecutorContractSha256 -Contract $contract) -or
+        $scopeSha -ne ([string]$contract.exactScopeSha256).Trim().ToUpperInvariant() -or
+        $scopeSha -ne (Get-EinkExecutorSha256Text -Text ($allowed -join "`n")) -or
+        $allowed.Count -eq 0
+    ) {
+        Set-LastLog -Action 'BRAIN_POST_MERGE' -Result 'BLOCKED' -Lines @(
+            'BLOCKED: POST_MERGE_AUTHORITY_MISMATCH'
+        )
+        return Get-ControlStatus
+    }
+
+    $script:Busy = $true
+    try {
+        $sourceHead = ([string]$task.execution.commitSha).Trim().ToLowerInvariant()
+        $prUrl = ([string]$task.execution.prUrl).Trim()
+        if (
+            $sourceHead -notmatch '^[0-9a-f]{40}$' -or
+            $prUrl -notmatch '^https://github\.com/.+/pull/\d+$'
+        ) {
+            throw 'TASK_PR_EVIDENCE_INVALID'
+        }
+
+        $status = Invoke-Git -Arguments @('status','--porcelain=v1','--untracked-files=all')
+        if ($status.ExitCode -ne 0 -or @($status.Output | Where-Object { $_ }).Count -gt 0) {
+            throw 'POST_MERGE_REQUIRES_CLEAN_TREE'
+        }
+
+        $prResult = Invoke-NativeText `
+            -FilePath 'gh' `
+            -Arguments @(
+                'pr','view',$prUrl,'--json',
+                'url,state,mergedAt,mergeCommit,headRefOid'
+            )
+        if ($prResult.ExitCode -ne 0) { throw 'PR_MERGE_VERIFICATION_FAILED' }
+        try {
+            $pr = (($prResult.Output -join "`n") | ConvertFrom-Json)
+        }
+        catch {
+            throw 'PR_MERGE_EVIDENCE_INVALID'
+        }
+        if (
+            [string]$pr.url -ne $prUrl -or
+            [string]$pr.state -ne 'MERGED' -or
+            [string]::IsNullOrWhiteSpace([string]$pr.mergedAt) -or
+            -not $pr.mergeCommit -or
+            [string]$pr.mergeCommit.oid -notmatch '^[0-9a-fA-F]{40}$' -or
+            -not ([string]$pr.headRefOid).Equals(
+                $sourceHead,
+                [StringComparison]::OrdinalIgnoreCase
+            )
+        ) {
+            throw 'TASK_PR_NOT_MERGED'
+        }
+
+        $fetch = Invoke-Git -Arguments @('fetch','origin')
+        if ($fetch.ExitCode -ne 0) { throw 'FETCH_ORIGIN_FAILED' }
+
+        $mergeHead = ([string]$pr.mergeCommit.oid).Trim().ToLowerInvariant()
+        $mergeAncestor = Invoke-Git -Arguments @(
+            'merge-base','--is-ancestor',$mergeHead,'origin/main'
+        )
+        if ($mergeAncestor.ExitCode -ne 0) { throw 'PR_MERGE_NOT_ON_ORIGIN_MAIN' }
+
+        $switch = Invoke-Git -Arguments @('switch','main')
+        if ($switch.ExitCode -ne 0) { throw 'SAFE_SWITCH_MAIN_FAILED' }
+
+        $pull = Invoke-Git -Arguments @('pull','--ff-only','origin','main')
+        if ($pull.ExitCode -ne 0) { throw 'FF_ONLY_PULL_MAIN_FAILED' }
+
+        $head = Invoke-Git -Arguments @('rev-parse','HEAD')
+        $originMain = Invoke-Git -Arguments @('rev-parse','origin/main')
+        if (
+            $head.ExitCode -ne 0 -or
+            $originMain.ExitCode -ne 0 -or
+            $head.Output.Count -eq 0 -or
+            $originMain.Output.Count -eq 0 -or
+            $head.Output[-1].Trim() -ne $originMain.Output[-1].Trim()
+        ) {
+            throw 'LOCAL_MAIN_NOT_EQUAL_ORIGIN_MAIN'
+        }
+        $mainHead = $head.Output[-1].Trim().ToLowerInvariant()
+
+        foreach ($file in $allowed) {
+            $sourceFile = Invoke-Git -Arguments @('cat-file','-e',("{0}:{1}" -f $sourceHead,$file))
+            $mainFile = Invoke-Git -Arguments @('cat-file','-e',("origin/main:{0}" -f $file))
+            if ($sourceFile.ExitCode -ne 0 -or $mainFile.ExitCode -ne 0) {
+                throw "EXACT_FILE_MISSING_ON_MAIN: $file"
+            }
+        }
+        $content = Invoke-Git -Arguments (@(
+            'diff','--quiet',$sourceHead,'origin/main','--'
+        ) + $allowed)
+        if ($content.ExitCode -ne 0) { throw 'EXACT_FILE_CONTENT_NOT_ON_MAIN' }
+
+        $execution = [ordered]@{}
+        foreach ($property in $task.execution.PSObject.Properties) {
+            $execution[$property.Name] = $property.Value
+        }
+        $completedUtc = [DateTime]::UtcNow.ToString('o')
+        $execution['state'] = 'COMPLETED'
+        $execution['phase'] = 'COMPLETED'
+        $execution['completedUtc'] = $completedUtc
+        $execution['mergeCommit'] = $mergeHead
+        $execution['prMergedAt'] = [string]$pr.mergedAt
+        $execution['mainHead'] = $mainHead
+        $execution['exactFileContentVerified'] = $true
+        $execution['log'] = @($task.execution.log) + @(
+            'PR_MERGED: VERIFIED',
+            'FETCH_ORIGIN: PASS',
+            'SWITCH_MAIN: PASS',
+            'PULL_FF_ONLY: PASS',
+            'HEAD_EQUALS_ORIGIN_MAIN: PASS',
+            'EXACT_FILE_CONTENT_ON_MAIN: PASS',
+            'AUTO_MERGE: NOT PERFORMED'
+        )
+
+        [void](Write-EinkBrainExecutionSnapshot `
+            -Task $task `
+            -Status 'COMPLETED' `
+            -Event 'POST_MERGE_COMPLETED' `
+            -Execution $execution `
+            -AppendHistory)
+        Set-LastLog -Action 'BRAIN_POST_MERGE' -Result 'PASS' -Lines @(
+            'EINK BRAIN POST-MERGE COMPLETION PASS.',
+            "TASK_ID: $taskId",
+            "PR: $prUrl",
+            "MERGE_COMMIT: $mergeHead",
+            "MAIN_HEAD: $mainHead",
+            'STATE: COMPLETED',
+            'ARCHIVE: ENABLED',
+            'AUTO_MERGE: NOT PERFORMED'
+        )
+    }
+    catch {
+        Set-LastLog -Action 'BRAIN_POST_MERGE' -Result 'BLOCKED' -Lines @(
+            "BLOCKED: $($_.Exception.Message)",
+            'STATE_PRESERVED: OWNER_MERGE_REQUIRED',
+            'AUTO_MERGE: NOT PERFORMED'
+        )
+    }
+    finally {
+        $script:Busy = $false
+    }
+
+    Get-ControlStatus
+}
 function Get-ControlStatus {
 
     $burnRuntime = Sync-BurnRuntimeState
@@ -5600,7 +5883,9 @@ try {
                         'brain-execute-arm',
                         'brain-execute',
                         'brain-publication-arm',
-                        'brain-publication-resume'
+                        'brain-publication-resume',
+                        'brain-post-merge-arm',
+                        'brain-post-merge-complete'
                     )
                 ) {
                     try {
@@ -5647,6 +5932,12 @@ try {
                     }
                     elseif ($actionId -eq 'brain-publication-resume') {
                         Invoke-EinkBrainPublicationAction -Body $body
+                    }
+                    elseif ($actionId -eq 'brain-post-merge-arm') {
+                        Invoke-EinkBrainPostMergeArmAction -Body $body
+                    }
+                    elseif ($actionId -eq 'brain-post-merge-complete') {
+                        Invoke-EinkBrainPostMergeCompleteAction -Body $body
                     }
                     else {
                         Invoke-EinkBrainExecuteAction -Body $body
