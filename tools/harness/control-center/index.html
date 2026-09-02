@@ -3522,7 +3522,10 @@
       $("einkBrainResumeButton").disabled = true;
 
       try {
-        const result = await einkAction("brain-resume", { taskId });
+        const result = await einkAction("brain-resume", {
+          taskId,
+          resumeExistingEvidence: $("einkBrainResumeExistingEvidence").checked
+        });
         render(result);
         hydrateEinkBrainCurrentTask(result, { force: true });
       } catch (error) {

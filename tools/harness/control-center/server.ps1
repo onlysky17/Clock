@@ -3892,7 +3892,7 @@ function Invoke-EinkBrainResumeAction {
         resumedOnHead = [string]$repo.Head
         contract = $sourceContract
         exactFiles = @($source.exactFiles)
-        resumeExistingEvidence = [bool]$source.resumeExistingEvidence
+        resumeExistingEvidence = [bool]$Body.resumeExistingEvidence
     }
 
     Write-Utf8JsonFile `
