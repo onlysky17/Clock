@@ -3973,8 +3973,21 @@ function Invoke-EinkBrainExecuteArmAction {
     }
 
     $repo = Get-EinkExecutorRepoStatus -RepoRoot $repoRoot
-    if (@($repo.Tracked).Count -gt 0 -or @($repo.Staged).Count -gt 0) {
+    if (@($repo.Staged).Count -gt 0) {
         return [ordered]@{ armed = $false; reason = 'DIRTY_TRACKED_TREE' }
+    }
+    if (@($repo.Tracked).Count -gt 0) {
+        if (-not [bool]$task.resumeExistingEvidence) {
+            return [ordered]@{ armed = $false; reason = 'DIRTY_TRACKED_TREE' }
+        }
+        $allowed = @($contract.allowedFiles | ForEach-Object {
+            ([string]$_).Replace('\','/')
+        })
+        $changed = @(Get-EinkExecutorChangedFiles -RepoRoot $repoRoot)
+        $outside = @($changed | Where-Object { $allowed -notcontains $_ })
+        if ($changed.Count -eq 0 -or $outside.Count -gt 0) {
+            return [ordered]@{ armed = $false; reason = 'RESUME_EVIDENCE_SCOPE_MISMATCH' }
+        }
     }
     if ($repo.Branch -eq 'main') {
         try {
@@ -4556,6 +4569,7 @@ function Get-ControlStatus {
         state = $state
         busy = [bool]($script:Busy -or $burnRunning -or ($compiledTaskRuntime -and $compiledTaskRuntime.Running))
         trackedDirtyCount = @($repo.TrackedStatus).Count
+        trackedDirtyFiles = @($repo.DirtyTrackedFiles)
         stagedCount = @($repo.StagedFiles).Count
         untrackedCount = @($repo.Untracked).Count
         brain = (Get-EinkBrainStatus)

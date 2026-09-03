@@ -830,6 +830,9 @@ function Invoke-EinkCompiledTaskExecutor {
         )) {
             throw 'EXACT_SCOPE_SHA_MISMATCH'
         }
+        $resume = [bool]$Task.resumeExistingEvidence -or
+            [bool]$contract.resumeExistingEvidence -or
+            $AcceptanceScenario -eq 'RESUME_EXISTING'
 
         Publish-State 'PREFLIGHT'
         if (-not $AcceptanceMode) {
@@ -849,8 +852,14 @@ function Invoke-EinkCompiledTaskExecutor {
             throw 'WRONG_WORKSPACE'
         }
         if ($repo.Staged.Count -gt 0) { throw 'PREEXISTING_STAGED_FILES' }
+        $resumeWorkingEvidence = $resume -and $repo.Tracked.Count -gt 0
         if ($repo.Tracked.Count -gt 0 -and -not [bool]$contract.allowDirtyTrackedTree) {
-            throw 'DIRTY_TRACKED_TREE'
+            if (-not $resumeWorkingEvidence) { throw 'DIRTY_TRACKED_TREE' }
+            $resumeFiles = @(Get-EinkExecutorChangedFiles -RepoRoot $RepoRoot)
+            $outsideResume = @($resumeFiles | Where-Object { $allowed -notcontains $_ })
+            if ($resumeFiles.Count -eq 0 -or $outsideResume.Count -gt 0) {
+                throw 'RESUME_EVIDENCE_SCOPE_MISMATCH'
+            }
         }
         $unknownUntracked = @(
             $repo.Untracked |
@@ -859,8 +868,6 @@ function Invoke-EinkCompiledTaskExecutor {
         if ($unknownUntracked.Count -gt 0) {
             throw ('UNAPPROVED_UNTRACKED_FILES: ' + ($unknownUntracked -join ', '))
         }
-        $resume = [bool]$contract.resumeExistingEvidence -or
-            $AcceptanceScenario -eq 'RESUME_EXISTING'
         $compiledBranch = [string]$contract.compiledFromBranch
         $compiledHead = [string]$contract.compiledFromHead
         $taskBranch = Get-EinkExecutorFeatureBranchName -TaskId ([string]$contract.taskId)
@@ -953,7 +960,7 @@ function Invoke-EinkCompiledTaskExecutor {
             if (-not $resume -and $taskHead -ne $compiledHead) {
                 throw 'TASK_BRANCH_HEAD_DRIFT'
             }
-            if ($resume -and $taskHead -eq $compiledHead) {
+            if ($resume -and -not $resumeWorkingEvidence -and $taskHead -eq $compiledHead) {
                 throw 'RESUME_EVIDENCE_COMMIT_REQUIRED'
             }
             Publish-State 'FEATURE_BRANCH_READY' $taskBranch
@@ -966,7 +973,12 @@ function Invoke-EinkCompiledTaskExecutor {
             throw 'COMPILED_SOURCE_DRIFT'
         }
 
-        if ($resume) {
+        if ($resumeWorkingEvidence) {
+            Publish-State 'EXECUTING' 'RESUME_EXISTING_WORKING_EVIDENCE'
+            $commitSha = ''
+            $log.Add('IMPLEMENTATION: SKIPPED_EXISTING_EVIDENCE')
+        }
+        elseif ($resume) {
             Publish-State 'EXECUTING' 'RESUME_EXISTING_EVIDENCE'
             $scopeArguments = if ($automaticFeatureBranch) {
                 $ancestor = Get-EinkExecutorGit -RepoRoot $RepoRoot -Arguments @(
