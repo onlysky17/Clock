@@ -2801,18 +2801,33 @@
           option.dataset.status = String(item.status || "").toUpperCase();
           option.dataset.archived = item.archived === true ? "true" : "false";
 
-          const request = String(item.request || "")
+          const taskName = String(item.request || "")
+            .split(/\r?\n/, 1)[0]
             .replace(/\s+/g, " ")
-            .trim();
+            .trim() || "Untitled task";
+
+          const displayName = taskName
+            .replace(/^EINK-HARNESS-/i, "")
+            .replace(/^EINK-BRAIN-/i, "") || taskName;
 
           const preview =
-            request.length > 60
-              ? `${request.slice(0, 60)}…`
-              : request;
+            displayName.length > 26
+              ? `${displayName.slice(0, 26)}…`
+              : displayName;
 
-          option.textContent =
-            `${item.archived === true ? "[ARCHIVED] · " : ""}` +
-            `${item.taskId || "-"} · ${item.status || item.event || "CREATE"} · ${preview}`;
+          const rawStatus = String(item.status || item.event || "CREATE").toUpperCase();
+          const shortStatus = ({
+            PAUSED_OWNER_ACTION: "WAITING",
+            WAITING_OWNER: "WAITING",
+            OWNER_MERGE_REQUIRED: "MERGE",
+            COMPLETED: "DONE",
+            CLOSED: "DONE",
+            COMPILED: "COMPILED",
+            READY: "READY",
+            BLOCKED: "BLOCKED",
+          })[rawStatus] || rawStatus;
+
+          option.textContent = `${preview} · ${shortStatus}`;
 
           historySelect.appendChild(option);
         }
