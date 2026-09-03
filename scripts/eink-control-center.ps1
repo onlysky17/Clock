@@ -16,7 +16,17 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$invokedRepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$lifecycleScript = Join-Path $invokedRepoRoot 'tools\harness\main-worktree-lifecycle.ps1'
+if (-not (Test-Path -LiteralPath $lifecycleScript -PathType Leaf)) {
+    throw 'HARNESS_MAIN_WORKTREE_LIFECYCLE_MODULE_MISSING'
+}
+. $lifecycleScript
+$worktreeLifecycle = Invoke-EinkHarnessMainWorktreeLifecycle `
+    -RepoRoot $invokedRepoRoot `
+    -FetchOrigin `
+    -AllowLegacyReservedRuntimeAdoption
+$repoRoot = [string]$worktreeLifecycle.CanonicalRoot
 $serverPath = Join-Path $repoRoot 'tools\harness\control-center\server.ps1'
 $runtimeRoot = Join-Path $repoRoot '_incoming\EINK_HARNESS_CONTROL_CENTER_RUNTIME'
 $runtimeLockPath = Join-Path $runtimeRoot ("server-$Port.json")

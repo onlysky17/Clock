@@ -3,6 +3,12 @@ param()
 
 $ErrorActionPreference = 'Stop'
 
+$mainWorktreeLifecycleScript = Join-Path $PSScriptRoot 'main-worktree-lifecycle.ps1'
+if (-not (Test-Path -LiteralPath $mainWorktreeLifecycleScript -PathType Leaf)) {
+    throw 'HARNESS_MAIN_WORKTREE_LIFECYCLE_MODULE_MISSING'
+}
+. $mainWorktreeLifecycleScript
+
 function Get-EinkExecutorSha256Text {
     param(
         [Parameter(Mandatory=$true)]
@@ -834,6 +840,13 @@ function Invoke-EinkCompiledTaskExecutor {
             [bool]$contract.resumeExistingEvidence -or
             $AcceptanceScenario -eq 'RESUME_EXISTING'
 
+        if ([string]$contract.compiledFromBranch -eq 'main') {
+            [void](Invoke-EinkHarnessMainWorktreeLifecycle `
+                -RepoRoot $RepoRoot `
+                -FetchOrigin:(-not $AcceptanceMode) `
+                -AllowLegacyReservedRuntimeAdoption)
+        }
+
         Publish-State 'PREFLIGHT'
         if (-not $AcceptanceMode) {
             $workstation = Test-EinkExecutorWorkstationPrerequisites `
@@ -1267,6 +1280,13 @@ function Invoke-EinkCompiledTaskPublicationResume {
             (@($Task.execution.exactFiles) -join "`n") -ne ($allowed -join "`n") -or
             ([string]$evidence.exactScopeSha256).Trim().ToUpperInvariant() -ne $scopeSha
         ) { throw 'VALIDATED_IMPLEMENTATION_SCOPE_MISMATCH' }
+
+        if ([string]$contract.compiledFromBranch -eq 'main') {
+            [void](Invoke-EinkHarnessMainWorktreeLifecycle `
+                -RepoRoot $RepoRoot `
+                -FetchOrigin:(-not $AcceptanceMode) `
+                -AllowLegacyReservedRuntimeAdoption)
+        }
 
         Publish-PublicationState 'PREFLIGHT'
         $repo = Get-EinkExecutorRepoStatus -RepoRoot $RepoRoot

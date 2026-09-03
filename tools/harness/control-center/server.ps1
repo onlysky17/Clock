@@ -109,6 +109,19 @@ if (-not (Test-Path -LiteralPath $compiledTaskWorkerScript -PathType Leaf)) {
 }
 . $executorScript
 
+if (-not $AcceptanceMode) {
+    $startupWorktreeLifecycle = Invoke-EinkHarnessMainWorktreeLifecycle `
+        -RepoRoot $repoRoot `
+        -FetchOrigin `
+        -AllowLegacyReservedRuntimeAdoption
+    if (-not ([string]$startupWorktreeLifecycle.CanonicalRoot).Equals(
+        [IO.Path]::GetFullPath($repoRoot),
+        [StringComparison]::OrdinalIgnoreCase
+    )) {
+        throw 'HARNESS_SERVER_MUST_RUN_FROM_CANONICAL_WORKTREE'
+    }
+}
+
 if ($ExecutorAcceptance -and (
     -not $AcceptanceMode -or $Port -eq 5175 -or -not $NoBrowser
 )) {
@@ -3972,6 +3985,18 @@ function Invoke-EinkBrainExecuteArmAction {
         return [ordered]@{ armed = $false; reason = 'EXECUTION_AUTHORITY_MISMATCH' }
     }
 
+    if ([string]$contract.compiledFromBranch -eq 'main') {
+        try {
+            [void](Invoke-EinkHarnessMainWorktreeLifecycle `
+                -RepoRoot $repoRoot `
+                -FetchOrigin:(-not $AcceptanceMode) `
+                -AllowLegacyReservedRuntimeAdoption)
+        }
+        catch {
+            return [ordered]@{ armed = $false; reason = $_.Exception.Message }
+        }
+    }
+
     $repo = Get-EinkExecutorRepoStatus -RepoRoot $repoRoot
     if (@($repo.Staged).Count -gt 0) {
         return [ordered]@{ armed = $false; reason = 'DIRTY_TRACKED_TREE' }
@@ -4401,6 +4426,10 @@ function Invoke-EinkBrainPostMergeCompleteAction {
             'merge-base','--is-ancestor',$mergeHead,'origin/main'
         )
         if ($mergeAncestor.ExitCode -ne 0) { throw 'PR_MERGE_NOT_ON_ORIGIN_MAIN' }
+
+        [void](Invoke-EinkHarnessMainWorktreeLifecycle `
+            -RepoRoot $repoRoot `
+            -AllowLegacyReservedRuntimeAdoption)
 
         $switch = Invoke-Git -Arguments @('switch','main')
         if ($switch.ExitCode -ne 0) { throw 'SAFE_SWITCH_MAIN_FAILED' }
