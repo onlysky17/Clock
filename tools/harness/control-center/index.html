@@ -2699,6 +2699,15 @@
         ? contract.allowedFiles.filter(Boolean)
         : [];
       const trackedDirty = Number(data?.trackedDirtyCount || 0);
+      const resumesExistingEvidence = task.resumeExistingEvidence === true;
+      const trackedDirtyFiles = Array.isArray(data?.trackedDirtyFiles)
+        ? data.trackedDirtyFiles.map((value) => String(value).replace(/\\/g, "/"))
+        : [];
+      const resumeEvidenceScopeMatches =
+        resumesExistingEvidence &&
+        Number(data?.stagedCount || 0) === 0 &&
+        trackedDirtyFiles.length === trackedDirty &&
+        trackedDirtyFiles.every((path) => exactFiles.includes(path));
 
       runButton.disabled = !(
         !data?.busy &&
@@ -2711,7 +2720,7 @@
         /^[0-9A-F]{64}$/i.test(contractSha) &&
         /^[0-9A-F]{64}$/i.test(scopeSha) &&
         exactFiles.length > 0 &&
-        trackedDirty === 0
+        (trackedDirty === 0 || resumeEvidenceScopeMatches)
       );
 
       const publicationState = String(brain.execution?.persistedPhase || "").toUpperCase();
