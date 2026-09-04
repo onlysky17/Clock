@@ -3400,11 +3400,27 @@ static uint8_t hink_d3d_store_last_known_time(uint32_t epoch, int16_t timezone, 
 
     if (needs_erase && hink_retained_valid)
     {
+        /*
+         * fb_rr aliases fb_bw on this B/W target. Never use the framebuffer as
+         * persistence scratch while an upload/render owns it: skipping one
+         * last-known-time journal update is safer than corrupting live content.
+         */
+        if ((hink_e5_state == HINK_E5_STATE_ACTIVE) ||
+            (hink_e6_state == HINK_E6_STATE_ACCEPTED_PENDING) ||
+            (hink_e6_state == HINK_E6_STATE_REFRESHING) ||
+            (hink_d2_render_state == HINK_D2_RENDER_ACCEPTED) ||
+            (hink_d2_render_state == HINK_D2_RENDER_RENDERING) ||
+            (epd_wait_hnd != EASY_TIMER_INVALID_TIMER))
+        {
+            fspi_exit();
+            return 0U;
+        }
+
         sf_read(HINK_RETAIN_META_ADDR, HINK_RETAIN_META_SIZE, retained_meta);
         if (hink_retained_meta_valid(retained_meta))
         {
-            hink_retained_read_frame(fb_rr);
-            if (hink_retained_frame_crc16(fb_rr) == hink_u16_le(&retained_meta[8]))
+            hink_retained_read_frame(fb_bw);
+            if (hink_retained_frame_crc16(fb_bw) == hink_u16_le(&retained_meta[8]))
             {
                 preserve_retained = 1U;
             }
@@ -3429,7 +3445,7 @@ static uint8_t hink_d3d_store_last_known_time(uint32_t epoch, int16_t timezone, 
     {
         if (preserve_retained)
         {
-            hink_retained_valid = hink_retained_write_after_erase(fb_rr);
+            hink_retained_valid = hink_retained_write_after_erase(fb_bw);
         }
         else
         {

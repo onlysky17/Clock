@@ -27,7 +27,9 @@ must(custs, 'hink_retained_refresh_pending = 1U;', 'one-shot boot refresh state'
 must(custs, '(void)hink_retained_store_image();', 'persist only after E6 display completion');
 must(custs, 'Metadata is committed last so a power loss cannot validate a partial frame.', 'power-loss ordering');
 must(custs, 'sf_erase(HINK_D3D_STORE_SECTOR, 0x1000, 1);', 'sector-bounded erase');
-must(custs, 'hink_retained_valid = hink_retained_write_after_erase(fb_rr);', 'D3D erase preserves retained image');
+must(custs, 'hink_retained_valid = hink_retained_write_after_erase(fb_bw);', 'D3D erase preserves retained image');
+must(custs, 'fb_rr aliases fb_bw on this B/W target.', 'framebuffer alias safety guard');
+must(custs, 'fspi_exit();\n            return 0U;', 'busy D3D persistence skips destructive sector erase');
 must(custs, 'void hink_retained_display_on_connect(void)', 'connect refresh entrypoint');
 must(custs, 'hnd = app_easy_timer(1, hink_retained_refresh_timer_cb);', 'deferred first-connect refresh');
 must(custs, 'hink_retained_refresh_pending = 0U;', 'one-shot refresh consume');
