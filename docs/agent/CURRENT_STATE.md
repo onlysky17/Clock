@@ -1,5 +1,63 @@
 # CURRENT_STATE
 
+## Current Closeout Checkpoint — 2026-09-04 10:39 (+07)
+
+`EINK-BW-RETAIN-MODE-CONNECT-REFRESH-001` has Owner physical PASS on the
+feature branch and is ready for PR / Owner merge. It is not merged yet.
+
+Repository state for this closeout:
+
+- Repository: `onlysky17/Clock`
+- Feature branch: `task-d/eink-bw-retain-mode-connect-refresh`
+- Product implementation HEAD before documentation closeout:
+  `2a648010f944d358d417ff66b2b561822b305978`
+- Base `main`: `3fbc49be9760d07c113f64ccf55fb358854944a9`
+- Harness remains FROZEN; this task makes no Harness change.
+
+Validated B/W retained-image behavior:
+
+- A successfully displayed uploaded B/W frame is persisted only after the E6
+  display completion path.
+- Cold reboot preserves the retained uploaded image and image mode; it does not
+  force a switch back to the clock.
+- The first successful BLE connection after cold boot waits about two seconds,
+  then performs exactly one FULL refresh of the retained image as visible
+  connection feedback.
+- BLE remains connected through that refresh; the prior `Connection Error`
+  regression is resolved.
+- Owner observed the BLE connection remain stable for at least 30 seconds after
+  the retained-image refresh.
+- Disconnect still holds the image.
+- A same-boot reconnect succeeds normally and does not trigger a second forced
+  retained-image refresh.
+
+Validation / artifact evidence:
+
+- Task smoke: `EINK B/W retain-mode connect-refresh smoke PASS`
+- Keil target: `DA14585`
+- Compiler: `V6.24`
+- RAW size: `59296` bytes
+- RAW SHA256:
+  `58610C6BDF58064284039EF67665716FB8D21535D09B2908AD7B6D8D6261E478`
+- PACKED size: `262144` bytes
+- PACKED SHA256:
+  `5433D7FCC8FCD7B5A1E82137126309CE2D9DD17AAA77BAF1222D68532F85E36C`
+- Packer validation: `HEADER_CRC_LAYOUT_PASS`
+- Payload byte match: PASS
+- SmartSnippets erase/write/full verify: PASS
+- Owner physical timing-fix acceptance: PASS
+
+Owner acceptance sequence:
+
+`send image -> disconnect holds image -> cold reboot holds retained image -> connect -> ~2 s -> one FULL refresh of same image -> BLE remains connected -> 30 s stable -> disconnect/reconnect -> no second forced refresh`
+
+Product roadmap after this PR is merged:
+
+1. Make the B/W Web experience user-ready.
+2. Begin EINK 3-color product work.
+
+---
+
 ## Current Canonical Checkpoint — 2026-08-21
 
 EINK Portrait Analog v2 and Harness SHA compatibility are MERGED.

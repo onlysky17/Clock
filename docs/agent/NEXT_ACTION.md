@@ -1,5 +1,36 @@
 # NEXT_ACTION
 
+## Current Checkpoint — 2026-09-04 10:39 (+07)
+
+`EINK-BW-RETAIN-MODE-CONNECT-REFRESH-001` has passed smoke, Keil build/pack,
+SmartSnippets burn/verify, and Owner physical validation on
+`task-d/eink-bw-retain-mode-connect-refresh`.
+
+Validated product behavior:
+
+- cold reboot keeps the retained uploaded image/mode;
+- first BLE connection after cold boot settles for about two seconds;
+- the panel then performs exactly one FULL refresh of that retained image;
+- BLE remains connected through the refresh and stays stable;
+- same-boot reconnect does not repeat the forced refresh;
+- disconnect still preserves the image.
+
+Harness remains FROZEN. Do not start new Harness work for this closeout.
+
+## Next Canonical Action
+
+1. Open/complete the closeout PR for
+   `EINK-BW-RETAIN-MODE-CONNECT-REFRESH-001`.
+2. Owner performs the final merge gate.
+3. After merge, sync `main` and verify local `HEAD == origin/main`.
+4. Then start the next product milestone: **B/W Web user-ready**.
+5. EINK 3-color follows after the B/W Web milestone.
+
+No additional firmware burn or physical test is required for this task unless
+the branch changes before merge or a merge regression is introduced.
+
+---
+
 ## Current Checkpoint â€” 2026-08-21
 
 Portrait Analog v2 and Harness SHA compatibility are merged into `main`.
