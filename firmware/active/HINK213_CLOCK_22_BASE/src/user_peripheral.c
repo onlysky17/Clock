@@ -74,6 +74,7 @@ extern int second; // å½“å‰ç§’æ•°ï¼Œç”¨äºŽè®¡ç®�
 extern uint8_t hink_d2_dedicated_clock_active(void);
 extern uint8_t hink_image_mode_is_active(void);
 extern void hink_d3d_boot_load_last_known_time(void);
+extern void hink_retained_display_on_connect(void);
 
 /*
  * å‡½æ•°å®šä¹‰
@@ -385,8 +386,11 @@ void user_app_on_db_init_complete( void )
 	QR_draw();
 	user_app_adv_start();
 
-	// å¯åŠ¨æ—¶é’Ÿå®šæ—¶å™¨ï¼Œå¯¹é½åˆ°æ•´åˆ†é’Ÿ
-	app_clock_timer_restart();
+	// Preserve retained uploaded-image mode across a true reboot.
+	if (!hink_image_mode_is_active())
+	{
+		app_clock_timer_restart();
+	}
 #endif
 }
 
@@ -490,6 +494,14 @@ void user_app_connection(uint8_t connection_idx, struct gapc_connection_req_ind 
 
     // æ‰§è¡Œé»˜è®¤è¿žæŽ¥å¤„ç†
     default_app_on_connection(connection_idx, param);
+
+    /* On the first successful connection after a cold boot, visibly refresh
+     * the exact retained uploaded image once. Subsequent reconnects in the
+     * same boot session do not force another panel refresh. */
+    if (app_connection_idx == connection_idx)
+    {
+        hink_retained_display_on_connect();
+    }
 }
 
 /**
