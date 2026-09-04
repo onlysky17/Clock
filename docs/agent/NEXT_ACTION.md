@@ -1,5 +1,18 @@
 # NEXT_ACTION
 
+## Current Checkpoint — 2026-09-04 10:50 (+07)
+
+PR #200 is merged. The B/W retained-image/reconnect firmware milestone is closed.
+
+Verified remote main at merge:
+`31be1520168b342b85e183652951e703ec6db668`
+
+Immediate repository task: merge the narrow Owner-facing execution guardrails update so critical rules are portable and enforced from repository governance rather than conversational memory.
+
+After that Owner merge, continue directly to **B/W Web user-ready**. EINK 3-color remains the milestone after B/W Web user-ready. Harness remains FROZEN.
+
+---
+
 ## Current Checkpoint — 2026-09-04 10:39 (+07)
 
 `EINK-BW-RETAIN-MODE-CONNECT-REFRESH-001` has passed smoke, Keil build/pack,

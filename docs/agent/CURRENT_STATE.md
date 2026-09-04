@@ -1,5 +1,22 @@
 # CURRENT_STATE
 
+## Post-Merge Canonical Checkpoint — 2026-09-04 10:50 (+07)
+
+`EINK-BW-RETAIN-MODE-CONNECT-REFRESH-001` is CLOSED / MERGED / OWNER PHYSICAL PASS.
+
+- PR #200: `feat: retain B/W image mode across reboot`
+- PR URL: `https://github.com/onlysky17/Clock/pull/200`
+- Feature closeout HEAD: `dd9be4131236fded79d58ec74d045af9d160d39c`
+- Merge commit / verified main: `31be1520168b342b85e183652951e703ec6db668`
+- Owner acceptance remains PASS: retained image survives cold reboot; first BLE connection waits about two seconds, refreshes the same retained image exactly once, BLE remains connected/stable for 30 seconds, and same-boot reconnect does not force another refresh.
+- Harness remains FROZEN.
+
+A narrow governance follow-up is active to make critical execution rules repository-enforced instead of relying on chat memory.
+
+Next product milestone after this governance follow-up is merged: **B/W Web user-ready**. EINK 3-color follows afterward.
+
+---
+
 ## Current Closeout Checkpoint — 2026-09-04 10:39 (+07)
 
 `EINK-BW-RETAIN-MODE-CONNECT-REFRESH-001` has Owner physical PASS on the
