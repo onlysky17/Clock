@@ -31,6 +31,88 @@ const { applyMainTabSelection } = imageTabModule;
 const mainInlineScript = mainAppSource.match(/<script>\s*([\s\S]*?)<\/script>/)?.[1];
 assert.ok(mainInlineScript, 'Main Clock inline runtime must exist');
 new Function(mainInlineScript);
+const mapperStart = mainInlineScript.indexOf('function describeBleConnectError(error){');
+const mapperEnd = mainInlineScript.indexOf('\n\nasync function connect(){', mapperStart);
+assert.ok(mapperStart >= 0 && mapperEnd > mapperStart, 'Shared BLE error mapper must be extractable');
+const describeBleConnectError = new Function(`${mainInlineScript.slice(mapperStart, mapperEnd)}; return describeBleConnectError;`)();
+assert.equal(describeBleConnectError({ name: 'AbortError', message: 'User cancelled the requestDevice()' }), 'Bạn đã hủy chọn thiết bị Bluetooth.');
+assert.equal(describeBleConnectError({ name: 'NotFoundError', message: 'User canceled requestDevice()' }), 'Bạn đã hủy chọn thiết bị Bluetooth.');
+assert.equal(describeBleConnectError('requestDevice cancelled'), 'Bạn đã hủy chọn thiết bị Bluetooth.');
+assert.equal(describeBleConnectError({ message: 'Bluetooth adapter not available' }), 'Bluetooth chưa sẵn sàng. Hãy bật Bluetooth rồi thử lại.');
+assert.equal(describeBleConnectError({ name: 'SecurityError', message: 'raw browser detail' }), 'Trình duyệt không cho phép Web Bluetooth trên trang này. Hãy mở bằng HTTPS.');
+assert.equal(describeBleConnectError({ name: 'SecurityError', message: 'requestDevice is not allowed' }), 'Trình duyệt không cho phép Web Bluetooth trên trang này. Hãy mở bằng HTTPS.');
+assert.equal(describeBleConnectError({ name: 'NotSupportedError', message: 'Web Bluetooth is not supported' }), 'Trình duyệt này chưa hỗ trợ Web Bluetooth. Hãy mở bằng Chrome trên Android.');
+assert.equal(describeBleConnectError({ message: 'Bluetooth unavailable' }), 'Bluetooth chưa sẵn sàng. Hãy bật Bluetooth rồi thử lại.');
+assert.equal(describeBleConnectError({ name: 'DOMException', message: 'raw browser detail' }), 'Không kết nối được thiết bị Bluetooth. Hãy thử lại.');
+assert.match(mainAppSource, /async connect\(\)\{[\s\S]*?catch\(error\)\{\s*throw Error\(describeBleConnectError\(error\)\);\s*\}/, 'Shared BLE session must sanitize every connect failure');
+assert.match(mainAppSource, /\$\('connect'\)\.onclick=\(\)=>safe\(\(\)=>window\.EINK_SHARED_BLE\.connect\(\),describeBleConnectError,false\)/, 'Top-level connect must use the shared BLE session without taking a nested busy lock');
+assert.match(mainAppSource, /describeConnectError\(error\)\{\s*return describeBleConnectError\(error\);\s*\}/, 'Shared BLE mapper must be available to feature tabs');
+const imageConnectStart = imageTabSource.indexOf("byId('mainImageConnect').addEventListener");
+const imageConnectEnd = imageTabSource.indexOf("root.querySelectorAll('input[name=\"mainImageFrameMode\"]')", imageConnectStart);
+assert.ok(imageConnectStart >= 0 && imageConnectEnd > imageConnectStart, 'Image connect handler must be extractable');
+const imageConnectBlock = imageTabSource.slice(imageConnectStart, imageConnectEnd);
+assert.match(imageConnectBlock, /setUserStatus\(session\.describeConnectError\(error\), 'error'\)/, 'Image CTA must render the shared mapped message');
+assert.doesNotMatch(imageConnectBlock, /error\.message|String\(error\)/, 'Image connect UI must not render raw browser exception text');
+const chooserCancel = { name: 'AbortError', message: 'User cancelled the requestDevice()' };
+const sharedConnectStart = mainInlineScript.indexOf('async connect(){');
+const sharedConnectBoundaryMarker = /\r?\n  },\r?\n  describeConnectError/;
+const sharedConnectBoundaryMatch = sharedConnectBoundaryMarker.exec(mainInlineScript.slice(sharedConnectStart));
+const sharedConnectEnd = sharedConnectBoundaryMatch ? sharedConnectStart + sharedConnectBoundaryMatch.index : -1;
+assert.ok(sharedConnectStart >= 0 && sharedConnectEnd > sharedConnectStart, 'Shared connect boundary must be executable in the final UI path');
+let busyState = false;
+let connectOperation = async () => { throw chooserCancel; };
+const sharedConnect = new Function('server', 'unifiedDailyUpdateConflicting', 'setBusy', 'emitSharedBleState', 'sharedBleSnapshot', 'connect', 'describeBleConnectError', `return ({${mainInlineScript.slice(sharedConnectStart, sharedConnectEnd)}}}).connect;`)(
+  null,
+  () => busyState,
+  value => { busyState = value; },
+  () => {},
+  () => Object.freeze({ connected: false }),
+  () => connectOperation(),
+  describeBleConnectError
+);
+const runConnectUiPath = async render => {
+  try {
+    await sharedConnect();
+    return 'unexpected success';
+  } catch (error) {
+    return render(error);
+  }
+};
+assert.equal(await runConnectUiPath(describeBleConnectError), 'Bạn đã hủy chọn thiết bị Bluetooth.', 'Top-level connect UI must render the mapped cancellation message');
+assert.equal(await runConnectUiPath(error => describeBleConnectError(error)), 'Bạn đã hủy chọn thiết bị Bluetooth.', 'Image CTA connect UI must render the mapped cancellation message');
+assert.equal(busyState, false, 'Image CTA cancellation must release the shared busy state');
+let retryCount = 0;
+connectOperation = async () => { retryCount += 1; };
+await sharedConnect();
+assert.equal(retryCount, 1, 'Top-level Connect must start a new attempt after image CTA cancellation');
+assert.equal(busyState, false, 'Successful retry must release the shared busy state');
+connectOperation = async () => { throw chooserCancel; };
+assert.equal(await runConnectUiPath(describeBleConnectError), 'Bạn đã hủy chọn thiết bị Bluetooth.', 'Top-level cancellation must keep the mapped Vietnamese message');
+assert.equal(busyState, false, 'Top-level cancellation must release the shared busy state');
+retryCount = 0;
+connectOperation = async () => { retryCount += 1; };
+await sharedConnect();
+assert.equal(retryCount, 1, 'Image CTA must start a new attempt after top-level cancellation');
+assert.equal(busyState, false, 'Image retry must release the shared busy state');
+let releaseActiveConnect;
+let activeConnects = 0;
+let maxActiveConnects = 0;
+connectOperation = async () => {
+  activeConnects += 1;
+  maxActiveConnects = Math.max(maxActiveConnects, activeConnects);
+  await new Promise(resolve => { releaseActiveConnect = resolve; });
+  activeConnects -= 1;
+};
+const firstActiveConnect = sharedConnect();
+await Promise.resolve();
+assert.equal(busyState, true, 'Shared busy state must stay held while chooser/connect is active');
+await assert.rejects(sharedConnect(), /Đang có thao tác khác, hãy chờ hoàn tất\./, 'Second connect attempt must stay blocked while the first is active');
+assert.equal(maxActiveConnects, 1, 'Concurrent connect attempts must not reach requestDevice twice');
+releaseActiveConnect();
+await firstActiveConnect;
+assert.equal(busyState, false, 'Active connect completion must release the shared busy state');
+console.log('BLE_CONNECT_ERROR_UI_PATH: PASS');
+console.log('BLE_CONNECT_LIFECYCLE_A_B_C: PASS');
 assert.equal(FRAME_WIDTH, 122);
 assert.equal(FRAME_HEIGHT, 250);
 assert.equal(FRAME_STRIDE, 16);
@@ -248,12 +330,14 @@ for (const marker of ['image-rendering:pixelated', 'preview-grid', 'panel-bezel'
 for (const marker of ['createImageBitmap', 'createOrientedCanvas', 'resolveProcessingPlan', 'floydSteinbergPixels', 'packMonochromeFrame', "new Blob([packedFrame]", 'application/octet-stream', 'navigator.bluetooth.requestDevice', 'if (transferActive) return', 'acknowledgedBytes', 'BLE_DISCONNECTED', 'E5_FINAL_MANIFEST_MISMATCH']) assert.ok(moduleSource.includes(marker), `Missing module contract: ${marker}`);
 for (const marker of ['ĐỒNG HỒ', 'ẢNH E-INK', 'imageEinkView', 'window.EINK_SHARED_BLE', 'sharedBleSnapshot', 'subscribeState', 'runExclusive', 'emitSharedBleState', 'Chi tiết kỹ thuật', 'setupMainAppTabs()', './image-upload-tab.mjs']) assert.ok(mainAppSource.includes(marker), `Missing main app integration: ${marker}`);
 for (const marker of ['unifiedDailyUpdate', 'productLayoutSelect', 'profileApply', 'preferenceApply', 'dailyWeatherRefresh', 'd2SetTime', 'd2GetStatus', 'd2RenderClock', 'd2GetIdentity', 'batteryRefresh', 'syncClock', 'function runUnifiedDailyUpdate()', 'function connect()', 'function controls()']) assert.ok(mainAppSource.includes(marker), `Clock regression contract missing: ${marker}`);
+for (const marker of ['function requireBleSupport()', 'function describeBleConnectError(error)', 'window.isSecureContext', 'navigator.bluetooth', 'Web Bluetooth cần trang HTTPS.', 'Trình duyệt này chưa hỗ trợ Web Bluetooth.', 'Bạn đã hủy chọn thiết bị Bluetooth.', 'Bluetooth chưa sẵn sàng. Hãy bật Bluetooth rồi thử lại.']) assert.ok(mainAppSource.includes(marker), `Web Bluetooth capability guard missing: ${marker}`);
+assert.match(mainAppSource, /name==='NotFoundError'\|\|\/requestdevice\|cancelled\|canceled\|no device\/i\.test\(message\)/, 'BLE chooser cancellation variants must map through the shared error mapper');
 assert.match(mainAppSource, /advancedBody\.append\(advancedDailyProgress,preferencePanel,identityCard\)/, 'Technical identity/build information must be collapsed');
 for (const marker of ['mainImageFile', 'mainImageFrameMode', 'value="manual"', 'Crop tay', 'mainImageManualViewport', 'mainImageCropZoom', 'mainImageCropReset', 'mainImageConnect', 'session.connect()', 'connectActive', 'pointerdown', 'pointermove', 'setPointerCapture', 'panManualCropByViewportDelta', 'computeManualCropPlacement', 'resetManualCrop(false)', 'mainImageRotation', 'mainImageOutput', 'mainImageThresholdCard', 'mainImageDitherCard', 'role="button"', "event.key === 'Enter'", "event.key === ' '", 'data-selected', 'createImageTransferPlan(frame', 'session.runExclusive', 'session.subscribeState', 'Đang gửi ảnh', 'Đang kiểm tra ảnh', 'Đang hiển thị ảnh', 'Hoàn tất']) assert.ok(imageTabSource.includes(marker), `Missing image tab contract: ${marker}`);
 for (const marker of ['minmax(330px,43fr) minmax(0,57fr)', 'grid-column:1/-1;width:100%', '[data-app-view="clock"][hidden]{display:none!important}', '@media(min-width:761px) and (max-width:1100px)', '.imagePreviewGrid{grid-template-columns:repeat(2,minmax(0,1fr));overflow:visible}', '.imagePreviewCard:first-child{grid-column:1/-1;width:min(100%,360px);justify-self:center}', '.imagePreviewGrid{grid-template-columns:minmax(0,1fr);overflow:visible}', 'document.documentElement.scrollWidth <= window.innerWidth', 'getClockPanels()', '.imageRotationOptions{grid-template-columns:repeat(3,minmax(0,1fr))}']) assert.ok(imageTabSource.includes(marker), `Missing image layout polish: ${marker}`);
 for (const marker of ["controlsCard.dataset.appView='clock'", "workspace.dataset.appView='clock'", "const tabs=document.querySelector('#mainAppTabs')", 'const anchor=tabs||header', "document.querySelector('#imageEinkView')?.hidden===false", 'workspace.hidden=imageActive']) assert.ok(panelRegistrySource.includes(marker), `Missing late Clock panel isolation: ${marker}`);
 for (const forbidden of ['navigator.bluetooth', '.gatt.connect(', 'getPrimaryService(', 'getCharacteristic(', "addEventListener('characteristicvaluechanged'"]) assert.ok(!imageTabSource.includes(forbidden), `Image tab must not own BLE/GATT: ${forbidden}`);
-assert.equal((mainAppSource.match(/navigator\.bluetooth\.requestDevice/g) || []).length, 1, 'Main app must have one Bluetooth chooser path');
+assert.equal((mainAppSource.match(/device=await navigator\.bluetooth\.requestDevice/g) || []).length, 1, 'Main app must have one Bluetooth chooser path');
 assert.equal((mainAppSource.match(/notifyChar\.addEventListener\('characteristicvaluechanged',onNotify\)/g) || []).length, 1, 'Main app must attach one authoritative notify listener');
 assert.equal((mainAppSource.match(/device\.addEventListener\('gattserverdisconnected'/g) || []).length, 1, 'Main app must attach one disconnect handler');
 assert.match(moduleSource, /typeof document !== 'undefined' && document\.getElementById\('imageFile'\)/, 'Standalone bootstrap must stay dormant inside the main app');

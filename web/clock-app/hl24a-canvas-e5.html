@@ -3012,10 +3012,15 @@ window.EINK_SHARED_BLE=Object.freeze({
     try{
       await connect();
       return sharedBleSnapshot();
+    }catch(error){
+      throw Error(describeBleConnectError(error));
     }finally{
       setBusy(false);
       emitSharedBleState();
     }
+  },
+  describeConnectError(error){
+    return describeBleConnectError(error);
   },
   disconnect(){
     if(device?.gatt?.connected)device.gatt.disconnect();
@@ -3061,8 +3066,48 @@ function onNotify(event){
   }
 }
 
+function requireBleSupport(){
+  if(!window.isSecureContext){
+    throw Error('Web Bluetooth cần trang HTTPS. Hãy mở bản preview HTTPS hoặc trang chính thức.');
+  }
+  if(!navigator.bluetooth||typeof navigator.bluetooth.requestDevice!=='function'){
+    throw Error('Trình duyệt này chưa hỗ trợ Web Bluetooth. Hãy mở bằng Chrome trên Android.');
+  }
+}
+
+function describeBleConnectError(error){
+  const name=String(error?.name||'');
+  const message=typeof error==='string'?error:String(error?.message||'');
+  if(name==='SecurityError'){
+    return 'Trình duyệt không cho phép Web Bluetooth trên trang này. Hãy mở bằng HTTPS.';
+  }
+  if(name==='NotSupportedError'){
+    return 'Trình duyệt này chưa hỗ trợ Web Bluetooth. Hãy mở bằng Chrome trên Android.';
+  }
+  if(
+    message==='Bạn đã hủy chọn thiết bị Bluetooth.'||
+    message==='Bluetooth chưa sẵn sàng. Hãy bật Bluetooth rồi thử lại.'||
+    message==='Trình duyệt không cho phép Web Bluetooth trên trang này. Hãy mở bằng HTTPS.'||
+    message==='Không kết nối được thiết bị Bluetooth. Hãy thử lại.'||
+    message==='Web Bluetooth cần trang HTTPS. Hãy mở bản preview HTTPS hoặc trang chính thức.'||
+    message==='Trình duyệt này chưa hỗ trợ Web Bluetooth. Hãy mở bằng Chrome trên Android.'||
+    message==='Đang có thao tác khác, hãy chờ hoàn tất.'
+  )return message;
+  if(/web bluetooth.*(?:not supported|unsupported)|(?:not supported|unsupported).*bluetooth/i.test(message)){
+    return 'Trình duyệt này chưa hỗ trợ Web Bluetooth. Hãy mở bằng Chrome trên Android.';
+  }
+  if(/adapter.*(?:not available|unavailable)|bluetooth.*(?:not available|unavailable|off)/i.test(message)){
+    return 'Bluetooth chưa sẵn sàng. Hãy bật Bluetooth rồi thử lại.';
+  }
+  if(name==='NotFoundError'||/requestdevice|cancelled|canceled|no device/i.test(message)){
+    return 'Bạn đã hủy chọn thiết bị Bluetooth.';
+  }
+  return 'Không kết nối được thiết bị Bluetooth. Hãy thử lại.';
+}
+
 async function connect(){
   if(server?.connected)return sharedBleSnapshot();
+  requireBleSupport();
   bleChooserCount+=1;
   device=await navigator.bluetooth.requestDevice({
     filters:[{namePrefix:'EINK'},{namePrefix:'HINK'}],
@@ -3760,17 +3805,18 @@ async function syncClockToPanel(){
   }
 }
 
-async function safe(fn){
+async function safe(fn,formatError=error=>error?.message||'Thao tác thất bại. Hãy thử lại.',manageBusy=true){
   try{
-    setBusy(true);
+    if(manageBusy)setBusy(true);
     await fn();
   }catch(error){
-    markProductError(error.message);
+    const message=formatError(error);
+    markProductError(message);
     setResult('FAIL','bad');
-    log(`ERROR: ${error.message}`,'ERROR');
-    alert(error.message);
+    log(`ERROR: ${message}`,'ERROR');
+    alert(message);
   }finally{
-    setBusy(false);
+    if(manageBusy)setBusy(false);
     if(
       $('dailyAutoWeather').checked&&
       !autoWeatherTimer&&!autoWeatherRetryTimer
@@ -3796,7 +3842,7 @@ for(const input of document.querySelectorAll('#dailyContextPanel input,#dailyCon
 $('sample').onclick=drawSample;
 $('addText').onclick=addSimpleText;
 $('repack').onclick=repack;
-$('connect').onclick=()=>safe(connect);
+$('connect').onclick=()=>safe(()=>window.EINK_SHARED_BLE.connect(),describeBleConnectError,false);
 $('disconnect').onclick=()=>device?.gatt?.disconnect();
 $('send').onclick=()=>safe(sendFramebuffer);
 $('refresh').onclick=()=>safe(refreshPanel);
