@@ -91,7 +91,7 @@ function installStyles() {
     .imagePreviewCard[data-selected="true"] .imagePreviewLabel::after{content:'✓';color:var(--ok)}
     .imagePanelBezel{display:grid;place-items:center;flex:1;padding:7px;border-radius:9px;background:#050910}
     .imagePanelBezel canvas{width:122px;height:250px;max-width:none;border:1px solid #62708a;background:#fff;image-rendering:pixelated;touch-action:auto}
-    .imageSendCard{grid-column:1/-1;width:100%;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center}
+    .imageSendCard{grid-column:1/-1;width:100%;display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:12px;align-items:center}
     .imageSendStatus{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
     .imageBleState{display:inline-flex;padding:6px 10px;border:1px solid #415c78;border-radius:999px;color:var(--warn);font-weight:900}
     .imageBleState[data-connected="true"]{border-color:#2f755d;color:var(--ok)}
@@ -214,8 +214,9 @@ export function mountImageUploadTab(root, session) {
       <section class="card imageSendCard">
         <div>
           <h2>5. Gửi lên E-ink</h2>
-          <div class="imageSendStatus"><strong id="mainImageBleState" class="imageBleState" data-connected="false">Chưa kết nối</strong><span id="mainImageDevice">Dùng nút Kết nối ở đầu trang.</span></div>
+          <div class="imageSendStatus"><strong id="mainImageBleState" class="imageBleState" data-connected="false">Chưa kết nối</strong><span id="mainImageDevice">Kết nối để gửi ảnh.</span></div>
         </div>
+        <button id="mainImageConnect" class="imageConnectAction" type="button">KẾT NỐI THIẾT BỊ</button>
         <button id="mainImageSend" class="imageSendAction" type="button" disabled>GỬI LÊN E-INK</button>
         <div class="imageSendProgress"><progress id="mainImageProgress" max="100" value="0"></progress><strong id="mainImageProgressText">0%</strong></div>
         <p id="mainImageStatus" class="imageUserStatus" data-state="idle" role="status" aria-live="polite">Chọn ảnh để bắt đầu.</p>
@@ -247,6 +248,7 @@ export function mountImageUploadTab(root, session) {
   let nextTransferId = 1;
   let imageSessionToken = 0;
   let connected = false;
+  let connectActive = false;
   let manualCrop = normalizeManualCropState();
   const cropPointers = new Map();
   let cropPinch = null;
@@ -259,6 +261,9 @@ export function mountImageUploadTab(root, session) {
 
   function updateControls() {
     const ready = packedFrame instanceof Uint8Array && packedFrame.length === FRAME_BYTES && hasWhitePadding(packedFrame);
+    const connectButton = byId('mainImageConnect');
+    connectButton.hidden = connected;
+    connectButton.disabled = connected || connectActive || transferActive;
     byId('mainImageSend').disabled = !connected || !ready || transferActive;
     byId('mainImageDownload').disabled = !ready || transferActive;
     byId('mainImageCopy').disabled = !ready || transferActive;
@@ -269,7 +274,7 @@ export function mountImageUploadTab(root, session) {
     const state = byId('mainImageBleState');
     state.textContent = connected ? 'Đã kết nối' : 'Chưa kết nối';
     state.dataset.connected = String(connected);
-    byId('mainImageDevice').textContent = connected ? (snapshot.deviceName || 'EINK/HINK') : 'Dùng nút Kết nối ở đầu trang.';
+    byId('mainImageDevice').textContent = connected ? (snapshot.deviceName || 'EINK/HINK') : 'Kết nối để gửi ảnh.';
     if (!connected && transferActive) setUserStatus('Lỗi kết nối. Hãy kết nối lại rồi thử gửi.', 'error');
     updateControls();
   }
@@ -453,6 +458,21 @@ export function mountImageUploadTab(root, session) {
       drawSource();
     } catch (error) {
       setUserStatus(`Không đọc được ảnh: ${error.message}`, 'error');
+    }
+  });
+  byId('mainImageConnect').addEventListener('click', async () => {
+    if (connectActive || connected || transferActive) return;
+    connectActive = true;
+    setUserStatus('Đang chờ chọn thiết bị BLE...');
+    updateControls();
+    try {
+      await session.connect();
+      setUserStatus('Đã kết nối. Chọn ảnh rồi bấm gửi.', 'ready');
+    } catch (error) {
+      setUserStatus(`Không kết nối được: ${error.message}`, 'error');
+    } finally {
+      connectActive = false;
+      updateControls();
     }
   });
   root.querySelectorAll('input[name="mainImageFrameMode"]').forEach(input => input.addEventListener('change', () => {
