@@ -31,7 +31,9 @@ must(custs, 'hink_retained_valid = hink_retained_write_after_erase(fb_bw);', 'D3
 must(custs, 'fb_rr aliases fb_bw on this B/W target.', 'framebuffer alias safety guard');
 assert(/fspi_exit\(\);\s*return 0U;/.test(custs), 'missing busy D3D persistence skips destructive sector erase');
 must(custs, 'void hink_retained_display_on_connect(void)', 'connect refresh entrypoint');
-must(custs, 'hnd = app_easy_timer(1, hink_retained_refresh_timer_cb);', 'deferred first-connect refresh');
+must(custs, '#define HINK_RETAIN_CONNECT_SETTLE_10MS 200U', 'two-second BLE settle window');
+must(custs, '(app_connection_idx < 0) || (ke_state_get(TASK_APP) != APP_CONNECTED)', 'refresh requires live BLE connection');
+must(custs, 'hnd = app_easy_timer(HINK_RETAIN_CONNECT_SETTLE_10MS,', 'deferred first-connect refresh');
 must(custs, 'hink_retained_refresh_pending = 0U;', 'one-shot refresh consume');
 must(periph, 'if (!hink_image_mode_is_active())', 'no clock timer in retained image mode');
 must(periph, 'hink_retained_display_on_connect();', 'connection hook');

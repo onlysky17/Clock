@@ -280,6 +280,7 @@ static uint32_t hink_epd_refresh_day
 #define HINK_RETAIN_VER              1U
 #define HINK_RETAIN_MODE_IMAGE       1U
 #define HINK_RETAIN_META_CRC_OFFSET  10U
+#define HINK_RETAIN_CONNECT_SETTLE_10MS 200U
 
 #if (HINK_RETAIN_FRAME_ADDR + HINK_RETAIN_FRAME_BYTES) != (HINK_D3D_STORE_SECTOR + 0x1000UL)
 #error "Retained B/W frame must end exactly at the approved 0x3BFFF sector boundary."
@@ -360,6 +361,7 @@ static void hink_d2_daily_notify(uint8_t result);
 static void hink_e4_arm_timer(void);
 
 extern int adv_state;
+extern int app_connection_idx;
 extern void app_clock_timer_stop(void);
 extern int sf_erase(int addr, int size, int wait);
 extern int fspi_exit(void);
@@ -3848,6 +3850,16 @@ static void hink_retained_refresh_timer_cb(void)
         return;
     }
 
+    /*
+     * The retained refresh is connection feedback, not part of BLE bring-up.
+     * If the browser disconnected during the settle window, keep pending set;
+     * the next successful connection will schedule the one-shot again.
+     */
+    if ((app_connection_idx < 0) || (ke_state_get(TASK_APP) != APP_CONNECTED))
+    {
+        return;
+    }
+
     if ((hink_e5_state == HINK_E5_STATE_ACTIVE) ||
         (hink_e6_state == HINK_E6_STATE_ACCEPTED_PENDING) ||
         (hink_e6_state == HINK_E6_STATE_REFRESHING) ||
@@ -3898,7 +3910,8 @@ void hink_retained_display_on_connect(void)
         return;
     }
 
-    hnd = app_easy_timer(1, hink_retained_refresh_timer_cb);
+    hnd = app_easy_timer(HINK_RETAIN_CONNECT_SETTLE_10MS,
+                         hink_retained_refresh_timer_cb);
     if (hnd != EASY_TIMER_INVALID_TIMER)
     {
         hink_retained_refresh_timer_hnd = hnd;
