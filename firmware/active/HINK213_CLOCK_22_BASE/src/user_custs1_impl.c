@@ -267,6 +267,29 @@ static uint32_t hink_epd_refresh_day
 #define HINK_D3D_STORE_VER    1U
 #define HINK_D3D_CRC_OFFSET   30U
 
+/*
+ * B/W retained-display storage shares the already-proven safe 4 KiB sector.
+ * D3D owns the first 64 bytes; retained metadata + the exact 4000-byte frame
+ * consume the remainder exactly, without touching 0x38000..0x3AFFF.
+ */
+#define HINK_RETAIN_META_ADDR        0x3B040UL
+#define HINK_RETAIN_META_SIZE        32U
+#define HINK_RETAIN_FRAME_ADDR       0x3B060UL
+#define HINK_RETAIN_FRAME_BYTES      HINK_E5_TOTAL_BYTES
+#define HINK_RETAIN_MAGIC            0x474D4948UL /* "HIMG" little-endian */
+#define HINK_RETAIN_VER              1U
+#define HINK_RETAIN_MODE_IMAGE       1U
+#define HINK_RETAIN_META_CRC_OFFSET  10U
+#define HINK_RETAIN_CONNECT_SETTLE_10MS 200U
+
+#if (HINK_RETAIN_FRAME_ADDR + HINK_RETAIN_FRAME_BYTES) != (HINK_D3D_STORE_SECTOR + 0x1000UL)
+#error "Retained B/W frame must end exactly at the approved 0x3BFFF sector boundary."
+#endif
+
+static uint8_t hink_retained_valid               __SECTION_ZERO("retention_mem_area0");
+static uint8_t hink_retained_refresh_pending     __SECTION_ZERO("retention_mem_area0");
+static timer_hnd hink_retained_refresh_timer_hnd __SECTION_ZERO("retention_mem_area0");
+
 static uint32_t hink_d3d_stale_epoch       __SECTION_ZERO("retention_mem_area0");
 static int16_t hink_d3d_stale_timezone     __SECTION_ZERO("retention_mem_area0");
 static uint8_t hink_d3d_stale_flags        __SECTION_ZERO("retention_mem_area0");
@@ -309,6 +332,9 @@ static uint8_t hink_d2_timer_flags             __SECTION_ZERO("retention_mem_are
 #define HINK_D2_TIMER_FIRST  0x02U
 
 static void hink_e6_timer_cb(void);
+static void hink_retained_refresh_timer_cb(void);
+static uint8_t hink_retained_store_image(void);
+void hink_retained_display_on_connect(void);
 static void hink_d2_render_timer_cb(void);
 static void hink_d2_prime_retry_cb(void);
 static uint8_t hink_d2_start_epd_refresh(void);
@@ -335,6 +361,7 @@ static void hink_d2_daily_notify(uint8_t result);
 static void hink_e4_arm_timer(void);
 
 extern int adv_state;
+extern int app_connection_idx;
 extern void app_clock_timer_stop(void);
 extern int sf_erase(int addr, int size, int wait);
 extern int fspi_exit(void);
@@ -1772,6 +1799,7 @@ static void epd_wait_timer(void)
         hink_epd_busy_start_polls = 0U;
         if (hink_e6_state == HINK_E6_STATE_REFRESHING) {
             hink_e6_state = HINK_E6_STATE_COMPLETE;
+            (void)hink_retained_store_image();
         }
         if (hink_d2_render_state == HINK_D2_RENDER_RENDERING) {
             if (hink_epd_first_refresh_pending) {
@@ -3105,6 +3133,129 @@ static void hink_d3d_build_record(uint8_t *rec,
     hink_put_u16_le(&rec[HINK_D3D_CRC_OFFSET], crc);
 }
 
+
+static uint16_t hink_retained_frame_crc16(const uint8_t *frame)
+{
+    uint16_t crc = 0xFFFFU;
+    uint16_t offset = 0U;
+
+    while (offset < HINK_RETAIN_FRAME_BYTES)
+    {
+        uint16_t remaining = (uint16_t)(HINK_RETAIN_FRAME_BYTES - offset);
+        uint8_t chunk = (remaining > 240U) ? 240U : (uint8_t)remaining;
+        crc = hink_e5_crc16_ccitt_update(crc, &frame[offset], chunk);
+        offset = (uint16_t)(offset + chunk);
+    }
+    return crc;
+}
+
+static void hink_retained_build_meta(uint8_t *meta, const uint8_t *frame)
+{
+    uint8_t i;
+    uint16_t frame_crc;
+    uint16_t meta_crc;
+
+    for (i = 0U; i < HINK_RETAIN_META_SIZE; i++)
+    {
+        meta[i] = 0xFFU;
+    }
+    hink_put_u32_le(&meta[0], HINK_RETAIN_MAGIC);
+    meta[4] = HINK_RETAIN_VER;
+    meta[5] = HINK_RETAIN_MODE_IMAGE;
+    hink_put_u16_le(&meta[6], HINK_RETAIN_FRAME_BYTES);
+    frame_crc = hink_retained_frame_crc16(frame);
+    hink_put_u16_le(&meta[8], frame_crc);
+    meta_crc = hink_e5_crc16_ccitt_update(0xFFFFU, meta, HINK_RETAIN_META_CRC_OFFSET);
+    hink_put_u16_le(&meta[HINK_RETAIN_META_CRC_OFFSET], meta_crc);
+}
+
+static uint8_t hink_retained_meta_valid(const uint8_t *meta)
+{
+    uint16_t meta_crc;
+
+    if ((hink_u32_le(&meta[0]) != HINK_RETAIN_MAGIC) ||
+        (meta[4] != HINK_RETAIN_VER) ||
+        (meta[5] != HINK_RETAIN_MODE_IMAGE) ||
+        (hink_u16_le(&meta[6]) != HINK_RETAIN_FRAME_BYTES))
+    {
+        return 0U;
+    }
+
+    meta_crc = hink_e5_crc16_ccitt_update(0xFFFFU, meta, HINK_RETAIN_META_CRC_OFFSET);
+    return (meta_crc == hink_u16_le(&meta[HINK_RETAIN_META_CRC_OFFSET])) ? 1U : 0U;
+}
+
+static void hink_retained_read_frame(uint8_t *frame)
+{
+    uint32_t addr = HINK_RETAIN_FRAME_ADDR;
+    uint16_t offset = 0U;
+    uint16_t remaining = HINK_RETAIN_FRAME_BYTES;
+
+    while (remaining > 0U)
+    {
+        uint16_t chunk = (remaining > 256U) ? 256U : remaining;
+        sf_read((int)addr, chunk, &frame[offset]);
+        addr += chunk;
+        offset = (uint16_t)(offset + chunk);
+        remaining = (uint16_t)(remaining - chunk);
+    }
+}
+
+static void hink_retained_write_frame_pages(const uint8_t *frame)
+{
+    uint32_t addr = HINK_RETAIN_FRAME_ADDR;
+    uint16_t offset = 0U;
+    uint16_t remaining = HINK_RETAIN_FRAME_BYTES;
+
+    while (remaining > 0U)
+    {
+        uint16_t page_left = (uint16_t)(0x100U - (addr & 0xFFU));
+        uint16_t chunk = (remaining < page_left) ? remaining : page_left;
+        sf_page_write((int)addr, (uint8_t *)&frame[offset], chunk);
+        sf_wait();
+        addr += chunk;
+        offset = (uint16_t)(offset + chunk);
+        remaining = (uint16_t)(remaining - chunk);
+    }
+}
+
+static uint8_t hink_retained_write_after_erase(const uint8_t *frame)
+{
+    uint8_t meta[HINK_RETAIN_META_SIZE];
+    uint8_t verify_meta[HINK_RETAIN_META_SIZE];
+    uint8_t verify_frame[240];
+    uint32_t addr;
+    uint16_t remaining;
+    uint16_t crc = 0xFFFFU;
+
+    hink_retained_build_meta(meta, frame);
+    hink_retained_write_frame_pages(frame);
+
+    /* Metadata is committed last so a power loss cannot validate a partial frame. */
+    sf_page_write(HINK_RETAIN_META_ADDR, meta, HINK_RETAIN_META_SIZE);
+    sf_wait();
+
+    sf_read(HINK_RETAIN_META_ADDR, HINK_RETAIN_META_SIZE, verify_meta);
+    if (!hink_retained_meta_valid(verify_meta))
+    {
+        return 0U;
+    }
+
+    addr = HINK_RETAIN_FRAME_ADDR;
+    remaining = HINK_RETAIN_FRAME_BYTES;
+    while (remaining > 0U)
+    {
+        uint8_t chunk = (remaining > sizeof(verify_frame)) ?
+                        (uint8_t)sizeof(verify_frame) : (uint8_t)remaining;
+        sf_read((int)addr, chunk, verify_frame);
+        crc = hink_e5_crc16_ccitt_update(crc, verify_frame, chunk);
+        addr += chunk;
+        remaining = (uint16_t)(remaining - chunk);
+    }
+
+    return (crc == hink_u16_le(&verify_meta[8])) ? 1U : 0U;
+}
+
 void hink_d3d_boot_load_last_known_time(void)
 {
     uint8_t a[HINK_D3D_STORE_SIZE];
@@ -3119,8 +3270,13 @@ void hink_d3d_boot_load_last_known_time(void)
     uint8_t flags_b;
     uint8_t valid_a;
     uint8_t valid_b;
+    uint8_t retained_meta[HINK_RETAIN_META_SIZE];
 
     hink_d3d_stale_valid = 0U;
+    hink_retained_valid = 0U;
+    hink_retained_refresh_pending = 0U;
+    hink_retained_refresh_timer_hnd = EASY_TIMER_INVALID_TIMER;
+    hink_image_mode_active = 0U;
     hink_clock_profile = HINK_CLOCK_PROFILE_MONTHLY;
     hink_clock_profile_persisted = HINK_CLOCK_PROFILE_NONE;
     hink_hour_mode = HINK_HOUR_MODE_24;
@@ -3130,6 +3286,17 @@ void hink_d3d_boot_load_last_known_time(void)
     fspi_init();
     sf_read(HINK_D3D_STORE_SLOT_A, HINK_D3D_STORE_SIZE, a);
     sf_read(HINK_D3D_STORE_SLOT_B, HINK_D3D_STORE_SIZE, b);
+    sf_read(HINK_RETAIN_META_ADDR, HINK_RETAIN_META_SIZE, retained_meta);
+    if (hink_retained_meta_valid(retained_meta))
+    {
+        hink_retained_read_frame(fb_bw);
+        if (hink_retained_frame_crc16(fb_bw) == hink_u16_le(&retained_meta[8]))
+        {
+            hink_retained_valid = 1U;
+            hink_retained_refresh_pending = 1U;
+            hink_image_mode_active = 1U;
+        }
+    }
     fspi_exit();
 
     valid_a = hink_d3d_record_valid(a, &seq_a, &epoch_a, &tz_a, &flags_a);
@@ -3194,6 +3361,9 @@ static uint8_t hink_d3d_store_last_known_time(uint32_t epoch, int16_t timezone, 
     uint8_t valid_a;
     uint8_t valid_b;
     uint8_t target_a;
+    uint8_t needs_erase = 0U;
+    uint8_t preserve_retained = 0U;
+    uint8_t retained_meta[HINK_RETAIN_META_SIZE];
     uint32_t next_seq = 1UL;
 
     fspi_init();
@@ -3209,7 +3379,7 @@ static uint8_t hink_d3d_store_last_known_time(uint32_t epoch, int16_t timezone, 
 
     if (valid_a && valid_b)
     {
-        sf_erase(HINK_D3D_STORE_SECTOR, 0x1000, 1);
+        needs_erase = 1U;
         target_a = 1U;
     }
     else if (valid_a)
@@ -3217,7 +3387,7 @@ static uint8_t hink_d3d_store_last_known_time(uint32_t epoch, int16_t timezone, 
         target_a = 0U;
         if (!hink_d3d_slot_blank(b))
         {
-            sf_erase(HINK_D3D_STORE_SECTOR, 0x1000, 1);
+            needs_erase = 1U;
             target_a = 1U;
         }
     }
@@ -3226,8 +3396,42 @@ static uint8_t hink_d3d_store_last_known_time(uint32_t epoch, int16_t timezone, 
         target_a = 1U;
         if (!hink_d3d_slot_blank(a))
         {
-            sf_erase(HINK_D3D_STORE_SECTOR, 0x1000, 1);
+            needs_erase = 1U;
         }
+    }
+
+    if (needs_erase && hink_retained_valid)
+    {
+        /*
+         * fb_rr aliases fb_bw on this B/W target. Never use the framebuffer as
+         * persistence scratch while an upload/render owns it: skipping one
+         * last-known-time journal update is safer than corrupting live content.
+         */
+        if ((hink_e5_state == HINK_E5_STATE_ACTIVE) ||
+            (hink_e6_state == HINK_E6_STATE_ACCEPTED_PENDING) ||
+            (hink_e6_state == HINK_E6_STATE_REFRESHING) ||
+            (hink_d2_render_state == HINK_D2_RENDER_ACCEPTED) ||
+            (hink_d2_render_state == HINK_D2_RENDER_RENDERING) ||
+            (epd_wait_hnd != EASY_TIMER_INVALID_TIMER))
+        {
+            fspi_exit();
+            return 0U;
+        }
+
+        sf_read(HINK_RETAIN_META_ADDR, HINK_RETAIN_META_SIZE, retained_meta);
+        if (hink_retained_meta_valid(retained_meta))
+        {
+            hink_retained_read_frame(fb_bw);
+            if (hink_retained_frame_crc16(fb_bw) == hink_u16_le(&retained_meta[8]))
+            {
+                preserve_retained = 1U;
+            }
+        }
+    }
+
+    if (needs_erase)
+    {
+        sf_erase(HINK_D3D_STORE_SECTOR, 0x1000, 1);
     }
 
     hink_d3d_build_record(rec, next_seq, epoch, timezone, flags);
@@ -3238,6 +3442,20 @@ static uint8_t hink_d3d_store_last_known_time(uint32_t epoch, int16_t timezone, 
     sf_read(target_a ? HINK_D3D_STORE_SLOT_A : HINK_D3D_STORE_SLOT_B,
             HINK_D3D_STORE_SIZE,
             verify);
+
+    if (needs_erase)
+    {
+        if (preserve_retained)
+        {
+            hink_retained_valid = hink_retained_write_after_erase(fb_bw);
+        }
+        else
+        {
+            hink_retained_valid = 0U;
+            hink_retained_refresh_pending = 0U;
+        }
+    }
+
     fspi_exit();
     if (hink_d3d_record_valid(verify, &seq_a, &old_epoch, &old_tz, &old_flags))
     {
@@ -3568,6 +3786,136 @@ static void hink_e6_notify(uint8_t response, uint8_t code, uint8_t transfer_id, 
     msg[4] = state;
     msg[5] = 0x14; // E4 timeout in hex (20 seconds)
     hink_e4_notify_bytes(msg, sizeof(msg));
+}
+
+
+static uint8_t hink_retained_store_image(void)
+{
+    uint8_t a[HINK_D3D_STORE_SIZE];
+    uint8_t b[HINK_D3D_STORE_SIZE];
+    uint8_t keep[HINK_D3D_STORE_SIZE];
+    uint32_t seq_a;
+    uint32_t seq_b;
+    uint32_t old_epoch;
+    int16_t old_tz;
+    uint8_t old_flags;
+    uint8_t valid_a;
+    uint8_t valid_b;
+    uint8_t keep_valid = 0U;
+    uint8_t stored;
+
+    fspi_init();
+    sf_read(HINK_D3D_STORE_SLOT_A, HINK_D3D_STORE_SIZE, a);
+    sf_read(HINK_D3D_STORE_SLOT_B, HINK_D3D_STORE_SIZE, b);
+    valid_a = hink_d3d_record_valid(a, &seq_a, &old_epoch, &old_tz, &old_flags);
+    valid_b = hink_d3d_record_valid(b, &seq_b, &old_epoch, &old_tz, &old_flags);
+
+    if (valid_a && (!valid_b || (seq_a >= seq_b)))
+    {
+        memcpy(keep, a, HINK_D3D_STORE_SIZE);
+        keep_valid = 1U;
+    }
+    else if (valid_b)
+    {
+        memcpy(keep, b, HINK_D3D_STORE_SIZE);
+        keep_valid = 1U;
+    }
+
+    sf_erase(HINK_D3D_STORE_SECTOR, 0x1000, 1);
+
+    if (keep_valid)
+    {
+        sf_page_write(HINK_D3D_STORE_SLOT_A, keep, HINK_D3D_STORE_SIZE);
+        sf_wait();
+    }
+
+    stored = hink_retained_write_after_erase(fb_bw);
+    fspi_exit();
+
+    hink_retained_valid = stored;
+    hink_retained_refresh_pending = 0U;
+    return stored;
+}
+
+static void hink_retained_refresh_timer_cb(void)
+{
+    timer_hnd hnd;
+
+    hink_retained_refresh_timer_hnd = EASY_TIMER_INVALID_TIMER;
+
+    if (!hink_retained_valid ||
+        !hink_retained_refresh_pending ||
+        !hink_image_mode_active)
+    {
+        return;
+    }
+
+    /*
+     * The retained refresh is connection feedback, not part of BLE bring-up.
+     * If the browser disconnected during the settle window, keep pending set;
+     * the next successful connection will schedule the one-shot again.
+     */
+    if ((app_connection_idx < 0) || (ke_state_get(TASK_APP) != APP_CONNECTED))
+    {
+        return;
+    }
+
+    if ((hink_e5_state == HINK_E5_STATE_ACTIVE) ||
+        (hink_e6_state == HINK_E6_STATE_ACCEPTED_PENDING) ||
+        (hink_e6_state == HINK_E6_STATE_REFRESHING) ||
+        (hink_d2_render_state == HINK_D2_RENDER_ACCEPTED) ||
+        (hink_d2_render_state == HINK_D2_RENDER_RENDERING) ||
+        (epd_wait_hnd != EASY_TIMER_INVALID_TIMER))
+    {
+        hnd = app_easy_timer(10, hink_retained_refresh_timer_cb);
+        if (hnd != EASY_TIMER_INVALID_TIMER)
+        {
+            hink_retained_refresh_timer_hnd = hnd;
+        }
+        return;
+    }
+
+    hink_retained_refresh_pending = 0U;
+    epd_hw_open();
+    epd_update_mode(UPDATE_FULL);
+    epd_init();
+    epd_screen_update();
+    epd_update();
+
+    arch_set_sleep_mode(ARCH_SLEEP_OFF);
+    hink_epd_busy_seen = 0U;
+    hink_epd_busy_start_polls = 0U;
+    hnd = app_easy_timer(40, epd_wait_timer);
+    epd_wait_hnd = hnd;
+
+    if (hnd == EASY_TIMER_INVALID_TIMER)
+    {
+        hink_retained_refresh_pending = 1U;
+        epd_cmd1(0x10, 0x01);
+        epd_power(0);
+        epd_hw_close();
+        arch_set_sleep_mode(ARCH_EXT_SLEEP_ON);
+    }
+}
+
+void hink_retained_display_on_connect(void)
+{
+    timer_hnd hnd;
+
+    if (!hink_retained_valid ||
+        !hink_retained_refresh_pending ||
+        !hink_image_mode_active ||
+        (hink_retained_refresh_timer_hnd != EASY_TIMER_INVALID_TIMER))
+    {
+        return;
+    }
+
+    hnd = app_easy_timer(HINK_RETAIN_CONNECT_SETTLE_10MS,
+                         hink_retained_refresh_timer_cb);
+    if (hnd != EASY_TIMER_INVALID_TIMER)
+    {
+        hink_retained_refresh_timer_hnd = hnd;
+    }
 }
 
 static void hink_e6_reset_state(void)
