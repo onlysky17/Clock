@@ -24,6 +24,43 @@ import {
 
 const E5_STATUS_NAMES = ['OK', 'INVALID', 'NOT_OPEN', 'WRONG_OWNER', 'BAD_GEOMETRY', 'BAD_ID', 'BAD_SEQUENCE', 'OVERFLOW', 'BAD_COUNT', 'BAD_CRC', 'UNSUPPORTED'];
 
+const SAFE_IMAGE_TRANSFER_MESSAGES = Object.freeze([
+  'Chưa kết nối thiết bị.',
+  'Chưa có ảnh sẵn sàng.',
+  'Không thể mở phiên gửi ảnh.',
+  'Phiên gửi ảnh đã hết hạn.',
+  'Thiết bị từ chối hiển thị ảnh.',
+  'Hiển thị ảnh quá thời gian chờ.',
+  'Không đọc được trạng thái hiển thị.',
+  'Thiết bị báo lỗi hiển thị ảnh.',
+  'Thiết bị xác nhận sai vị trí dữ liệu.',
+  'Thiết bị chưa xác nhận đủ ảnh.'
+]);
+
+function errorText(error) {
+  return typeof error === 'string' ? error : String(error?.message || '');
+}
+
+export function describeImageDecodeError() {
+  return 'Không đọc được ảnh này. Hãy chọn JPG hoặc PNG hợp lệ.';
+}
+
+export function describeImageTransferError(error) {
+  const name = String(error?.name || '');
+  const message = errorText(error);
+  const detail = `${name} ${message}`;
+  if (/disconnected|not connected|networkerror|invalidstate|gatt|bluetooth|\bble\b|mất kết nối|kết nối lại/i.test(detail)) {
+    return 'Kết nối Bluetooth đã mất. Hãy kết nối lại rồi thử gửi.';
+  }
+  if (/timeout|timed out|không phản hồi|ack timeout/i.test(detail)) {
+    return 'Thiết bị không phản hồi. Hãy thử lại.';
+  }
+  if (SAFE_IMAGE_TRANSFER_MESSAGES.includes(message) || /^Không thể bắt đầu gửi ảnh \(/.test(message) || /^Gửi ảnh bị từ chối \(/.test(message) || /^Kiểm tra ảnh thất bại \(/.test(message)) {
+    return message;
+  }
+  return 'Không gửi được ảnh. Hãy thử lại.';
+}
+
 export function applyMainTabSelection(name, buttons, clockPanels, imagePanel) {
   if (name !== 'clock' && name !== 'image') throw new Error('INVALID_MAIN_TAB');
   for (const button of buttons) {
@@ -434,7 +471,7 @@ export function mountImageUploadTab(root, session) {
         try { await closeSession(); } catch { imageSessionToken = 0; }
       });
     } catch (error) {
-      setUserStatus(error.message || 'Gửi ảnh thất bại.', 'error');
+      setUserStatus(describeImageTransferError(error), 'error');
       throw error;
     } finally {
       transferActive = false;
@@ -457,7 +494,7 @@ export function mountImageUploadTab(root, session) {
       resetManualCrop(false);
       drawSource();
     } catch (error) {
-      setUserStatus(`Không đọc được ảnh: ${error.message}`, 'error');
+      setUserStatus(describeImageDecodeError(error), 'error');
     }
   });
   byId('mainImageConnect').addEventListener('click', async () => {

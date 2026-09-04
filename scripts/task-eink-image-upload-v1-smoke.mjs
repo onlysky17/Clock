@@ -27,8 +27,8 @@ const [html, css, moduleSource, mainAppSource, imageTabSource, panelRegistrySour
 ]);
 
 const { FRAME_WIDTH, FRAME_HEIGHT, FRAME_STRIDE, FRAME_BYTES, IMAGE_TRANSFER_VERSION, IMAGE_CHUNK_BYTES, IMAGE_TOTAL_CHUNKS, BLE_SERVICE_UUID, BLE_WRITE_UUID, BLE_NOTIFY_UUID, MANUAL_CROP_MIN_ZOOM, MANUAL_CROP_MAX_ZOOM, crc16Ccitt, createImageTransferPlan, computeImagePlacement, computeManualCropPlacement, normalizeManualCropState, panManualCropByViewportDelta, orientedDimensions, fitUtilization, chooseAutoRotation, chooseAutoFrameMode, resolveProcessingPlan, thresholdPixels, floydSteinbergPixels, packMonochromeFrame, hasWhitePadding, formatHexDump } = imageModule;
-const { applyMainTabSelection } = imageTabModule;
-const mainInlineScript = mainAppSource.match(/<script>\s*([\s\S]*?)<\/script>/)?.[1];
+const { applyMainTabSelection, describeImageDecodeError, describeImageTransferError } = imageTabModule;
+const mainInlineScript = mainAppSource.match(/<script>\s*([\s\S]*?)<\/script>/)?.[1]?.replaceAll('\r\n', '\n');
 assert.ok(mainInlineScript, 'Main Clock inline runtime must exist');
 new Function(mainInlineScript);
 const mapperStart = mainInlineScript.indexOf('function describeBleConnectError(error){');
@@ -53,6 +53,15 @@ assert.ok(imageConnectStart >= 0 && imageConnectEnd > imageConnectStart, 'Image 
 const imageConnectBlock = imageTabSource.slice(imageConnectStart, imageConnectEnd);
 assert.match(imageConnectBlock, /setUserStatus\(session\.describeConnectError\(error\), 'error'\)/, 'Image CTA must render the shared mapped message');
 assert.doesNotMatch(imageConnectBlock, /error\.message|String\(error\)/, 'Image connect UI must not render raw browser exception text');
+assert.equal(describeImageDecodeError({ message: 'The source image could not be decoded.' }), 'Không đọc được ảnh này. Hãy chọn JPG hoặc PNG hợp lệ.');
+assert.equal(describeImageTransferError({ name: 'NetworkError', message: 'GATT operation failed.' }), 'Kết nối Bluetooth đã mất. Hãy kết nối lại rồi thử gửi.');
+assert.equal(describeImageTransferError(new Error('BLE chưa kết nối.')), 'Kết nối Bluetooth đã mất. Hãy kết nối lại rồi thử gửi.');
+assert.equal(describeImageTransferError({ name: 'DOMException', message: 'ACK timeout' }), 'Thiết bị không phản hồi. Hãy thử lại.');
+assert.equal(describeImageTransferError(new Error('Chưa có ảnh sẵn sàng.')), 'Chưa có ảnh sẵn sàng.');
+assert.equal(describeImageTransferError({ name: 'DOMException', message: 'raw browser detail' }), 'Không gửi được ảnh. Hãy thử lại.');
+assert.match(imageTabSource, /setUserStatus\(describeImageTransferError\(error\), 'error'\)/, 'Image send failures must use the safe transfer mapper');
+assert.match(imageTabSource, /setUserStatus\(describeImageDecodeError\(error\), 'error'\)/, 'Image decode failures must use safe product guidance');
+assert.doesNotMatch(imageTabSource, /setUserStatus\([^\n]*error\.message/, 'Image status must not render raw error.message');
 const chooserCancel = { name: 'AbortError', message: 'User cancelled the requestDevice()' };
 const sharedConnectStart = mainInlineScript.indexOf('async connect(){');
 const sharedConnectBoundaryMarker = /\r?\n  },\r?\n  describeConnectError/;
