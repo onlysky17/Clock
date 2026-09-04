@@ -469,7 +469,7 @@ export function mountImageUploadTab(root, session) {
       await session.connect();
       setUserStatus('Đã kết nối. Chọn ảnh rồi bấm gửi.', 'ready');
     } catch (error) {
-      setUserStatus(`Không kết nối được: ${error.message}`, 'error');
+      setUserStatus(session.describeConnectError(error), 'error');
     } finally {
       connectActive = false;
       updateControls();
