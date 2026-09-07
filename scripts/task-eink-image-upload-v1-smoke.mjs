@@ -74,6 +74,38 @@ assert.match(mainAppSource, /function describeBleOperationError\(error\)/, 'Cloc
 assert.match(mainAppSource, /const safeError=describeBleOperationError\(error\);[\s\S]*?setD2Status\(`ERROR: \$\{safeError\}`,'bad'\)/, 'D2 flow must render mapped operation guidance');
 assert.match(mainAppSource, /const safeError=describeBleOperationError\(error\);[\s\S]*?setUnifiedDailyResult\(`Không thể cập nhật màn: \$\{safeError\}`,'failure'\)/, 'Unified daily flow must render mapped operation guidance');
 assert.doesNotMatch(mainAppSource, /setD2Status\(`ERROR: \$\{error\.message\}`,'bad'\)|setUnifiedDailyResult\(`Không thể cập nhật màn: \$\{error\.message\}`,'failure'\)|alert\(error\.message\)/, 'Clock user-facing operation paths must not render raw error.message');
+const busyRetryStart = mainInlineScript.indexOf('async function d2RequestWithBusyRetry(');
+const busyRetryEnd = mainInlineScript.indexOf('\n\nasync function d2ApplyClockProfile', busyRetryStart);
+assert.ok(busyRetryStart >= 0 && busyRetryEnd > busyRetryStart, 'Shared D2 BUSY retry helper must be extractable');
+assert.match(mainAppSource, /for\(let attempt=0;attempt<maxAttempts;attempt\+\+\)/, 'D2 BUSY recovery must use bounded retries');
+assert.match(mainAppSource, /D2_BUSY_TIMEOUT/, 'D2 BUSY recovery must fail with a bounded marker');
+const d2RequestWithBusyRetry = new Function('request', 'parseStatus', 'setD2Status', 'sleep', `${mainInlineScript.slice(busyRetryStart, busyRetryEnd)}; return d2RequestWithBusyRetry;`);
+let busyResponses = [{ result: 0x06 }, { result: 0x06 }, { result: 0x00 }];
+let busyRequestCount = 0;
+const busyStatusUpdates = [];
+const busyRetry = d2RequestWithBusyRetry(
+  async () => { busyRequestCount += 1; return busyResponses.shift(); },
+  status => status,
+  text => busyStatusUpdates.push(text),
+  async () => {}
+);
+const busyRecovered = await busyRetry(Uint8Array.of(0xD2, 0x04, 0x01), () => true, status => status, { timeout: 1, maxAttempts: 4, retryBaseMs: 0 });
+assert.equal(busyRecovered.result, 0x00, 'D2 BUSY retry must recover when the device becomes idle');
+assert.equal(busyRequestCount, 3, 'D2 BUSY retry must resend the same request after BUSY');
+assert.equal(busyStatusUpdates.length, 2, 'D2 BUSY retry must expose waiting status');
+let exhaustedBusyRequests = 0;
+const exhaustedBusyRetry = d2RequestWithBusyRetry(
+  async () => { exhaustedBusyRequests += 1; return { result: 0x06 }; },
+  status => status,
+  () => {},
+  async () => {}
+);
+await assert.rejects(
+  exhaustedBusyRetry(Uint8Array.of(0xD2, 0x04, 0x01), () => true, status => status, { timeout: 1, maxAttempts: 3, retryBaseMs: 0 }),
+  /D2_BUSY_TIMEOUT/,
+  'D2 BUSY retry must stop at the bounded attempt limit'
+);
+assert.equal(exhaustedBusyRequests, 3, 'D2 BUSY retry must not loop indefinitely');
 const chooserCancel = { name: 'AbortError', message: 'User cancelled the requestDevice()' };
 const sharedConnectStart = mainInlineScript.indexOf('async connect(){');
 const sharedConnectBoundaryMarker = /\r?\n  },\r?\n  describeConnectError/;

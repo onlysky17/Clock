@@ -3395,21 +3395,16 @@ async function d2GetClockProfile(){
   return status;
 }
 
-async function d2RequestWithOneBusyRetry(packet,predicate,parseStatus,{timeout=5000}={}){
-  const completionSerial=d2RenderCompletionSerial;
+async function d2RequestWithBusyRetry(packet,predicate,parseStatus,{timeout=5000,maxAttempts=8,retryBaseMs=500}={}){
   const send=async()=>parseStatus(await request(packet,predicate,{timeout}));
-  let status=await send();
-  if(status.result!==0x06)return status;
-  if(d2RenderCompletionSerial===completionSerial){
-    const completed=parseD2RenderStatus(await waitFor(
-      a=>a[0]===0xD2&&a[1]===0x82&&a[3]===0x03,
-      35000
-    ));
-    if(completed.result!==0x00)throw Error(`D2 render ${d2ResultName(completed.result)}`);
+  for(let attempt=0;attempt<maxAttempts;attempt++){
+    const status=await send();
+    if(status.result!==0x06)return status;
+    if(attempt===maxAttempts-1)throw Error('D2_BUSY_TIMEOUT');
+    setD2Status(`BUSY · Đang chờ thiết bị rảnh (${attempt+1}/${maxAttempts-1})`,'warn');
+    await sleep(retryBaseMs*(attempt+1));
   }
-  status=await send();
-  if(status.result===0x06)throw Error('Thiết bị đang bận - thử lại');
-  return status;
+  throw Error('D2_BUSY_TIMEOUT');
 }
 
 async function d2ApplyClockProfile({refreshWeather=true,dailyPacket=null}={}){
@@ -3421,7 +3416,7 @@ async function d2ApplyClockProfile({refreshWeather=true,dailyPacket=null}={}){
     const dailyStatus=await d2SetDailyContext(dailyPacket);
     if(dailyStatus.state!==1)throw Error('Dữ liệu thời tiết chưa ở trạng thái hôm nay.');
   }
-  const status=await d2RequestWithOneBusyRetry(
+  const status=await d2RequestWithBusyRetry(
     buildD2SetProfilePacket(selectedClockProfile),
     a=>a[0]===0xD2&&a[1]===0x84,
     parseD2ProfileStatus
@@ -3448,7 +3443,7 @@ async function d2GetClockPreferences(){
 }
 
 async function d2ApplyClockPreferences(){
-  const status=await d2RequestWithOneBusyRetry(
+  const status=await d2RequestWithBusyRetry(
     buildD2SetPreferencePacket(selectedHourMode,selectedRefreshMinutes),
     a=>a[0]===0xD2&&a[1]===0x86,
     parseD2PreferenceStatus
@@ -3471,7 +3466,7 @@ async function d2GetDailyContext(){
 }
 
 async function d2SetDailyContext(packet=buildD2SetDailyPacket(new Date())){
-  const status=await d2RequestWithOneBusyRetry(
+  const status=await d2RequestWithBusyRetry(
     packet,
     a=>a[0]===0xD2&&a[1]===0x88,
     parseD2DailyStatus
