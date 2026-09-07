@@ -1480,7 +1480,7 @@ function controls(){
   $('d2GetIdentity').disabled=!connected||locked;
   $('batteryRefresh').disabled=!connected||locked;
   $('d2StaleRecover').disabled=!connected||locked||!d2StalePresent||identityBlocked;
-  $('profileApply').disabled=!connected||locked||identityBlocked||productD2State===null||productD2State===0;
+  $('profileApply').disabled=!connected||locked||identityBlocked||productD2State===null;
   $('preferenceApply').disabled=!connected||locked||identityBlocked||productD2State===null||productD2State===0;
   $('refresh').disabled=!connected||!token||!e5Complete||locked;
 
@@ -3110,6 +3110,9 @@ function describeBleOperationError(error){
   const name=String(error?.name||'');
   const message=typeof error==='string'?error:String(error?.message||'');
   const detail=`${name} ${message}`;
+  if(message==='D2_TIME_SYNC_FAILED'){
+    return 'Chưa đồng bộ được giờ thiết bị. Hãy thử lại rồi áp dụng lại.';
+  }
   if(name==='SecurityError'||name==='NotSupportedError'||name==='NotFoundError'||/requestdevice|cancelled|canceled/i.test(message)){
     return describeBleConnectError(error);
   }
@@ -3408,6 +3411,11 @@ async function d2RequestWithBusyRetry(packet,predicate,parseStatus,{timeout=5000
 }
 
 async function d2ApplyClockProfile({refreshWeather=true,dailyPacket=null}={}){
+  if(productD2State===0){
+    setD2Status('Đang đồng bộ giờ trước khi áp dụng...','warn');
+    const timeStatus=await d2SetCurrentTime();
+    if(timeStatus.result!==0x00)throw Error('D2_TIME_SYNC_FAILED');
+  }
   if(selectedClockProfile===2){
     if(!dailyPacket){
       if(refreshWeather&&$('dailyAutoWeather').checked)await refreshDailyWeatherFromPhone();

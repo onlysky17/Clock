@@ -71,6 +71,17 @@ assert.match(imageTabSource, /setUserStatus\(describeImageTransferError\(error\)
 assert.match(imageTabSource, /setUserStatus\(describeImageDecodeError\(error\), 'error'\)/, 'Image decode failures must use safe product guidance');
 assert.doesNotMatch(imageTabSource, /setUserStatus\([^\n]*error\.message/, 'Image status must not render raw error.message');
 assert.match(mainAppSource, /function describeBleOperationError\(error\)/, 'Clock operations must have a shared safe error mapper');
+assert.equal(
+  describeBleOperationError(new Error('D2_TIME_SYNC_FAILED')),
+  'Chưa đồng bộ được giờ thiết bị. Hãy thử lại rồi áp dụng lại.',
+  'UNSET-time apply failures must use friendly Product guidance'
+);
+assert.match(mainAppSource, /\$\('profileApply'\)\.disabled=!connected\|\|locked\|\|identityBlocked\|\|productD2State===null;/, 'Product profile Apply must remain actionable when D2 time is UNSET');
+const profileApplyStart = mainInlineScript.indexOf('async function d2ApplyClockProfile(');
+const profileRequestAfterTime = mainInlineScript.indexOf('d2RequestWithBusyRetry(', profileApplyStart);
+assert.ok(profileApplyStart >= 0 && profileRequestAfterTime > profileApplyStart, 'Profile apply flow must be present');
+const timeInitBlock = mainInlineScript.slice(profileApplyStart, profileRequestAfterTime);
+assert.match(timeInitBlock, /if\(productD2State===0\)[\s\S]*?await d2SetCurrentTime\(\)[\s\S]*?timeStatus\.result!==0x00/, 'UNSET profile apply must initialize time and require OK before profile');
 assert.match(mainAppSource, /const safeError=describeBleOperationError\(error\);[\s\S]*?setD2Status\(`ERROR: \$\{safeError\}`,'bad'\)/, 'D2 flow must render mapped operation guidance');
 assert.match(mainAppSource, /const safeError=describeBleOperationError\(error\);[\s\S]*?setUnifiedDailyResult\(`Không thể cập nhật màn: \$\{safeError\}`,'failure'\)/, 'Unified daily flow must render mapped operation guidance');
 assert.doesNotMatch(mainAppSource, /setD2Status\(`ERROR: \$\{error\.message\}`,'bad'\)|setUnifiedDailyResult\(`Không thể cập nhật màn: \$\{error\.message\}`,'failure'\)|alert\(error\.message\)/, 'Clock user-facing operation paths must not render raw error.message');
