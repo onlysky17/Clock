@@ -35,6 +35,10 @@ const mapperStart = mainInlineScript.indexOf('function describeBleConnectError(e
 const mapperEnd = mainInlineScript.indexOf('\n\nasync function connect(){', mapperStart);
 assert.ok(mapperStart >= 0 && mapperEnd > mapperStart, 'Shared BLE error mapper must be extractable');
 const describeBleConnectError = new Function(`${mainInlineScript.slice(mapperStart, mapperEnd)}; return describeBleConnectError;`)();
+const operationMapperStart = mainInlineScript.indexOf('function describeBleOperationError(error){');
+const operationMapperEnd = mainInlineScript.indexOf('\n\nasync function connect(){', operationMapperStart);
+assert.ok(operationMapperStart >= 0 && operationMapperEnd > operationMapperStart, 'Shared BLE operation error mapper must be extractable');
+const describeBleOperationError = new Function(`${mainInlineScript.slice(mapperStart, operationMapperEnd)}; return describeBleOperationError;`)();
 assert.equal(describeBleConnectError({ name: 'AbortError', message: 'User cancelled the requestDevice()' }), 'Bạn đã hủy chọn thiết bị Bluetooth.');
 assert.equal(describeBleConnectError({ name: 'NotFoundError', message: 'User canceled requestDevice()' }), 'Bạn đã hủy chọn thiết bị Bluetooth.');
 assert.equal(describeBleConnectError('requestDevice cancelled'), 'Bạn đã hủy chọn thiết bị Bluetooth.');
@@ -44,6 +48,10 @@ assert.equal(describeBleConnectError({ name: 'SecurityError', message: 'requestD
 assert.equal(describeBleConnectError({ name: 'NotSupportedError', message: 'Web Bluetooth is not supported' }), 'Trình duyệt này chưa hỗ trợ Web Bluetooth. Hãy mở bằng Chrome trên Android.');
 assert.equal(describeBleConnectError({ message: 'Bluetooth unavailable' }), 'Bluetooth chưa sẵn sàng. Hãy bật Bluetooth rồi thử lại.');
 assert.equal(describeBleConnectError({ name: 'DOMException', message: 'raw browser detail' }), 'Không kết nối được thiết bị Bluetooth. Hãy thử lại.');
+assert.equal(describeBleOperationError({ name: 'NetworkError', message: 'GATT operation failed.' }), 'Kết nối Bluetooth đã mất. Hãy kết nối lại rồi thử.');
+assert.equal(describeBleOperationError({ name: 'DOMException', message: 'ACK timeout' }), 'Thiết bị không phản hồi. Hãy thử lại.');
+assert.equal(describeBleOperationError({ name: 'NotFoundError', message: 'User cancelled requestDevice()' }), 'Bạn đã hủy chọn thiết bị Bluetooth.');
+assert.equal(describeBleOperationError({ message: 'raw technical detail' }), 'Không thể hoàn tất thao tác trên E-ink. Hãy thử lại.');
 assert.match(mainAppSource, /async connect\(\)\{[\s\S]*?catch\(error\)\{\s*throw Error\(describeBleConnectError\(error\)\);\s*\}/, 'Shared BLE session must sanitize every connect failure');
 assert.match(mainAppSource, /\$\('connect'\)\.onclick=\(\)=>safe\(\(\)=>window\.EINK_SHARED_BLE\.connect\(\),describeBleConnectError,false\)/, 'Top-level connect must use the shared BLE session without taking a nested busy lock');
 assert.match(mainAppSource, /describeConnectError\(error\)\{\s*return describeBleConnectError\(error\);\s*\}/, 'Shared BLE mapper must be available to feature tabs');
@@ -62,6 +70,53 @@ assert.equal(describeImageTransferError({ name: 'DOMException', message: 'raw br
 assert.match(imageTabSource, /setUserStatus\(describeImageTransferError\(error\), 'error'\)/, 'Image send failures must use the safe transfer mapper');
 assert.match(imageTabSource, /setUserStatus\(describeImageDecodeError\(error\), 'error'\)/, 'Image decode failures must use safe product guidance');
 assert.doesNotMatch(imageTabSource, /setUserStatus\([^\n]*error\.message/, 'Image status must not render raw error.message');
+assert.match(mainAppSource, /function describeBleOperationError\(error\)/, 'Clock operations must have a shared safe error mapper');
+assert.equal(
+  describeBleOperationError(new Error('D2_TIME_SYNC_FAILED')),
+  'Chưa đồng bộ được giờ thiết bị. Hãy thử lại rồi áp dụng lại.',
+  'UNSET-time apply failures must use friendly Product guidance'
+);
+assert.match(mainAppSource, /\$\('profileApply'\)\.disabled=!connected\|\|locked\|\|identityBlocked\|\|productD2State===null;/, 'Product profile Apply must remain actionable when D2 time is UNSET');
+const profileApplyStart = mainInlineScript.indexOf('async function d2ApplyClockProfile(');
+const profileRequestAfterTime = mainInlineScript.indexOf('d2RequestWithBusyRetry(', profileApplyStart);
+assert.ok(profileApplyStart >= 0 && profileRequestAfterTime > profileApplyStart, 'Profile apply flow must be present');
+const timeInitBlock = mainInlineScript.slice(profileApplyStart, profileRequestAfterTime);
+assert.match(timeInitBlock, /if\(productD2State===0\)[\s\S]*?await d2SetCurrentTime\(\)[\s\S]*?timeStatus\.result!==0x00/, 'UNSET profile apply must initialize time and require OK before profile');
+assert.match(mainAppSource, /const safeError=describeBleOperationError\(error\);[\s\S]*?setD2Status\(`ERROR: \$\{safeError\}`,'bad'\)/, 'D2 flow must render mapped operation guidance');
+assert.match(mainAppSource, /const safeError=describeBleOperationError\(error\);[\s\S]*?setUnifiedDailyResult\(`Không thể cập nhật màn: \$\{safeError\}`,'failure'\)/, 'Unified daily flow must render mapped operation guidance');
+assert.doesNotMatch(mainAppSource, /setD2Status\(`ERROR: \$\{error\.message\}`,'bad'\)|setUnifiedDailyResult\(`Không thể cập nhật màn: \$\{error\.message\}`,'failure'\)|alert\(error\.message\)/, 'Clock user-facing operation paths must not render raw error.message');
+const busyRetryStart = mainInlineScript.indexOf('async function d2RequestWithBusyRetry(');
+const busyRetryEnd = mainInlineScript.indexOf('\n\nasync function d2ApplyClockProfile', busyRetryStart);
+assert.ok(busyRetryStart >= 0 && busyRetryEnd > busyRetryStart, 'Shared D2 BUSY retry helper must be extractable');
+assert.match(mainAppSource, /for\(let attempt=0;attempt<maxAttempts;attempt\+\+\)/, 'D2 BUSY recovery must use bounded retries');
+assert.match(mainAppSource, /D2_BUSY_TIMEOUT/, 'D2 BUSY recovery must fail with a bounded marker');
+const d2RequestWithBusyRetry = new Function('request', 'parseStatus', 'setD2Status', 'sleep', `${mainInlineScript.slice(busyRetryStart, busyRetryEnd)}; return d2RequestWithBusyRetry;`);
+let busyResponses = [{ result: 0x06 }, { result: 0x06 }, { result: 0x00 }];
+let busyRequestCount = 0;
+const busyStatusUpdates = [];
+const busyRetry = d2RequestWithBusyRetry(
+  async () => { busyRequestCount += 1; return busyResponses.shift(); },
+  status => status,
+  text => busyStatusUpdates.push(text),
+  async () => {}
+);
+const busyRecovered = await busyRetry(Uint8Array.of(0xD2, 0x04, 0x01), () => true, status => status, { timeout: 1, maxAttempts: 4, retryBaseMs: 0 });
+assert.equal(busyRecovered.result, 0x00, 'D2 BUSY retry must recover when the device becomes idle');
+assert.equal(busyRequestCount, 3, 'D2 BUSY retry must resend the same request after BUSY');
+assert.equal(busyStatusUpdates.length, 2, 'D2 BUSY retry must expose waiting status');
+let exhaustedBusyRequests = 0;
+const exhaustedBusyRetry = d2RequestWithBusyRetry(
+  async () => { exhaustedBusyRequests += 1; return { result: 0x06 }; },
+  status => status,
+  () => {},
+  async () => {}
+);
+await assert.rejects(
+  exhaustedBusyRetry(Uint8Array.of(0xD2, 0x04, 0x01), () => true, status => status, { timeout: 1, maxAttempts: 3, retryBaseMs: 0 }),
+  /D2_BUSY_TIMEOUT/,
+  'D2 BUSY retry must stop at the bounded attempt limit'
+);
+assert.equal(exhaustedBusyRequests, 3, 'D2 BUSY retry must not loop indefinitely');
 const chooserCancel = { name: 'AbortError', message: 'User cancelled the requestDevice()' };
 const sharedConnectStart = mainInlineScript.indexOf('async connect(){');
 const sharedConnectBoundaryMarker = /\r?\n  },\r?\n  describeConnectError/;
