@@ -35,6 +35,18 @@ must(custs, '#define HINK_RETAIN_CONNECT_SETTLE_10MS 200U', 'two-second BLE sett
 must(custs, '(app_connection_idx < 0) || (ke_state_get(TASK_APP) != APP_CONNECTED)', 'refresh requires live BLE connection');
 must(custs, 'hnd = app_easy_timer(HINK_RETAIN_CONNECT_SETTLE_10MS,', 'deferred first-connect refresh');
 must(custs, 'hink_retained_refresh_pending = 0U;', 'one-shot refresh consume');
+must(custs, '#define HINK_AUTO_BUSY()', 'shared real-busy gate');
+must(custs, '#define HINK_AUTO_IDLE() ((!hink_image_mode_active) && !HINK_AUTO_BUSY())', 'auto scheduler still respects image mode');
+must(custs, '#define HINK_CLOCK_COMMAND_IDLE() (!HINK_AUTO_BUSY())', 'explicit Clock/Product command gate');
+must(custs, 'static void hink_clock_exit_image_mode(void)', 'explicit retained-image exit helper');
+must(custs, 'hink_retained_refresh_pending = 0U;', 'Clock/Product clears reconnect refresh pending');
+must(custs, 'hink_auto_flags &= (uint8_t)~HINK_AUTO_FLAG_PENDING;', 'Clock/Product clears stale auto render');
+assert((custs.match(/if \(!HINK_CLOCK_COMMAND_IDLE\(\)\)/g) || []).length === 3,
+  'all three D2 Clock/Product SET handlers use the real-busy gate');
+assert((custs.match(/hink_clock_exit_image_mode\(\);/g) || []).length >= 5,
+  'profile/pref/daily success paths exit retained image mode');
+assert(!/hink_clock_exit_image_mode\(\)[\s\S]{0,160}hink_retained_valid\s*=/.test(custs),
+  'Clock/Product exit must not clear retained image validity');
 must(periph, 'if (!hink_image_mode_is_active())', 'no clock timer in retained image mode');
 must(periph, 'hink_retained_display_on_connect();', 'connection hook');
 must(periph, 'if (hink_image_mode_is_active())', 'disconnect image hold guard');

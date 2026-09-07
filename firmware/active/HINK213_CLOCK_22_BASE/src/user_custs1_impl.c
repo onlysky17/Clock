@@ -302,13 +302,16 @@ static uint8_t hink_d3d_stale_valid        __SECTION_ZERO("retention_mem_area0")
 #define HINK_AUTO_FLAG_PENDING 0x02U
 #define HINK_AUTO_FLAG_TEST    0x04U
 #define HINK_AUTO_SENTINEL     0xFFFFFFFFUL
-#define HINK_AUTO_IDLE() ((!hink_image_mode_active) && \
-                          (hink_e5_state != HINK_E5_STATE_ACTIVE) && \
-                          (hink_e6_state != HINK_E6_STATE_ACCEPTED_PENDING) && \
-                          (hink_e6_state != HINK_E6_STATE_REFRESHING) && \
-                          (hink_d2_render_state != HINK_D2_RENDER_ACCEPTED) && \
-                          (hink_d2_render_state != HINK_D2_RENDER_RENDERING) && \
-                          (epd_wait_hnd == EASY_TIMER_INVALID_TIMER))
+#define HINK_AUTO_BUSY() ((hink_e5_state == HINK_E5_STATE_ACTIVE) || \
+                          (hink_e6_state == HINK_E6_STATE_ACCEPTED_PENDING) || \
+                          (hink_e6_state == HINK_E6_STATE_REFRESHING) || \
+                          (hink_d2_render_state == HINK_D2_RENDER_ACCEPTED) || \
+                          (hink_d2_render_state == HINK_D2_RENDER_RENDERING) || \
+                          (epd_wait_hnd != EASY_TIMER_INVALID_TIMER))
+#define HINK_AUTO_IDLE() ((!hink_image_mode_active) && !HINK_AUTO_BUSY())
+/* Explicit Clock/Product commands may leave retained image mode, but never
+ * bypass an active transfer, render, or panel refresh. */
+#define HINK_CLOCK_COMMAND_IDLE() (!HINK_AUTO_BUSY())
 #define HINK_AUTO_TRY_SCHEDULE() do { \
         if ((hink_auto_flags & HINK_AUTO_FLAG_PENDING) && HINK_AUTO_IDLE()) { \
             hink_auto_rendering_minute = hink_auto_pending_minute; \
@@ -345,6 +348,7 @@ static uint32_t hink_auto_local_minute_key(void);
 static void hink_auto_note_minute(uint32_t auto_minute);
 static void hink_d2_minute_start_cb(void);
 static void hink_d2_minute_timer_cb(void);
+static void hink_clock_exit_image_mode(void);
 static uint8_t hink_d3d_store_last_known_time(uint32_t epoch, int16_t timezone, uint8_t flags);
 void hink_d3d_boot_load_last_known_time(void);
 static void hink_bitmap_draw_clock(uint8_t h, uint8_t m, uint16_t sy, uint8_t sm,
@@ -2146,6 +2150,38 @@ static void hink_d2_minute_cancel(void)
     hink_d2_timer_flags = 0U;
 }
 
+/*
+ * An explicit Clock/Product setting is the deliberate user command that
+ * leaves retained-image mode.  Keep the retained frame/metadata intact for
+ * the next reboot, but cancel the pending reconnect refresh and resume the
+ * correct clock scheduler without creating a second timer.
+ */
+static void hink_clock_exit_image_mode(void)
+{
+    if (!hink_image_mode_active)
+    {
+        return;
+    }
+
+    if (hink_retained_refresh_timer_hnd != EASY_TIMER_INVALID_TIMER)
+    {
+        app_easy_timer_cancel(hink_retained_refresh_timer_hnd);
+        hink_retained_refresh_timer_hnd = EASY_TIMER_INVALID_TIMER;
+    }
+
+    hink_retained_refresh_pending = 0U;
+    hink_image_mode_active = 0U;
+    /* An explicit render supersedes any minute queued before image mode. */
+    hink_auto_flags &= (uint8_t)~HINK_AUTO_FLAG_PENDING;
+    hink_auto_rendering_minute = HINK_AUTO_SENTINEL;
+
+    /* D2's dedicated minute timer owns scheduling once it is active. */
+    if ((hink_d2_timer_flags & HINK_D2_TIMER_ACTIVE) == 0U)
+    {
+        app_clock_timer_restart();
+    }
+}
+
 static uint8_t hink_d2_arm_minute_timer(uint8_t seconds)
 {
     timer_hnd hnd = app_easy_timer((uint32_t)seconds * 100UL, hink_d2_minute_timer_cb);
@@ -2310,7 +2346,7 @@ static uint8_t hink_d2_profile_handle(struct custs1_val_write_ind const *param)
         hink_d2_profile_notify(HINK_D2_RESULT_NOT_INIT);
         return 1U;
     }
-    if (!HINK_AUTO_IDLE())
+    if (!HINK_CLOCK_COMMAND_IDLE())
     {
         hink_d2_profile_notify(HINK_D2_RESULT_BUSY);
         return 1U;
@@ -2318,6 +2354,7 @@ static uint8_t hink_d2_profile_handle(struct custs1_val_write_ind const *param)
     if ((profile == hink_clock_profile) &&
         (profile == hink_clock_profile_persisted))
     {
+        hink_clock_exit_image_mode();
         hink_d2_profile_notify(HINK_D2_RESULT_OK);
         return 1U;
     }
@@ -2332,6 +2369,7 @@ static uint8_t hink_d2_profile_handle(struct custs1_val_write_ind const *param)
         hink_d2_profile_notify(HINK_D2_RESULT_INTERNAL);
         return 1U;
     }
+    hink_clock_exit_image_mode();
     hink_d2_profile_notify(HINK_D2_RESULT_OK);
     return 1U;
 }
@@ -2389,7 +2427,7 @@ static uint8_t hink_d2_pref_handle(struct custs1_val_write_ind const *param)
         hink_d2_pref_notify(HINK_D2_RESULT_NOT_INIT);
         return 1U;
     }
-    if (!HINK_AUTO_IDLE())
+    if (!HINK_CLOCK_COMMAND_IDLE())
     {
         hink_d2_pref_notify(HINK_D2_RESULT_BUSY);
         return 1U;
@@ -2399,6 +2437,7 @@ static uint8_t hink_d2_pref_handle(struct custs1_val_write_ind const *param)
         (hour_mode == hink_hour_mode_persisted) &&
         (refresh_minutes == hink_refresh_persisted))
     {
+        hink_clock_exit_image_mode();
         hink_d2_pref_notify(HINK_D2_RESULT_OK);
         return 1U;
     }
@@ -2416,6 +2455,7 @@ static uint8_t hink_d2_pref_handle(struct custs1_val_write_ind const *param)
         hink_d2_pref_notify(HINK_D2_RESULT_INTERNAL);
         return 1U;
     }
+    hink_clock_exit_image_mode();
     hink_d2_pref_notify(HINK_D2_RESULT_OK);
     return 1U;
 }
@@ -2521,7 +2561,7 @@ static uint8_t hink_d2_daily_handle(struct custs1_val_write_ind const *param)
         hink_d2_daily_notify(HINK_D2_RESULT_NOT_INIT);
         return 1U;
     }
-    if (!HINK_AUTO_IDLE())
+    if (!HINK_CLOCK_COMMAND_IDLE())
     {
         hink_d2_daily_notify(HINK_D2_RESULT_BUSY);
         return 1U;
@@ -2588,6 +2628,7 @@ static uint8_t hink_d2_daily_handle(struct custs1_val_write_ind const *param)
         hink_daily_agenda_label[1][i] = (char)param->value[17U + i];
     }
     hink_daily_set = 1U;
+    hink_clock_exit_image_mode();
     hink_d2_daily_notify(HINK_D2_RESULT_OK);
     return 1U;
 }
