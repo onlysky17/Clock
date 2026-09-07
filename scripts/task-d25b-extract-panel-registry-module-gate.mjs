@@ -33,7 +33,16 @@ assert(
   "Registry remains inline"
 );
 
-const sandbox={window:{}};
+const sandbox={
+  window:{},
+  document:{
+    readyState:'loading',
+    createElement:()=>({dataset:{}}),
+    head:{append(){}},
+    querySelector:()=>null,
+    addEventListener(){}
+  }
+};
 vm.createContext(sandbox);
 vm.runInContext(registrySource,sandbox);
 
@@ -42,10 +51,14 @@ const defaultId=sandbox.window.EINK_DEFAULT_PANEL_ID;
 const panel=sandbox.window.EINK_ACTIVE_PANEL;
 
 assert(defaultId==="hink213-bw-250x122","Wrong default panel");
-assert(Object.keys(registry).length===1,"Expected one panel");
+assert(Object.keys(registry).length===2,"Expected B/W and B/W/R panel descriptors");
 assert(Object.isFrozen(registry),"Registry not frozen");
 assert(Object.isFrozen(panel),"Descriptor not frozen");
 assert(registry[defaultId]===panel,"Active panel mismatch");
+
+const bwr=registry["hink213-bwr-250x122"];
+assert(bwr?.model==="HINK-E0213A67","B/W/R panel descriptor missing");
+assert(bwr?.planeCount===2,"B/W/R plane count changed");
 
 const expected={
   id:"hink213-bw-250x122",
