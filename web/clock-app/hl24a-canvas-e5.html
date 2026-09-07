@@ -2973,8 +2973,9 @@ function handleD2Notify(bytes){
       markProductError('Unknown D2 response');
     }
   }catch(error){
-    markProductError(error.message);
-    log(error.message,'D2');
+    const safeError=describeBleOperationError(error);
+    markProductError(safeError);
+    log(safeError,'D2');
   }
   controls();
 }
@@ -3103,6 +3104,25 @@ function describeBleConnectError(error){
     return 'Bạn đã hủy chọn thiết bị Bluetooth.';
   }
   return 'Không kết nối được thiết bị Bluetooth. Hãy thử lại.';
+}
+
+function describeBleOperationError(error){
+  const name=String(error?.name||'');
+  const message=typeof error==='string'?error:String(error?.message||'');
+  const detail=`${name} ${message}`;
+  if(name==='SecurityError'||name==='NotSupportedError'||name==='NotFoundError'||/requestdevice|cancelled|canceled/i.test(message)){
+    return describeBleConnectError(error);
+  }
+  if(/networkerror|gatt|bluetooth|disconnected|not connected|invalidstate|\bble\b|mất kết nối|kết nối lại/i.test(detail)){
+    return 'Kết nối Bluetooth đã mất. Hãy kết nối lại rồi thử.';
+  }
+  if(/timeout|timed out|không phản hồi|quá thời gian|ack timeout/i.test(detail)){
+    return 'Thiết bị không phản hồi. Hãy thử lại.';
+  }
+  if(/chưa kết nối|chưa sẵn sàng/i.test(detail)){
+    return 'Hãy kết nối thiết bị E-ink rồi thử lại.';
+  }
+  return 'Không thể hoàn tất thao tác trên E-ink. Hãy thử lại.';
 }
 
 async function connect(){
@@ -3273,10 +3293,11 @@ async function runUnifiedDailyUpdate(){
       );
       return true;
     }catch(error){
-      setUnifiedDailyStep(hardStep,error.message,'failure');
-      setUnifiedDailyResult(`Không thể cập nhật màn: ${error.message}`,'failure');
-      markProductError(error.message);
-      log(`Unified daily update failed: ${error.message}`,'ERROR');
+      const safeError=describeBleOperationError(error);
+      setUnifiedDailyStep(hardStep,safeError,'failure');
+      setUnifiedDailyResult(`Không thể cập nhật màn: ${safeError}`,'failure');
+      markProductError(safeError);
+      log(`Unified daily update failed: ${safeError}`,'ERROR');
       return false;
     }finally{
       d2Running=false;
@@ -3302,10 +3323,11 @@ async function runD2Flow(action){
     setD2Status('RUNNING','warn');
     await action();
   }catch(error){
-    markProductError(error.message);
-    setD2Status(`ERROR: ${error.message}`,'bad');
-    log(`D2 error: ${error.message}`,'ERROR');
-    alert(error.message);
+    const safeError=describeBleOperationError(error);
+    markProductError(safeError);
+    setD2Status(`ERROR: ${safeError}`,'bad');
+    log(`D2 error: ${safeError}`,'ERROR');
+    alert(safeError);
   }finally{
     d2Running=false;
     controls();

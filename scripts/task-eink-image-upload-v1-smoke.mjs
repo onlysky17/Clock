@@ -35,6 +35,10 @@ const mapperStart = mainInlineScript.indexOf('function describeBleConnectError(e
 const mapperEnd = mainInlineScript.indexOf('\n\nasync function connect(){', mapperStart);
 assert.ok(mapperStart >= 0 && mapperEnd > mapperStart, 'Shared BLE error mapper must be extractable');
 const describeBleConnectError = new Function(`${mainInlineScript.slice(mapperStart, mapperEnd)}; return describeBleConnectError;`)();
+const operationMapperStart = mainInlineScript.indexOf('function describeBleOperationError(error){');
+const operationMapperEnd = mainInlineScript.indexOf('\n\nasync function connect(){', operationMapperStart);
+assert.ok(operationMapperStart >= 0 && operationMapperEnd > operationMapperStart, 'Shared BLE operation error mapper must be extractable');
+const describeBleOperationError = new Function(`${mainInlineScript.slice(mapperStart, operationMapperEnd)}; return describeBleOperationError;`)();
 assert.equal(describeBleConnectError({ name: 'AbortError', message: 'User cancelled the requestDevice()' }), 'Bạn đã hủy chọn thiết bị Bluetooth.');
 assert.equal(describeBleConnectError({ name: 'NotFoundError', message: 'User canceled requestDevice()' }), 'Bạn đã hủy chọn thiết bị Bluetooth.');
 assert.equal(describeBleConnectError('requestDevice cancelled'), 'Bạn đã hủy chọn thiết bị Bluetooth.');
@@ -44,6 +48,10 @@ assert.equal(describeBleConnectError({ name: 'SecurityError', message: 'requestD
 assert.equal(describeBleConnectError({ name: 'NotSupportedError', message: 'Web Bluetooth is not supported' }), 'Trình duyệt này chưa hỗ trợ Web Bluetooth. Hãy mở bằng Chrome trên Android.');
 assert.equal(describeBleConnectError({ message: 'Bluetooth unavailable' }), 'Bluetooth chưa sẵn sàng. Hãy bật Bluetooth rồi thử lại.');
 assert.equal(describeBleConnectError({ name: 'DOMException', message: 'raw browser detail' }), 'Không kết nối được thiết bị Bluetooth. Hãy thử lại.');
+assert.equal(describeBleOperationError({ name: 'NetworkError', message: 'GATT operation failed.' }), 'Kết nối Bluetooth đã mất. Hãy kết nối lại rồi thử.');
+assert.equal(describeBleOperationError({ name: 'DOMException', message: 'ACK timeout' }), 'Thiết bị không phản hồi. Hãy thử lại.');
+assert.equal(describeBleOperationError({ name: 'NotFoundError', message: 'User cancelled requestDevice()' }), 'Bạn đã hủy chọn thiết bị Bluetooth.');
+assert.equal(describeBleOperationError({ message: 'raw technical detail' }), 'Không thể hoàn tất thao tác trên E-ink. Hãy thử lại.');
 assert.match(mainAppSource, /async connect\(\)\{[\s\S]*?catch\(error\)\{\s*throw Error\(describeBleConnectError\(error\)\);\s*\}/, 'Shared BLE session must sanitize every connect failure');
 assert.match(mainAppSource, /\$\('connect'\)\.onclick=\(\)=>safe\(\(\)=>window\.EINK_SHARED_BLE\.connect\(\),describeBleConnectError,false\)/, 'Top-level connect must use the shared BLE session without taking a nested busy lock');
 assert.match(mainAppSource, /describeConnectError\(error\)\{\s*return describeBleConnectError\(error\);\s*\}/, 'Shared BLE mapper must be available to feature tabs');
@@ -62,6 +70,10 @@ assert.equal(describeImageTransferError({ name: 'DOMException', message: 'raw br
 assert.match(imageTabSource, /setUserStatus\(describeImageTransferError\(error\), 'error'\)/, 'Image send failures must use the safe transfer mapper');
 assert.match(imageTabSource, /setUserStatus\(describeImageDecodeError\(error\), 'error'\)/, 'Image decode failures must use safe product guidance');
 assert.doesNotMatch(imageTabSource, /setUserStatus\([^\n]*error\.message/, 'Image status must not render raw error.message');
+assert.match(mainAppSource, /function describeBleOperationError\(error\)/, 'Clock operations must have a shared safe error mapper');
+assert.match(mainAppSource, /const safeError=describeBleOperationError\(error\);[\s\S]*?setD2Status\(`ERROR: \$\{safeError\}`,'bad'\)/, 'D2 flow must render mapped operation guidance');
+assert.match(mainAppSource, /const safeError=describeBleOperationError\(error\);[\s\S]*?setUnifiedDailyResult\(`Không thể cập nhật màn: \$\{safeError\}`,'failure'\)/, 'Unified daily flow must render mapped operation guidance');
+assert.doesNotMatch(mainAppSource, /setD2Status\(`ERROR: \$\{error\.message\}`,'bad'\)|setUnifiedDailyResult\(`Không thể cập nhật màn: \$\{error\.message\}`,'failure'\)|alert\(error\.message\)/, 'Clock user-facing operation paths must not render raw error.message');
 const chooserCancel = { name: 'AbortError', message: 'User cancelled the requestDevice()' };
 const sharedConnectStart = mainInlineScript.indexOf('async connect(){');
 const sharedConnectBoundaryMarker = /\r?\n  },\r?\n  describeConnectError/;
