@@ -6,6 +6,12 @@ on:
       - main
       - preview-clock-classic-mobile
   workflow_dispatch:
+    inputs:
+      source_ref:
+        description: 'Git ref containing the Web branch to publish under /preview/'
+        required: true
+        default: preview-clock-classic-mobile
+        type: string
 
 permissions:
   contents: read
@@ -30,11 +36,13 @@ jobs:
       - name: Checkout fixed preview channel
         uses: actions/checkout@v6
         with:
-          ref: preview-clock-classic-mobile
+          ref: ${{ inputs.source_ref || 'preview-clock-classic-mobile' }}
           path: preview-src
 
       - name: Compose production plus fixed preview
         shell: bash
+        env:
+          PREVIEW_REF: ${{ inputs.source_ref || 'preview-clock-classic-mobile' }}
         run: |
           rm -rf site
           mkdir -p site
@@ -44,19 +52,66 @@ jobs:
             --exclude='.github' \
             prod/ site/
 
-          mkdir -p site/preview
+          mkdir -p site/preview/web/clock-app
 
-          rsync -a --delete \
-            --exclude='.git' \
-            --exclude='.github' \
-            preview-src/ site/preview/
+          WEB_ASSETS=(
+            web/clock-app/hl24a-canvas-e5.html
+            web/clock-app/image-upload-tab.mjs
+            web/clock-app/image-upload.mjs
+            web/clock-app/panel-registry.js
+            web/clock-app/premium-theme.css
+            web/clock-app/weekly-calendar-preview.js
+            web/clock-app/device-target-preview.js
+          )
+          for asset in "${WEB_ASSETS[@]}"; do
+            test -f "preview-src/${asset}" || { echo "Missing preview asset: ${asset}"; exit 1; }
+            install -m 0644 "preview-src/${asset}" "site/preview/${asset}"
+          done
 
           PREVIEW_SHA="$(git -C preview-src rev-parse HEAD)"
 
           printf '%s\n' \
-            "preview_ref=preview-clock-classic-mobile" \
+            "preview_ref=${PREVIEW_REF}" \
             "preview_sha=${PREVIEW_SHA}" \
+            "preview_assets=${#WEB_ASSETS[@]}" \
             > site/preview/preview-build.txt
+
+          export PREVIEW_REF PREVIEW_SHA
+          python3 - <<'PY'
+          import html
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path('site/preview')
+          ref = os.environ['PREVIEW_REF']
+          sha = os.environ['PREVIEW_SHA']
+          safe_ref = html.escape(ref, quote=True)
+          app = root / 'web/clock-app/hl24a-canvas-e5.html'
+          marker = (
+              '<div id="einkPreviewSource" style="position:fixed;right:8px;bottom:8px;'
+              'z-index:9999;pointer-events:none;padding:4px 7px;border-radius:6px;'
+              'background:rgba(3,12,24,.86);color:#b8f1ff;font:11px ui-monospace,monospace">'
+              f'EINK PREVIEW · {safe_ref} · {sha[:12]}'
+              '</div>'
+          )
+          text = app.read_text(encoding='utf-8')
+          if '<body>' not in text:
+              raise SystemExit('Preview app has no body insertion point')
+          app.write_text(text.replace('<body>', f'<body>{marker}', 1), encoding='utf-8')
+          (root / 'source.json').write_text(
+              json.dumps({'preview_ref': ref, 'preview_sha': sha, 'assets': 7}, indent=2) + '\n',
+              encoding='utf-8'
+          )
+          (root / 'index.html').write_text(
+              '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+              f'<title>EINK Web Preview · {safe_ref}</title>'
+              f'<meta http-equiv="refresh" content="0;url=web/clock-app/hl24a-canvas-e5.html">'
+              f'<p>EINK Web Preview · {safe_ref} · {sha}</p>'
+              '<p><a href="web/clock-app/hl24a-canvas-e5.html">Mở EINK Clock</a></p>',
+              encoding='utf-8'
+          )
+          PY
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
