@@ -12,6 +12,10 @@ int fb_h;
 
 /* HINK-E0213A53 physical override: 122x250 controller RAM, 16*250 = 4000. */
 u8 fb_bw[EPD_FRAME_BYTES];
+#if EPD_PANEL_BWR
+/* HINK-E0213A67 owns a physically separate red plane. */
+u8 fb_rr[EPD_PLANE_BYTES];
+#endif
 
 /******************************************************************************/
 
@@ -44,8 +48,12 @@ void draw_pixel(int x, int y, int color)
 	if(color!=WHITE){
 		fb_bw[byte_pos] &= ~bit_mask;
 	}
-	if(scr_mode&EPD_BWR && color==RED){
-		fb_rr[byte_pos] |=  bit_mask;
+	if(scr_mode&EPD_BWR){
+		if(color==RED){
+			fb_rr[byte_pos] |= bit_mask;
+		}else{
+			fb_rr[byte_pos] &= (uint8_t)~bit_mask;
+		}
 	}
 }
 

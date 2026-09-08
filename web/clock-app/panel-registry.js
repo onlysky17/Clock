@@ -34,6 +34,41 @@
       rotation:3,
       bitOrder:'msb-first',
       whiteBit:1
+    }),
+    'hink213-bwr-250x122':Object.freeze({
+      id:'hink213-bwr-250x122',
+      model:'HINK-E0213A67',
+      logicalWidth:250,
+      logicalHeight:122,
+      ramWidth:122,
+      ramHeight:250,
+      stride:16,
+      planeCount:2,
+      planeBytes:4000,
+      payloadBytes:8000,
+      packing:'plane-major',
+      planeOrder:Object.freeze(['black','red']),
+      planes:Object.freeze({
+        black:Object.freeze({
+          command:0x24,
+          zero:'black',
+          one:'white'
+        }),
+        red:Object.freeze({
+          command:0x26,
+          zero:'not-red',
+          one:'red'
+        })
+      }),
+      firmware:Object.freeze({
+        driverMode:'EPD_BWR',
+        redPlaneOwner:'firmware',
+        framebufferOwnership:'separate-black-red',
+        nextImplementationTask:'EINK-3C-FW-001'
+      }),
+      rotation:3,
+      bitOrder:'msb-first',
+      whiteBit:1
     })
   });
 

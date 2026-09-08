@@ -127,5 +127,22 @@ extern int fb_h;
 #define EPD_FRAME_STRIDE  16
 #define EPD_FRAME_BYTES   (EPD_FRAME_STRIDE * EPD_FRAME_HEIGHT)
 
+/* The shipped HINK213 B/W target stays at zero. Dedicated HINK-E0213A67
+ * B/W/R builds set this compile-time switch to one. */
+#ifndef EPD_PANEL_BWR
+#define EPD_PANEL_BWR     0
+#endif
+
+#if EPD_PANEL_BWR && ((EPD_FRAME_WIDTH != 122) || (EPD_FRAME_HEIGHT != 250) || (EPD_FRAME_STRIDE != 16))
+#error "HINK-E0213A67 requires the 250x122 logical / 122x250 RAM contract."
+#endif
+
+#define EPD_PANEL_PLANE_COUNT (EPD_PANEL_BWR ? 2 : 1)
+#define EPD_PLANE_BYTES       EPD_FRAME_BYTES
+
 extern u8 fb_bw[EPD_FRAME_BYTES];
+#if EPD_PANEL_BWR
+extern u8 fb_rr[EPD_PLANE_BYTES];
+#else
 #define fb_rr fb_bw
+#endif

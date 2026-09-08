@@ -370,7 +370,7 @@ int selflash(int otp_boot)
 	/* HINK-E0213A53 plugged panel is physically verified as 122x250 BW. */
 	detect_w = EPD_FRAME_WIDTH;
 	detect_h = EPD_FRAME_HEIGHT;
-	detect_mode = EPD_BW;
+	detect_mode = EPD_PANEL_BWR ? EPD_BWR : EPD_BW;
 	printk("EPD  Res: %dx%d  %d (profile %dx%d)\n", detect_w, detect_h, pbuf[9], xres, yres);
 
 	int region_table = (int)&Region$$Table$$Base;

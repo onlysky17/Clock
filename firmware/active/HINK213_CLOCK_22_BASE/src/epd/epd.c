@@ -16,7 +16,7 @@ int lut_size;
 
 int detect_w = 104;
 int detect_h = 212;
-int detect_mode = EPD_BW;
+int detect_mode = EPD_PANEL_BWR ? EPD_BWR : EPD_BW;
 
 
 // 窗口参数
