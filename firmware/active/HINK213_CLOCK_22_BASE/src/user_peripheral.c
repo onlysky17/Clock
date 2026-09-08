@@ -202,9 +202,17 @@ void user_app_init(void)
     hink_d3d_boot_load_last_known_time();
 
 	// åˆå§‹åŒ–EPDå±å¹•ï¼ˆ2.13é»‘ç™½å±ï¼Œ6ä¸ªæµ‹è¯•ç‚¹ï¼‰
+	#if EPD_PANEL_BWR
+	epd_hw_init(0x23111000, 0x07210120, detect_w, detect_h, detect_mode | ROTATE_3);
+	#else
 	epd_hw_init(0x23200700, 0x05210006, detect_w, detect_h, detect_mode | ROTATE_3);
+	#endif
 	if(epd_detect()==0){  // å¦‚æžœæ£€æµ‹ä¸åˆ°å±å¹•ï¼Œå°è¯•å¦ä¸€ç§é…ç½®ï¼ˆ5ä¸ªæµ‹è¯•ç‚¹ï¼‰
+	#if EPD_PANEL_BWR
+		epd_hw_init(0x23200700, 0x05210006, detect_w, detect_h, detect_mode | ROTATE_3);
+	#else
 		epd_hw_init(0x23111000, 0x07210120, detect_w, detect_h, detect_mode | ROTATE_3);
+	#endif
 		epd_detect();
 	}
 
